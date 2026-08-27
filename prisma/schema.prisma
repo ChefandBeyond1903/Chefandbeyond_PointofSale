@@ -47,6 +47,7 @@ model Product {
   trackStock  Boolean @default(true)
   stock       Int     @default(0)
   active      Boolean @default(true)
+  favorite    Boolean @default(false)
 
   categoryId String?
   category   Category? @relation(fields: [categoryId], references: [id])
@@ -57,6 +58,7 @@ model Product {
 
   @@index([categoryId])
   @@index([active])
+  @@index([favorite])
 }
 
 /// A completed (or voided) transaction. status is "COMPLETED" or "VOIDED".

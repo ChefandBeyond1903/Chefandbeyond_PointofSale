@@ -28,6 +28,7 @@ export interface Product {
   trackStock: boolean;
   stock: number;
   active: boolean;
+  favorite: boolean;
   categoryId: string | null;
   category: { id: string; name: string } | null;
   createdAt?: string;

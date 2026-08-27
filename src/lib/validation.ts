@@ -17,6 +17,7 @@ export const productCreateSchema = z.object({
   stock: z.number().int().default(0),
   categoryId: z.string().trim().min(1).optional().or(z.literal("")).transform((v) => (v ? v : undefined)),
   active: z.boolean().default(true),
+  favorite: z.boolean().default(false),
 });
 
 export const productUpdateSchema = productCreateSchema.partial();

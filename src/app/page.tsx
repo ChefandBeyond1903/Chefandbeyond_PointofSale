@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney, taxOn } from "@/lib/money";
 import { MoneyInput } from "@/components/MoneyInput";
-import type { Category, Product, Sale, Shift, ShiftStats } from "@/lib/types";
+import type { Category, Product, Role, Sale, Shift, ShiftStats } from "@/lib/types";
 
 interface CartLine {
   product: Product;
@@ -13,7 +13,11 @@ interface CartLine {
 }
 
 export default function RegisterPage() {
-  const [products, setProducts] = useState<Product[]>([]);
+  const [favorites, setFavorites] = useState<Product[]>([]);
+  const [allProducts, setAllProducts] = useState<Product[] | null>(null);
+  const [searchHits, setSearchHits] = useState<Product[] | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [browseAll, setBrowseAll] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -28,16 +32,17 @@ export default function RegisterPage() {
   const [payOpen, setPayOpen] = useState(false);
   const [receipt, setReceipt] = useState<Sale | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [role, setRole] = useState<Role | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const loadCatalog = useCallback(async () => {
     setLoading(true);
     try {
       const [p, c] = await Promise.all([
-        api<{ products: Product[] }>("/api/products?take=500"),
+        api<{ products: Product[] }>("/api/products?favorite=1&take=1000"),
         api<{ categories: Category[] }>("/api/categories"),
       ]);
-      setProducts(p.products);
+      setFavorites(p.products);
       setCategories(c.categories);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load catalog");
@@ -45,6 +50,23 @@ export default function RegisterPage() {
       setLoading(false);
     }
   }, []);
+
+  const loadAllProducts = useCallback(async () => {
+    try {
+      const r = await api<{ products: Product[] }>("/api/products?take=1000");
+      setAllProducts(r.products);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to load products");
+    }
+  }, []);
+
+  function toggleBrowseAll() {
+    setBrowseAll((on) => {
+      const next = !on;
+      if (next && !allProducts) loadAllProducts();
+      return next;
+    });
+  }
 
   const loadShift = useCallback(async () => {
     try {
@@ -59,20 +81,66 @@ export default function RegisterPage() {
   useEffect(() => {
     loadCatalog();
     loadShift();
+    api<{ user: { role: Role } | null }>("/api/auth/me")
+      .then((r) => setRole(r.user?.role ?? null))
+      .catch(() => {});
   }, [loadCatalog, loadShift]);
 
+  const isManager = role === "MANAGER";
+
+  async function toggleFavorite(p: Product, next: boolean) {
+    // Optimistic update across whichever lists hold this product.
+    const apply = (list: Product[]) =>
+      list.map((x) => (x.id === p.id ? { ...x, favorite: next } : x));
+    setFavorites((cur) => (next ? [...apply(cur), { ...p, favorite: true }].filter((x, i, a) => a.findIndex((y) => y.id === x.id) === i) : cur.filter((x) => x.id !== p.id)));
+    setAllProducts((cur) => (cur ? apply(cur) : cur));
+    setSearchHits((cur) => (cur ? apply(cur) : cur));
+    try {
+      await api(`/api/products/${p.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ favorite: next }),
+      });
+      loadCatalog();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not update favorite");
+      loadCatalog();
+    }
+  }
+
+  // Search runs against the whole catalog on the server (debounced).
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) {
+      setSearchHits(null);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    const t = setTimeout(async () => {
+      try {
+        const r = await api<{ products: Product[] }>(
+          `/api/products?q=${encodeURIComponent(q)}&take=80`,
+        );
+        setSearchHits(r.products);
+      } catch {
+        setSearchHits([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  const isSearching = query.trim().length > 0;
+
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return products.filter((p) => {
-      if (activeCategory && p.categoryId !== activeCategory) return false;
-      if (!q) return true;
-      return (
-        p.name.toLowerCase().includes(q) ||
-        p.sku.toLowerCase().includes(q) ||
-        (p.barcode ?? "").toLowerCase().includes(q)
-      );
-    });
-  }, [products, query, activeCategory]);
+    const source = isSearching
+      ? (searchHits ?? [])
+      : browseAll
+        ? (allProducts ?? [])
+        : favorites;
+    return source.filter((p) => !activeCategory || p.categoryId === activeCategory);
+  }, [isSearching, searchHits, browseAll, allProducts, favorites, activeCategory]);
 
   const totals = useMemo(() => {
     let subtotal = 0;
@@ -172,6 +240,7 @@ export default function RegisterPage() {
       setPayOpen(false);
       clearCart();
       loadCatalog();
+      if (allProducts) loadAllProducts();
       loadShift();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not complete the sale");
