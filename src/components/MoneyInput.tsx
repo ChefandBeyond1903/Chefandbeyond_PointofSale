@@ -1,0 +1,49 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { parseMoney } from "@/lib/money";
+
+/** Controlled dollar input that reports integer cents. */
+export function MoneyInput({
+  cents,
+  onCentsChange,
+  className = "input",
+  placeholder = "0.00",
+  autoFocus,
+  id,
+}: {
+  cents: number;
+  onCentsChange: (cents: number) => void;
+  className?: string;
+  placeholder?: string;
+  autoFocus?: boolean;
+  id?: string;
+}) {
+  const [text, setText] = useState(cents ? (cents / 100).toFixed(2) : "");
+
+  useEffect(() => {
+    // Keep in sync when the parent resets the value (e.g. after a sale).
+    const external = cents ? (cents / 100).toFixed(2) : "";
+    setText((cur) => (parseMoney(cur) === cents ? cur : external));
+  }, [cents]);
+
+  return (
+    <input
+      id={id}
+      inputMode="decimal"
+      className={className}
+      placeholder={placeholder}
+      value={text}
+      autoFocus={autoFocus}
+      onChange={(e) => {
+        const raw = e.target.value.replace(/[^0-9.]/g, "");
+        setText(raw);
+        onCentsChange(parseMoney(raw));
+      }}
+      onBlur={() => {
+        const c = parseMoney(text);
+        setText(c ? (c / 100).toFixed(2) : "");
+      }}
+    />
+  );
+}

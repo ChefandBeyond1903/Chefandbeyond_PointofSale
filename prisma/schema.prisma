@@ -1,0 +1,122 @@
+// CB_POS — Retail point-of-sale
+// Dev uses SQLite. To move to Postgres: set provider = "postgresql",
+// point DATABASE_URL at your Postgres instance, then `npx prisma migrate deploy`.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// Staff who can sign in. role is "MANAGER" or "CASHIER".
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         String   @default("CASHIER")
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sales  Sale[]
+  shifts Shift[]
+}
+
+model Category {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  createdAt DateTime  @default(now())
+  products  Product[]
+}
+
+/// A sellable item. All money is stored as integer cents.
+/// taxRateBps is basis points: 800 = 8.00%.
+model Product {
+  id          String  @id @default(cuid())
+  name        String
+  sku         String  @unique
+  barcode     String? @unique
+  description String?
+  priceCents  Int
+  costCents   Int     @default(0)
+  taxRateBps  Int     @default(0)
+  trackStock  Boolean @default(true)
+  stock       Int     @default(0)
+  active      Boolean @default(true)
+
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id])
+
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  saleItems SaleItem[]
+
+  @@index([categoryId])
+  @@index([active])
+}
+
+/// A completed (or voided) transaction. status is "COMPLETED" or "VOIDED".
+/// paymentMethod is "CASH" or "CARD".
+model Sale {
+  id            String @id @default(cuid())
+  number        Int    @unique
+  status        String @default("COMPLETED")
+  subtotalCents Int
+  discountCents Int    @default(0)
+  taxCents      Int    @default(0)
+  totalCents    Int
+  paymentMethod String
+  tenderedCents Int    @default(0)
+  changeCents   Int    @default(0)
+  note          String?
+
+  cashierId String
+  cashier   User   @relation(fields: [cashierId], references: [id])
+  shiftId   String?
+  shift     Shift?  @relation(fields: [shiftId], references: [id])
+
+  createdAt DateTime   @default(now())
+  items     SaleItem[]
+
+  @@index([createdAt])
+  @@index([cashierId])
+}
+
+model SaleItem {
+  id             String @id @default(cuid())
+  nameSnapshot   String
+  unitPriceCents Int
+  quantity       Int
+  discountCents  Int    @default(0)
+  taxRateBps     Int    @default(0)
+  lineTotalCents Int
+
+  saleId    String
+  sale      Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  @@index([saleId])
+  @@index([productId])
+}
+
+/// A cashier's till session. status is "OPEN" or "CLOSED".
+model Shift {
+  id                String    @id @default(cuid())
+  openingFloatCents Int       @default(0)
+  closingCountCents Int?
+  status            String    @default("OPEN")
+  openedAt          DateTime  @default(now())
+  closedAt          DateTime?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+  sales  Sale[]
+
+  @@index([userId])
+  @@index([status])
+}
