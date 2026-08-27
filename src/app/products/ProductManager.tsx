@@ -19,6 +19,7 @@ type Draft = {
   stock: number;
   categoryId: string;
   active: boolean;
+  favorite: boolean;
 };
 
 const emptyDraft: Draft = {
@@ -33,6 +34,7 @@ const emptyDraft: Draft = {
   stock: 0,
   categoryId: "",
   active: true,
+  favorite: false,
 };
 
 export function ProductManager() {
@@ -96,6 +98,7 @@ export function ProductManager() {
       stock: p.stock,
       categoryId: p.categoryId ?? "",
       active: p.active,
+      favorite: p.favorite,
     });
   }
 
@@ -115,6 +118,7 @@ export function ProductManager() {
       stock: draft.stock,
       categoryId: draft.categoryId || undefined,
       active: draft.active,
+      favorite: draft.favorite,
     };
     try {
       if (draft.id) {
@@ -128,6 +132,20 @@ export function ProductManager() {
       setError(err instanceof ApiError ? err.message : "Could not save");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function toggleFavorite(p: Product) {
+    const next = !p.favorite;
+    setProducts((cur) => cur.map((x) => (x.id === p.id ? { ...x, favorite: next } : x)));
+    try {
+      await api(`/api/products/${p.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ favorite: next }),
+      });
+    } catch (err) {
+      setProducts((cur) => cur.map((x) => (x.id === p.id ? { ...x, favorite: !next } : x)));
+      setError(err instanceof ApiError ? err.message : "Could not update favorite");
     }
   }
 
@@ -194,6 +212,7 @@ export function ProductManager() {
         <table className="w-full text-sm">
           <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
             <tr>
+              <th className="w-10 px-3 py-2.5" title="Show on register">★</th>
               <th className="px-4 py-2.5">Name</th>
               <th className="px-4 py-2.5">SKU</th>
               <th className="px-4 py-2.5">Category</th>
@@ -206,13 +225,25 @@ export function ProductManager() {
           <tbody className="divide-y divide-zinc-100">
             {loading ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-zinc-400">
+                <td colSpan={8} className="px-4 py-8 text-center text-zinc-400">
                   Loading…
                 </td>
               </tr>
             ) : (
               filtered.map((p) => (
                 <tr key={p.id} className={p.active ? "" : "opacity-50"}>
+                  <td className="px-3 py-2.5">
+                    <button
+                      onClick={() => toggleFavorite(p)}
+                      aria-label={p.favorite ? "Remove from register" : "Show on register"}
+                      title={p.favorite ? "Showing on register — click to remove" : "Show on register home"}
+                      className={`text-lg leading-none transition-colors ${
+                        p.favorite ? "text-amber-500" : "text-zinc-300 hover:text-zinc-400"
+                      }`}
+                    >
+                      {p.favorite ? "★" : "☆"}
+                    </button>
+                  </td>
                   <td className="px-4 py-2.5 font-medium">
                     {p.name}
                     {!p.active && <span className="ml-2 text-xs text-zinc-400">(archived)</span>}
@@ -347,6 +378,14 @@ export function ProductManager() {
                   Active
                 </label>
               </div>
+              <label className="col-span-2 flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={draft.favorite}
+                  onChange={(e) => setDraft({ ...draft, favorite: e.target.checked })}
+                />
+                Show on register home <span className="text-zinc-400">(favorite)</span>
+              </label>
               <div className="col-span-2">
                 <label className="label">Description</label>
                 <textarea

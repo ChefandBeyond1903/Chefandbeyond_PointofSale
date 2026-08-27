@@ -20,7 +20,23 @@ export const productCreateSchema = z.object({
   favorite: z.boolean().default(false),
 });
 
-export const productUpdateSchema = productCreateSchema.partial();
+// Every field optional and — crucially — NO defaults, so a partial update
+// only touches the keys actually sent. (productCreateSchema.partial() would
+// still apply .default() to omitted fields and silently reset them.)
+export const productUpdateSchema = z.object({
+  name: z.string().trim().min(1).max(200).optional(),
+  sku: z.string().trim().min(1).max(64).optional(),
+  barcode: z.string().trim().max(64).optional(),
+  description: z.string().trim().max(1000).optional(),
+  priceCents: z.number().int().min(0).optional(),
+  costCents: z.number().int().min(0).optional(),
+  taxRateBps: z.number().int().min(0).max(100000).optional(),
+  trackStock: z.boolean().optional(),
+  stock: z.number().int().optional(),
+  categoryId: z.string().trim().min(1).optional(),
+  active: z.boolean().optional(),
+  favorite: z.boolean().optional(),
+});
 
 export const categoryCreateSchema = z.object({
   name: z.string().trim().min(1).max(100),
