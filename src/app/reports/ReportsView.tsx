@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
+import { InvoiceModal } from "@/components/InvoiceModal";
 import type { ReportSummary } from "@/lib/types";
 
 type RangeKey = "today" | "7d" | "30d";
@@ -25,6 +26,7 @@ export function ReportsView() {
   const [data, setData] = useState<ReportSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
 
   const load = useCallback(async (key: RangeKey) => {
     setLoading(true);
@@ -47,7 +49,7 @@ export function ReportsView() {
   }, [load, rangeKey]);
 
   return (
-    <div className="mx-auto w-full max-w-7xl flex-1 p-4">
+    <div className="w-full flex-1 p-4">
       <div className="mb-4 flex items-center gap-3">
         <h1 className="text-xl font-semibold">Reports</h1>
         <div className="ml-auto flex gap-1 rounded-md bg-zinc-100 p-1 text-sm">
@@ -109,7 +111,10 @@ export function ReportsView() {
             </div>
 
             <div className="card p-4">
-              <h2 className="mb-3 font-semibold">Recent transactions</h2>
+              <h2 className="mb-3 font-semibold">Invoices</h2>
+              <p className="mb-2 text-xs text-zinc-400">
+                Every completed sale is an invoice. Open one to raise purchase orders by vendor.
+              </p>
               {data.recentSales.length === 0 ? (
                 <p className="text-sm text-zinc-400">No sales in this period.</p>
               ) : (
@@ -117,7 +122,11 @@ export function ReportsView() {
                   <table className="w-full text-sm">
                     <tbody className="divide-y divide-zinc-100">
                       {data.recentSales.map((s) => (
-                        <tr key={s.id}>
+                        <tr
+                          key={s.id}
+                          onClick={() => setOpenInvoiceId(s.id)}
+                          className="cursor-pointer hover:bg-zinc-50"
+                        >
                           <td className="py-2 font-medium">#{s.number}</td>
                           <td className="py-2 text-zinc-500">
                             {new Date(s.createdAt).toLocaleString([], {
@@ -127,7 +136,7 @@ export function ReportsView() {
                               minute: "2-digit",
                             })}
                           </td>
-                          <td className="py-2 text-zinc-500">{s.cashier}</td>
+                          <td className="py-2 text-zinc-500">{s.customer || s.cashier}</td>
                           <td className="py-2 text-right text-zinc-400">{s.itemCount} items</td>
                           <td className="py-2 text-right font-medium">{formatMoney(s.totalCents)}</td>
                         </tr>
@@ -139,6 +148,10 @@ export function ReportsView() {
             </div>
           </div>
         </div>
+      )}
+
+      {openInvoiceId && (
+        <InvoiceModal saleId={openInvoiceId} onClose={() => setOpenInvoiceId(null)} />
       )}
     </div>
   );

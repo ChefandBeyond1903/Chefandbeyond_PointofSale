@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney, taxOn } from "@/lib/money";
 import { MoneyInput } from "@/components/MoneyInput";
-import type { Category, Product, Role, Sale, Shift, ShiftStats } from "@/lib/types";
+import type { Category, Customer, Product, Role, Sale, Shift, ShiftStats } from "@/lib/types";
 
 interface CartLine {
   product: Product;
@@ -26,6 +26,15 @@ export default function RegisterPage() {
   const [cart, setCart] = useState<CartLine[]>([]);
   const [orderDiscountCents, setOrderDiscountCents] = useState(0);
 
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [custId, setCustId] = useState<string | null>(null);
+  const [custName, setCustName] = useState("");
+  const [custEmail, setCustEmail] = useState("");
+  const [custPhone, setCustPhone] = useState("");
+  const [custAddress, setCustAddress] = useState("");
+  const [custCompany, setCustCompany] = useState("");
+  const [custOpen, setCustOpen] = useState(false);
+
   const [shift, setShift] = useState<Shift | null>(null);
   const [shiftStats, setShiftStats] = useState<ShiftStats | null>(null);
 
@@ -39,7 +48,7 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       const [p, c] = await Promise.all([
-        api<{ products: Product[] }>("/api/products?favorite=1&take=1000"),
+        api<{ products: Product[] }>("/api/products?favorite=1&take=5000"),
         api<{ categories: Category[] }>("/api/categories"),
       ]);
       setFavorites(p.products);
@@ -53,7 +62,7 @@ export default function RegisterPage() {
 
   const loadAllProducts = useCallback(async () => {
     try {
-      const r = await api<{ products: Product[] }>("/api/products?take=1000");
+      const r = await api<{ products: Product[] }>("/api/products?take=5000");
       setAllProducts(r.products);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load products");
@@ -78,13 +87,47 @@ export default function RegisterPage() {
     }
   }, []);
 
+  const loadCustomers = useCallback(async () => {
+    try {
+      const res = await api<{ customers: Customer[] }>("/api/customers");
+      setCustomers(res.customers);
+    } catch {
+      /* non-fatal */
+    }
+  }, []);
+
   useEffect(() => {
     loadCatalog();
     loadShift();
+    loadCustomers();
     api<{ user: { role: Role } | null }>("/api/auth/me")
       .then((r) => setRole(r.user?.role ?? null))
       .catch(() => {});
-  }, [loadCatalog, loadShift]);
+  }, [loadCatalog, loadShift, loadCustomers]);
+
+  function pickCustomer(name: string) {
+    setCustName(name);
+    const match = customers.find((c) => c.name.toLowerCase() === name.trim().toLowerCase());
+    if (match) {
+      setCustId(match.id);
+      setCustEmail(match.email);
+      setCustPhone(match.phone);
+      setCustAddress(match.address);
+      setCustCompany(match.company);
+    } else {
+      setCustId(null);
+    }
+  }
+
+  function clearCustomer() {
+    setCustId(null);
+    setCustName("");
+    setCustEmail("");
+    setCustPhone("");
+    setCustAddress("");
+    setCustCompany("");
+    setCustOpen(false);
+  }
 
   const isManager = role === "MANAGER";
 
@@ -202,6 +245,7 @@ export default function RegisterPage() {
   function clearCart() {
     setCart([]);
     setOrderDiscountCents(0);
+    clearCustomer();
   }
 
   function onSearchKeyDown(e: React.KeyboardEvent) {
@@ -234,6 +278,19 @@ export default function RegisterPage() {
           orderDiscountCents,
           paymentMethod,
           tenderedCents,
+          ...(custId
+            ? { customerId: custId }
+            : custName.trim()
+              ? {
+                  customer: {
+                    name: custName.trim(),
+                    email: custEmail.trim(),
+                    phone: custPhone.trim(),
+                    address: custAddress.trim(),
+                    company: custCompany.trim(),
+                  },
+                }
+              : {}),
         }),
       });
       setReceipt(res.sale);
@@ -242,13 +299,14 @@ export default function RegisterPage() {
       loadCatalog();
       if (allProducts) loadAllProducts();
       loadShift();
+      loadCustomers();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not complete the sale");
     }
   }
 
   return (
-    <div className="mx-auto grid w-full max-w-7xl flex-1 gap-4 p-4 lg:grid-cols-[1fr_400px]">
+    <div className="grid w-full flex-1 gap-4 p-4 lg:grid-cols-[1fr_400px]">
       {/* Catalog */}
       <section className="flex min-h-0 flex-col">
         <div className="mb-3 flex gap-2">
@@ -286,13 +344,12 @@ export default function RegisterPage() {
         ) : (
           <div className="grid grid-cols-2 gap-2 overflow-y-auto pb-4 sm:grid-cols-3 xl:grid-cols-4">
             {filtered.map((p) => {
-              const out = p.trackStock && p.stock <= 0;
+              const low = p.trackStock && p.stock <= 0;
               return (
                 <button
                   key={p.id}
                   onClick={() => addToCart(p)}
-                  disabled={out}
-                  className="card flex flex-col items-start gap-1 p-3 text-left transition-transform hover:-translate-y-0.5 hover:shadow-md disabled:opacity-40 disabled:hover:translate-y-0"
+                  className="card flex flex-col items-start gap-1 p-3 text-left transition-transform hover:-translate-y-0.5 hover:shadow-md"
                 >
                   <span className="line-clamp-2 text-sm font-medium">{p.name}</span>
                   <span className="text-xs text-zinc-400">{p.sku}</span>
@@ -300,8 +357,8 @@ export default function RegisterPage() {
                     {formatMoney(p.priceCents)}
                   </span>
                   {p.trackStock && (
-                    <span className={`text-[11px] ${out ? "text-red-500" : "text-zinc-400"}`}>
-                      {out ? "Out of stock" : `${p.stock} in stock`}
+                    <span className={`text-[11px] ${low ? "text-red-500" : "text-zinc-400"}`}>
+                      {p.stock} in stock
                     </span>
                   )}
                 </button>
@@ -325,6 +382,74 @@ export default function RegisterPage() {
               <button onClick={clearCart} className="btn-ghost text-xs">
                 Clear
               </button>
+            )}
+          </div>
+
+          {/* Customer */}
+          <div className="border-b border-zinc-100 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <input
+                className="input h-8"
+                list="customer-list"
+                placeholder="Customer (optional)"
+                value={custName}
+                onChange={(e) => pickCustomer(e.target.value)}
+              />
+              <datalist id="customer-list">
+                {customers.map((c) => (
+                  <option key={c.id} value={c.name} />
+                ))}
+              </datalist>
+              {custName ? (
+                <button onClick={clearCustomer} className="btn-ghost px-2 py-0.5 text-xs">
+                  ✕
+                </button>
+              ) : null}
+              <button
+                onClick={() => setCustOpen((v) => !v)}
+                className="btn-ghost whitespace-nowrap px-2 py-0.5 text-xs"
+              >
+                {custOpen ? "Hide" : "Details"}
+              </button>
+            </div>
+            {custId && (
+              <p className="mt-1 text-[11px] text-green-600">Existing customer — details on file</p>
+            )}
+            {custOpen && (
+              <div className="mt-2 grid gap-2">
+                <input
+                  className="input h-8"
+                  placeholder="Email"
+                  value={custEmail}
+                  onChange={(e) => setCustEmail(e.target.value)}
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    className="input h-8"
+                    placeholder="Phone"
+                    value={custPhone}
+                    onChange={(e) => setCustPhone(e.target.value)}
+                  />
+                  <input
+                    className="input h-8"
+                    placeholder="Company"
+                    value={custCompany}
+                    onChange={(e) => setCustCompany(e.target.value)}
+                  />
+                </div>
+                <textarea
+                  className="input"
+                  rows={2}
+                  placeholder="Address"
+                  value={custAddress}
+                  onChange={(e) => setCustAddress(e.target.value)}
+                />
+                {!custId && custName.trim() && (
+                  <p className="text-[11px] text-zinc-400">
+                    New customer — added to Customers when the sale completes.
+                  </p>
+                )}
+              </div>
             )}
           </div>
 
@@ -662,6 +787,9 @@ function ReceiptModal({ sale, onClose }: { sale: Sale; onClose: () => void }) {
           <p className="text-center text-sm font-bold">CB POS</p>
           <p className="text-center text-zinc-500">Sale #{sale.number}</p>
           <p className="text-center text-zinc-500">{new Date(sale.createdAt).toLocaleString()}</p>
+          {sale.customerNameSnapshot ? (
+            <p className="text-center text-zinc-500">Customer: {sale.customerNameSnapshot}</p>
+          ) : null}
           <hr className="my-2 border-dashed" />
           {sale.items.map((it) => (
             <div key={it.id} className="flex justify-between">

@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
     const categoryId = searchParams.get("categoryId")?.trim();
     const includeInactive = searchParams.get("all") === "1";
     const favoritesOnly = searchParams.get("favorite") === "1";
-    const take = Math.min(Number(searchParams.get("take") ?? 200), 1000);
+    const take = Math.min(Number(searchParams.get("take") ?? 200), 5000);
 
     const where: Prisma.ProductWhereInput = {};
     if (!includeInactive) where.active = true;
@@ -56,6 +56,7 @@ export async function POST(req: NextRequest) {
         stock: data.stock,
         active: data.active,
         favorite: data.favorite,
+        vendor: data.vendor,
         categoryId: data.categoryId,
       },
       include: { category: { select: { id: true, name: true } } },

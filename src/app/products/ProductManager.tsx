@@ -20,6 +20,7 @@ type Draft = {
   categoryId: string;
   active: boolean;
   favorite: boolean;
+  vendor: string;
 };
 
 const emptyDraft: Draft = {
@@ -35,6 +36,7 @@ const emptyDraft: Draft = {
   categoryId: "",
   active: true,
   favorite: false,
+  vendor: "",
 };
 
 export function ProductManager() {
@@ -46,22 +48,56 @@ export function ProductManager() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [newCategory, setNewCategory] = useState("");
+  const [vendorNames, setVendorNames] = useState<string[]>([]);
+
+  // Inline "add vendor" state for the product modal.
+  const [addingVendor, setAddingVendor] = useState(false);
+  const [newVendor, setNewVendor] = useState({ name: "", email: "", phone: "" });
+  const [savingVendor, setSavingVendor] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [p, c] = await Promise.all([
-        api<{ products: Product[] }>("/api/products?all=1&take=500"),
+      const [p, c, v] = await Promise.all([
+        api<{ products: Product[] }>("/api/products?all=1&take=5000"),
         api<{ categories: Category[] }>("/api/categories"),
+        api<{ vendors: { name: string }[] }>("/api/vendors"),
       ]);
       setProducts(p.products);
       setCategories(c.categories);
+      setVendorNames(v.vendors.map((x) => x.name));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load");
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const reloadVendors = useCallback(async () => {
+    const v = await api<{ vendors: { name: string }[] }>("/api/vendors");
+    setVendorNames(v.vendors.map((x) => x.name));
+  }, []);
+
+  async function saveNewVendor() {
+    const name = newVendor.name.trim();
+    if (!name) return;
+    setSavingVendor(true);
+    setError(null);
+    try {
+      await api("/api/vendors", {
+        method: "POST",
+        body: JSON.stringify({ name, email: newVendor.email.trim(), phone: newVendor.phone.trim() }),
+      });
+      await reloadVendors();
+      setDraft((d) => (d ? { ...d, vendor: name } : d));
+      setAddingVendor(false);
+      setNewVendor({ name: "", email: "", phone: "" });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not add vendor");
+    } finally {
+      setSavingVendor(false);
+    }
+  }
 
   useEffect(() => {
     load();
@@ -74,17 +110,30 @@ export function ProductManager() {
       (p) =>
         p.name.toLowerCase().includes(s) ||
         p.sku.toLowerCase().includes(s) ||
+        (p.vendor ?? "").toLowerCase().includes(s) ||
         (p.barcode ?? "").toLowerCase().includes(s),
     );
   }, [products, q]);
 
+  function resetVendorAdd() {
+    setAddingVendor(false);
+    setNewVendor({ name: "", email: "", phone: "" });
+  }
+
+  function closeDraft() {
+    setDraft(null);
+    resetVendorAdd();
+  }
+
   function startCreate() {
     setError(null);
+    resetVendorAdd();
     setDraft({ ...emptyDraft });
   }
 
   function startEdit(p: Product) {
     setError(null);
+    resetVendorAdd();
     setDraft({
       id: p.id,
       name: p.name,
@@ -99,6 +148,7 @@ export function ProductManager() {
       categoryId: p.categoryId ?? "",
       active: p.active,
       favorite: p.favorite,
+      vendor: p.vendor ?? "",
     });
   }
 
@@ -119,6 +169,7 @@ export function ProductManager() {
       categoryId: draft.categoryId || undefined,
       active: draft.active,
       favorite: draft.favorite,
+      vendor: draft.vendor.trim(),
     };
     try {
       if (draft.id) {
@@ -126,7 +177,7 @@ export function ProductManager() {
       } else {
         await api("/api/products", { method: "POST", body: JSON.stringify(payload) });
       }
-      setDraft(null);
+      closeDraft();
       load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not save");
@@ -171,7 +222,7 @@ export function ProductManager() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-7xl flex-1 p-4">
+    <div className="w-full flex-1 p-4">
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <h1 className="text-xl font-semibold">Products</h1>
         <input
@@ -215,6 +266,7 @@ export function ProductManager() {
               <th className="w-10 px-3 py-2.5" title="Show on register">★</th>
               <th className="px-4 py-2.5">Name</th>
               <th className="px-4 py-2.5">SKU</th>
+              <th className="px-4 py-2.5">Vendor</th>
               <th className="px-4 py-2.5">Category</th>
               <th className="px-4 py-2.5 text-right">Price</th>
               <th className="px-4 py-2.5 text-right">Tax</th>
@@ -225,7 +277,7 @@ export function ProductManager() {
           <tbody className="divide-y divide-zinc-100">
             {loading ? (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-zinc-400">
+                <td colSpan={9} className="px-4 py-8 text-center text-zinc-400">
                   Loading…
                 </td>
               </tr>
@@ -249,6 +301,7 @@ export function ProductManager() {
                     {!p.active && <span className="ml-2 text-xs text-zinc-400">(archived)</span>}
                   </td>
                   <td className="px-4 py-2.5 text-zinc-500">{p.sku}</td>
+                  <td className="px-4 py-2.5 text-zinc-500">{p.vendor || "—"}</td>
                   <td className="px-4 py-2.5 text-zinc-500">{p.category?.name ?? "—"}</td>
                   <td className="px-4 py-2.5 text-right">{formatMoney(p.priceCents)}</td>
                   <td className="px-4 py-2.5 text-right text-zinc-500">{formatBps(p.taxRateBps)}</td>
@@ -277,7 +330,7 @@ export function ProductManager() {
       </div>
 
       {draft && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={() => setDraft(null)}>
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={closeDraft}>
           <div
             className="card max-h-[90vh] w-full max-w-lg overflow-y-auto p-6"
             onClick={(e) => e.stopPropagation()}
@@ -348,6 +401,80 @@ export function ProductManager() {
                   ))}
                 </select>
               </div>
+              <div className="col-span-2">
+                <label className="label">Vendor</label>
+                {!addingVendor ? (
+                  <div className="flex gap-2">
+                    <select
+                      className="input"
+                      value={draft.vendor}
+                      onChange={(e) => {
+                        if (e.target.value === "__add__") {
+                          setNewVendor({ name: "", email: "", phone: "" });
+                          setAddingVendor(true);
+                        } else {
+                          setDraft({ ...draft, vendor: e.target.value });
+                        }
+                      }}
+                    >
+                      <option value="">— None —</option>
+                      {[...new Set([...vendorNames, draft.vendor].filter(Boolean))]
+                        .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+                        .map((v) => (
+                          <option key={v} value={v}>
+                            {v}
+                          </option>
+                        ))}
+                      <option value="__add__">＋ Add new vendor…</option>
+                    </select>
+                  </div>
+                ) : (
+                  <div className="rounded-md border border-zinc-200 p-3">
+                    <p className="mb-2 text-xs font-medium text-zinc-600">New vendor</p>
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <input
+                        className="input"
+                        placeholder="Name *"
+                        value={newVendor.name}
+                        onChange={(e) => setNewVendor({ ...newVendor, name: e.target.value })}
+                        autoFocus
+                      />
+                      <input
+                        className="input"
+                        placeholder="Email"
+                        value={newVendor.email}
+                        onChange={(e) => setNewVendor({ ...newVendor, email: e.target.value })}
+                      />
+                      <input
+                        className="input"
+                        placeholder="Phone"
+                        value={newVendor.phone}
+                        onChange={(e) => setNewVendor({ ...newVendor, phone: e.target.value })}
+                      />
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={saveNewVendor}
+                        disabled={savingVendor || !newVendor.name.trim()}
+                        className="btn-primary h-8 text-xs"
+                      >
+                        {savingVendor ? "Adding…" : "Add vendor"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={resetVendorAdd}
+                        className="btn-ghost h-8 text-xs"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                    <p className="mt-1 text-[11px] text-zinc-400">
+                      Saved to Vendors and selected for this product.
+                    </p>
+                  </div>
+                )}
+              </div>
               <div className="col-span-2 flex items-center gap-4">
                 <label className="flex items-center gap-2 text-sm">
                   <input
@@ -400,7 +527,7 @@ export function ProductManager() {
             {error && <p className="mt-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
             <div className="mt-5 flex gap-2">
-              <button onClick={() => setDraft(null)} className="btn-secondary flex-1">
+              <button onClick={closeDraft} className="btn-secondary flex-1">
                 Cancel
               </button>
               <button onClick={save} disabled={saving} className="btn-primary flex-1">

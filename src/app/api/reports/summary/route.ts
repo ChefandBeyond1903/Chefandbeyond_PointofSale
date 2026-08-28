@@ -81,6 +81,7 @@ export async function GET(req: NextRequest) {
         number: s.number,
         createdAt: s.createdAt.toISOString(),
         cashier: s.cashier.name,
+        customer: s.customerNameSnapshot || "",
         paymentMethod: s.paymentMethod,
         itemCount: s.items.reduce((sum, i) => sum + i.quantity, 0),
         totalCents: s.totalCents,

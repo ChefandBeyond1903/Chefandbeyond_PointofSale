@@ -64,7 +64,7 @@ export function UserManager({ currentUserId }: { currentUserId: string }) {
   }
 
   return (
-    <div className="mx-auto w-full max-w-4xl flex-1 p-4">
+    <div className="w-full flex-1 p-4">
       <h1 className="mb-4 text-xl font-semibold">Staff</h1>
 
       {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}

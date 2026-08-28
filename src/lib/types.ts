@@ -16,6 +16,31 @@ export interface Category {
   _count?: { products: number };
 }
 
+export interface Vendor {
+  id: string;
+  name: string;
+  contact: string;
+  email: string;
+  phone: string;
+  address: string;
+  notes: string;
+  createdAt?: string;
+  productCount?: number;
+}
+
+export interface Customer {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+  company: string;
+  notes: string;
+  createdAt?: string;
+  _count?: { sales: number };
+  sales?: { id: string; number: number; totalCents: number; createdAt: string }[];
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -29,6 +54,7 @@ export interface Product {
   stock: number;
   active: boolean;
   favorite: boolean;
+  vendor: string;
   categoryId: string | null;
   category: { id: string; name: string } | null;
   createdAt?: string;
@@ -39,11 +65,91 @@ export interface SaleItem {
   id: string;
   productId: string;
   nameSnapshot: string;
+  skuSnapshot: string;
+  vendorSnapshot: string;
   unitPriceCents: number;
+  unitCostCents: number;
   quantity: number;
   discountCents: number;
   taxRateBps: number;
   lineTotalCents: number;
+}
+
+export type PurchaseOrderStatus = "OPEN" | "CLOSED" | "SENT" | "RECEIVED" | "CANCELLED";
+
+export interface PurchaseOrderItem {
+  id: string;
+  productId: string | null;
+  nameSnapshot: string;
+  skuSnapshot: string;
+  description: string;
+  quantity: number;
+  unitCostCents: number;
+  lineCostCents: number;
+  customerProject: string;
+  klass: string;
+  sortOrder: number;
+}
+
+export interface PurchaseOrderCategoryLine {
+  id: string;
+  category: string;
+  description: string;
+  amountCents: number;
+  customerProject: string;
+  klass: string;
+  sortOrder: number;
+}
+
+export interface PurchaseOrder {
+  id: string;
+  poNumber: string;
+  vendor: string;
+  status: PurchaseOrderStatus;
+  subtotalCents: number;
+  note: string | null;
+
+  email: string;
+  ccBcc: string;
+  mailingAddress: string;
+  shipTo: string;
+  shippingAddress: string;
+  poDate: string;
+  dueDate: string | null;
+  shipVia: string;
+  storeName: string;
+  permitNumber: string;
+  messageToCustomer: string;
+  poRef: string;
+  salesRep: string;
+  mobileNumber: string;
+  tags: string; // JSON array string
+  messageToVendor: string;
+  memo: string;
+
+  saleId: string | null;
+  createdAt: string;
+  createdBy?: { id: string; name: string };
+  sale?: { id: string; number: number; createdAt?: string } | null;
+  items?: PurchaseOrderItem[];
+  categoryLines?: PurchaseOrderCategoryLine[];
+  _count?: { items: number };
+}
+
+/** One vendor's slice of an invoice, ready to become a PO. */
+export interface InvoiceVendor {
+  vendor: string;
+  quantity: number;
+  costCents: number;
+  letter: string;
+  poNumber: string;
+  hasPo: boolean;
+}
+
+export interface InvoiceDetail {
+  sale: Sale & { purchaseOrders: PurchaseOrder[] };
+  vendors: InvoiceVendor[];
+  unassignedQty: number;
 }
 
 export interface Sale {
@@ -60,6 +166,12 @@ export interface Sale {
   note: string | null;
   createdAt: string;
   cashier?: { id: string; name: string };
+  customer?: { id: string; name: string } | Customer | null;
+  customerId?: string | null;
+  customerNameSnapshot?: string;
+  customerEmailSnapshot?: string;
+  customerPhoneSnapshot?: string;
+  customerAddressSnapshot?: string;
   items: SaleItem[];
 }
 
@@ -107,6 +219,7 @@ export interface ReportSummary {
     number: number;
     createdAt: string;
     cashier: string;
+    customer: string;
     paymentMethod: string;
     itemCount: number;
     totalCents: number;

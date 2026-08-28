@@ -9,6 +9,9 @@ import { api } from "@/lib/client";
 const LINKS = [
   { href: "/", label: "Register", managerOnly: false },
   { href: "/products", label: "Products", managerOnly: true },
+  { href: "/vendors", label: "Vendors", managerOnly: true },
+  { href: "/customers", label: "Customers", managerOnly: true },
+  { href: "/purchase-orders", label: "Purchase Orders", managerOnly: true },
   { href: "/reports", label: "Reports", managerOnly: true },
   { href: "/users", label: "Staff", managerOnly: true },
 ];
@@ -24,16 +27,18 @@ export function Nav({ user }: { user: SessionUser }) {
     setLoggingOut(true);
     try {
       await api("/api/auth/logout", { method: "POST" });
+    } catch {
+      // Session may already be gone — still send the user to the login page.
+    } finally {
       router.push("/login");
       router.refresh();
-    } finally {
       setLoggingOut(false);
     }
   }
 
   return (
     <header className="border-b border-zinc-200 bg-white">
-      <div className="mx-auto flex h-14 max-w-7xl items-center gap-1 px-4">
+      <div className="flex h-14 w-full items-center gap-1 px-4">
         <span className="mr-4 flex items-center gap-2 font-semibold tracking-tight">
           <span className="grid h-7 w-7 place-items-center rounded-md bg-indigo-600 text-xs font-bold text-white">
             CB

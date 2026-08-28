@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 import { SESSION_COOKIE } from "@/lib/auth";
 
-// Public paths that never require a session.
-const PUBLIC_PATHS = ["/login", "/api/auth/login"];
+// Public paths that never require a session. Logout must be reachable with an
+// expired/absent token, and /api/auth/me returns { user: null } on its own.
+const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/auth/logout", "/api/auth/me"];
 
 function isPublic(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));

@@ -18,6 +18,7 @@ export const productCreateSchema = z.object({
   categoryId: z.string().trim().min(1).optional().or(z.literal("")).transform((v) => (v ? v : undefined)),
   active: z.boolean().default(true),
   favorite: z.boolean().default(false),
+  vendor: z.string().trim().max(120).default(""),
 });
 
 // Every field optional and — crucially — NO defaults, so a partial update
@@ -36,10 +37,29 @@ export const productUpdateSchema = z.object({
   categoryId: z.string().trim().min(1).optional(),
   active: z.boolean().optional(),
   favorite: z.boolean().optional(),
+  vendor: z.string().trim().max(120).optional(),
 });
 
 export const categoryCreateSchema = z.object({
   name: z.string().trim().min(1).max(100),
+});
+
+export const vendorCreateSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  contact: z.string().trim().max(120).default(""),
+  email: z.string().trim().max(160).default(""),
+  phone: z.string().trim().max(60).default(""),
+  address: z.string().trim().max(400).default(""),
+  notes: z.string().trim().max(1000).default(""),
+});
+
+export const vendorUpdateSchema = z.object({
+  name: z.string().trim().min(1).max(120).optional(),
+  contact: z.string().trim().max(120).optional(),
+  email: z.string().trim().max(160).optional(),
+  phone: z.string().trim().max(60).optional(),
+  address: z.string().trim().max(400).optional(),
+  notes: z.string().trim().max(1000).optional(),
 });
 
 export const saleItemSchema = z.object({
@@ -48,12 +68,42 @@ export const saleItemSchema = z.object({
   discountCents: z.number().int().min(0).default(0),
 });
 
+export const saleCustomerSchema = z.object({
+  name: z.string().trim().min(1).max(160),
+  email: z.string().trim().max(200).default(""),
+  phone: z.string().trim().max(60).default(""),
+  address: z.string().trim().max(400).default(""),
+  company: z.string().trim().max(160).default(""),
+});
+
 export const saleCreateSchema = z.object({
   items: z.array(saleItemSchema).min(1),
   orderDiscountCents: z.number().int().min(0).default(0),
   paymentMethod: z.enum(["CASH", "CARD"]),
   tenderedCents: z.number().int().min(0).default(0),
   note: z.string().trim().max(500).optional().or(z.literal("")).transform((v) => (v ? v : undefined)),
+  // Bill the invoice to a customer: either an existing id, or details to
+  // match/auto-create by name.
+  customerId: z.string().min(1).optional(),
+  customer: saleCustomerSchema.optional(),
+});
+
+export const customerCreateSchema = z.object({
+  name: z.string().trim().min(1).max(160),
+  email: z.string().trim().max(200).default(""),
+  phone: z.string().trim().max(60).default(""),
+  address: z.string().trim().max(400).default(""),
+  company: z.string().trim().max(160).default(""),
+  notes: z.string().trim().max(1000).default(""),
+});
+
+export const customerUpdateSchema = z.object({
+  name: z.string().trim().min(1).max(160).optional(),
+  email: z.string().trim().max(200).optional(),
+  phone: z.string().trim().max(60).optional(),
+  address: z.string().trim().max(400).optional(),
+  company: z.string().trim().max(160).optional(),
+  notes: z.string().trim().max(1000).optional(),
 });
 
 export const userCreateSchema = z.object({
@@ -76,4 +126,107 @@ export const shiftOpenSchema = z.object({
 
 export const shiftCloseSchema = z.object({
   closingCountCents: z.number().int().min(0),
+});
+
+export const purchaseOrderCreateSchema = z.object({
+  vendor: z.string().trim().min(1).max(120),
+  note: z.string().trim().max(500).optional().or(z.literal("")).transform((v) => (v ? v : undefined)),
+  // Optional: pick specific products (and quantities) for this PO.
+  // Omit to include every item from this vendor on the invoice.
+  items: z
+    .array(
+      z.object({
+        productId: z.string().min(1),
+        quantity: z.number().int().min(1).max(999999),
+      }),
+    )
+    .min(1)
+    .optional(),
+});
+
+export const purchaseOrderUpdateSchema = z.object({
+  status: z.enum(["OPEN", "SENT", "RECEIVED", "CANCELLED"]).optional(),
+  note: z.string().trim().max(500).optional(),
+});
+
+// ---- Full purchase-order form (standalone entry / edit) ----
+
+const PO_STATUS = z.enum(["OPEN", "CLOSED", "SENT", "RECEIVED", "CANCELLED"]);
+
+const poCategoryLineSchema = z.object({
+  category: z.string().trim().max(200).default(""),
+  description: z.string().trim().max(1000).default(""),
+  amountCents: z.number().int().default(0),
+  customerProject: z.string().trim().max(200).default(""),
+  klass: z.string().trim().max(200).default(""),
+});
+
+const poItemLineSchema = z.object({
+  productId: z.string().min(1).nullish(),
+  productService: z.string().trim().max(300).default(""),
+  sku: z.string().trim().max(120).default(""),
+  description: z.string().trim().max(1000).default(""),
+  quantity: z.number().int().min(0).default(0),
+  rateCents: z.number().int().min(0).default(0),
+  customerProject: z.string().trim().max(200).default(""),
+  klass: z.string().trim().max(200).default(""),
+});
+
+// Accepts an ISO datetime or a plain "YYYY-MM-DD".
+const dateish = z
+  .string()
+  .trim()
+  .refine((s) => !s || !Number.isNaN(Date.parse(s)), "Invalid date");
+
+export const purchaseOrderFormSchema = z.object({
+  vendor: z.string().trim().min(1).max(120),
+  status: PO_STATUS.default("OPEN"),
+  poNumber: z.string().trim().min(1).max(60).optional(),
+  email: z.string().trim().max(300).default(""),
+  ccBcc: z.string().trim().max(300).default(""),
+  mailingAddress: z.string().trim().max(1000).default(""),
+  shipTo: z.string().trim().max(200).default(""),
+  shippingAddress: z.string().trim().max(1000).default(""),
+  poDate: dateish.optional(),
+  dueDate: dateish.optional().nullable(),
+  shipVia: z.string().trim().max(200).default(""),
+  storeName: z.string().trim().max(200).default(""),
+  permitNumber: z.string().trim().max(120).default(""),
+  messageToCustomer: z.string().trim().max(1000).default(""),
+  poRef: z.string().trim().max(200).default(""),
+  salesRep: z.string().trim().max(200).default(""),
+  mobileNumber: z.string().trim().max(60).default(""),
+  tags: z.array(z.string().trim().max(60)).max(50).default([]),
+  messageToVendor: z.string().trim().max(2000).default(""),
+  memo: z.string().trim().max(2000).default(""),
+  categoryLines: z.array(poCategoryLineSchema).default([]),
+  itemLines: z.array(poItemLineSchema).default([]),
+});
+
+// PATCH: every field optional, no defaults — a `{ status }`-only call and a
+// full-form save both go through here.
+export const purchaseOrderPatchSchema = z.object({
+  vendor: z.string().trim().min(1).max(120).optional(),
+  status: PO_STATUS.optional(),
+  poNumber: z.string().trim().min(1).max(60).optional(),
+  note: z.string().trim().max(500).optional(),
+  email: z.string().trim().max(300).optional(),
+  ccBcc: z.string().trim().max(300).optional(),
+  mailingAddress: z.string().trim().max(1000).optional(),
+  shipTo: z.string().trim().max(200).optional(),
+  shippingAddress: z.string().trim().max(1000).optional(),
+  poDate: dateish.optional(),
+  dueDate: dateish.optional().nullable(),
+  shipVia: z.string().trim().max(200).optional(),
+  storeName: z.string().trim().max(200).optional(),
+  permitNumber: z.string().trim().max(120).optional(),
+  messageToCustomer: z.string().trim().max(1000).optional(),
+  poRef: z.string().trim().max(200).optional(),
+  salesRep: z.string().trim().max(200).optional(),
+  mobileNumber: z.string().trim().max(60).optional(),
+  tags: z.array(z.string().trim().max(60)).max(50).optional(),
+  messageToVendor: z.string().trim().max(2000).optional(),
+  memo: z.string().trim().max(2000).optional(),
+  categoryLines: z.array(poCategoryLineSchema).optional(),
+  itemLines: z.array(poItemLineSchema).optional(),
 });

@@ -14,9 +14,11 @@ export async function GET(req: NextRequest) {
     const from = searchParams.get("from");
     const to = searchParams.get("to");
     const cashierId = searchParams.get("cashierId")?.trim();
+    const number = Number(searchParams.get("number"));
 
     const where: Prisma.SaleWhereInput = {};
     if (cashierId) where.cashierId = cashierId;
+    if (Number.isInteger(number) && number > 0) where.number = number;
     if (from || to) {
       where.createdAt = {};
       if (from) where.createdAt.gte = new Date(from);
@@ -29,6 +31,7 @@ export async function GET(req: NextRequest) {
       take,
       include: {
         cashier: { select: { id: true, name: true } },
+        customer: { select: { id: true, name: true } },
         items: true,
       },
     });
@@ -65,9 +68,7 @@ export async function POST(req: NextRequest) {
     for (const p of products) {
       const line = merged.get(p.id)!;
       if (!p.active) throw new HttpError(400, `"${p.name}" is not available for sale`);
-      if (p.trackStock && p.stock < line.quantity) {
-        throw new HttpError(409, `Not enough stock for "${p.name}" (${p.stock} left)`);
-      }
+      // Overselling is allowed — stock is still tracked and may go negative.
       priced.push({
         productId: p.id,
         name: p.name,
@@ -79,6 +80,10 @@ export async function POST(req: NextRequest) {
     }
 
     const computed = computeSale(priced, body.orderDiscountCents);
+
+    const meta = new Map(
+      products.map((p) => [p.id, { sku: p.sku, vendor: p.vendor, costCents: p.costCents }]),
+    );
 
     let tenderedCents = computed.totalCents;
     let changeCents = 0;
@@ -99,6 +104,48 @@ export async function POST(req: NextRequest) {
       const last = await tx.sale.findFirst({ orderBy: { number: "desc" }, select: { number: true } });
       const number = (last?.number ?? 0) + 1;
 
+      // Resolve the customer: use the given id, else match by name/email, else
+      // auto-create. Blank fields on an existing record get filled in.
+      let customerId: string | null = null;
+      let cSnap = { name: "", email: "", phone: "", address: "" };
+      if (body.customerId) {
+        const c = await tx.customer.findUnique({ where: { id: body.customerId } });
+        if (!c) throw new HttpError(400, "Customer not found");
+        customerId = c.id;
+        cSnap = { name: c.name, email: c.email, phone: c.phone, address: c.address };
+      } else if (body.customer) {
+        const inp = body.customer;
+        const existing = await tx.customer.findFirst({
+          where: {
+            OR: [{ name: inp.name }, ...(inp.email ? [{ email: inp.email }] : [])],
+          },
+        });
+        if (existing) {
+          const patch: Record<string, string> = {};
+          if (!existing.email && inp.email) patch.email = inp.email;
+          if (!existing.phone && inp.phone) patch.phone = inp.phone;
+          if (!existing.address && inp.address) patch.address = inp.address;
+          if (!existing.company && inp.company) patch.company = inp.company;
+          const c = Object.keys(patch).length
+            ? await tx.customer.update({ where: { id: existing.id }, data: patch })
+            : existing;
+          customerId = c.id;
+          cSnap = { name: c.name, email: c.email, phone: c.phone, address: c.address };
+        } else {
+          const c = await tx.customer.create({
+            data: {
+              name: inp.name,
+              email: inp.email,
+              phone: inp.phone,
+              address: inp.address,
+              company: inp.company,
+            },
+          });
+          customerId = c.id;
+          cSnap = { name: c.name, email: c.email, phone: c.phone, address: c.address };
+        }
+      }
+
       const created = await tx.sale.create({
         data: {
           number,
@@ -113,11 +160,19 @@ export async function POST(req: NextRequest) {
           note: body.note,
           cashierId: user.id,
           shiftId: openShift?.id ?? null,
+          customerId,
+          customerNameSnapshot: cSnap.name,
+          customerEmailSnapshot: cSnap.email,
+          customerPhoneSnapshot: cSnap.phone,
+          customerAddressSnapshot: cSnap.address,
           items: {
             create: computed.lines.map((l) => ({
               productId: l.productId,
               nameSnapshot: l.nameSnapshot,
+              skuSnapshot: meta.get(l.productId)?.sku ?? "",
+              vendorSnapshot: meta.get(l.productId)?.vendor ?? "",
               unitPriceCents: l.unitPriceCents,
+              unitCostCents: meta.get(l.productId)?.costCents ?? 0,
               quantity: l.quantity,
               discountCents: l.discountCents,
               taxRateBps: l.taxRateBps,
@@ -125,7 +180,11 @@ export async function POST(req: NextRequest) {
             })),
           },
         },
-        include: { items: true, cashier: { select: { id: true, name: true } } },
+        include: {
+          items: true,
+          cashier: { select: { id: true, name: true } },
+          customer: true,
+        },
       });
 
       for (const p of products) {

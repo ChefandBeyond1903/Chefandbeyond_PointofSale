@@ -59,16 +59,21 @@ body {
   }
 }
 
-/* When printing a receipt, show only the receipt block. */
 @media print {
-  body * {
+  /* Anything tagged .no-print (nav, action bars, internal-only fields) is dropped. */
+  .no-print {
+    display: none !important;
+  }
+
+  /* When a receipt modal is on screen, print only the receipt. */
+  body:has(#receipt) * {
     visibility: hidden;
   }
-  #receipt,
-  #receipt * {
+  body:has(#receipt) #receipt,
+  body:has(#receipt) #receipt * {
     visibility: visible;
   }
-  #receipt {
+  body:has(#receipt) #receipt {
     position: absolute;
     inset: 0;
     border: none !important;
