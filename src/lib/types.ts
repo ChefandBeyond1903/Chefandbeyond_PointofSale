@@ -195,6 +195,9 @@ export interface Sale {
   createdAt: string;
   storeId?: string | null;
   storeNameSnapshot?: string;
+  storeAddressSnapshot?: string;
+  storePhoneSnapshot?: string;
+  storeEmailSnapshot?: string;
   cashier?: { id: string; name: string };
   customer?: { id: string; name: string } | Customer | null;
   customerId?: string | null;

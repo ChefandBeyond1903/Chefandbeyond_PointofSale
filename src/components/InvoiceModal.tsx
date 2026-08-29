@@ -178,6 +178,11 @@ export function InvoiceModal({
                   {sale.paymentMethod}
                   {sale.storeNameSnapshot ? ` · ${sale.storeNameSnapshot}` : ""}
                 </p>
+                {(sale.storeAddressSnapshot || sale.storePhoneSnapshot) && (
+                  <p className="text-xs text-zinc-400">
+                    {[sale.storeAddressSnapshot, sale.storePhoneSnapshot].filter(Boolean).join(" · ")}
+                  </p>
+                )}
                 {sale.customerNameSnapshot ? (
                   <p className="mt-1 text-sm">
                     <span className="text-zinc-400">Bill to </span>

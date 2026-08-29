@@ -1113,12 +1113,16 @@ function ReceiptModal({
           {sale.storeNameSnapshot ? (
             <p className="text-center text-zinc-500">{sale.storeNameSnapshot}</p>
           ) : null}
-          {company?.address ? (
-            <p className="text-center text-zinc-500">{company.address}</p>
-          ) : null}
-          {company?.phone ? (
-            <p className="text-center text-zinc-500">{company.phone}</p>
-          ) : null}
+          {(sale.storeAddressSnapshot || company?.address) && (
+            <p className="text-center text-zinc-500">
+              {sale.storeAddressSnapshot || company?.address}
+            </p>
+          )}
+          {(sale.storePhoneSnapshot || company?.phone) && (
+            <p className="text-center text-zinc-500">
+              {sale.storePhoneSnapshot || company?.phone}
+            </p>
+          )}
           <p className="text-center text-zinc-500">Sale #{sale.number}</p>
           <p className="text-center text-zinc-500">{new Date(sale.createdAt).toLocaleString()}</p>
           {sale.customerNameSnapshot ? (

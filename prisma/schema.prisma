@@ -155,10 +155,14 @@ model Sale {
   note          String?
 
   // Store the sale was rung at (the cashier's assigned store). storeId may be
-  // null for historic rows; the snapshot freezes the name onto the invoice.
-  storeId           String?
-  store             Store?  @relation(fields: [storeId], references: [id])
-  storeNameSnapshot String  @default("")
+  // null for historic rows; the snapshots freeze the store's details onto the
+  // invoice so it stays correct if the store is later edited.
+  storeId              String?
+  store                Store?  @relation(fields: [storeId], references: [id])
+  storeNameSnapshot    String  @default("")
+  storeAddressSnapshot String  @default("")
+  storePhoneSnapshot   String  @default("")
+  storeEmailSnapshot   String  @default("")
 
   // Customer the invoice is billed to. customerId may be null (walk-in);
   // the snapshot fields freeze the details onto this invoice.

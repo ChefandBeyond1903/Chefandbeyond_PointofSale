@@ -55,6 +55,9 @@ export async function POST(req: NextRequest) {
     const taxRateBps = actor?.store?.taxRateBps ?? 0;
     const storeId = actor?.storeId ?? null;
     const storeNameSnapshot = actor?.store?.name ?? "";
+    const storeAddressSnapshot = actor?.store?.address ?? "";
+    const storePhoneSnapshot = actor?.store?.phone ?? "";
+    const storeEmailSnapshot = actor?.store?.email ?? "";
 
     // Merge duplicate product lines defensively.
     const merged = new Map<
@@ -200,6 +203,9 @@ export async function POST(req: NextRequest) {
           cashierId: user.id,
           storeId,
           storeNameSnapshot,
+          storeAddressSnapshot,
+          storePhoneSnapshot,
+          storeEmailSnapshot,
           shiftId: openShift?.id ?? null,
           customerId,
           customerNameSnapshot: cSnap.name,
