@@ -57,14 +57,22 @@ export async function POST(req: NextRequest) {
     const storeNameSnapshot = actor?.store?.name ?? "";
 
     // Merge duplicate product lines defensively.
-    const merged = new Map<string, { quantity: number; discountCents: number }>();
+    const merged = new Map<
+      string,
+      { quantity: number; discountCents: number; unitPriceCents?: number }
+    >();
     for (const item of body.items) {
       const prev = merged.get(item.productId);
       if (prev) {
         prev.quantity += item.quantity;
         prev.discountCents += item.discountCents;
+        if (item.unitPriceCents !== undefined) prev.unitPriceCents = item.unitPriceCents;
       } else {
-        merged.set(item.productId, { quantity: item.quantity, discountCents: item.discountCents });
+        merged.set(item.productId, {
+          quantity: item.quantity,
+          discountCents: item.discountCents,
+          unitPriceCents: item.unitPriceCents,
+        });
       }
     }
 
@@ -75,14 +83,17 @@ export async function POST(req: NextRequest) {
     }
 
     const priced: PricedInput[] = [];
+    let listSubtotalCents = 0;
     for (const p of products) {
       const line = merged.get(p.id)!;
       if (!p.active) throw new HttpError(400, `"${p.name}" is not available for sale`);
+      listSubtotalCents += p.priceCents * line.quantity;
       // Overselling is allowed — stock is still tracked and may go negative.
       priced.push({
         productId: p.id,
         name: p.name,
-        unitPriceCents: p.priceCents,
+        // A manual price (up or down) overrides the catalog price for this sale.
+        unitPriceCents: line.unitPriceCents ?? p.priceCents,
         quantity: line.quantity,
         lineDiscountCents: line.discountCents,
       });
@@ -177,6 +188,7 @@ export async function POST(req: NextRequest) {
           number,
           status: "COMPLETED",
           subtotalCents: computed.subtotalCents,
+          listSubtotalCents,
           discountCents: computed.discountCents,
           taxCents: computed.taxCents,
           taxRateBps: computed.taxRateBps,

@@ -68,6 +68,9 @@ export const saleItemSchema = z.object({
   productId: z.string().min(1),
   quantity: z.number().int().min(1).max(9999),
   discountCents: z.number().int().min(0).default(0),
+  // Manual per-unit price set at the register (up or down). Omit to use the
+  // product's catalog price.
+  unitPriceCents: z.number().int().min(0).max(100_000_00).optional(),
 });
 
 export const saleCustomerSchema = z.object({

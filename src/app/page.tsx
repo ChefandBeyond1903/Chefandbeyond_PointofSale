@@ -21,24 +21,37 @@ type DiscMode = "AMOUNT" | "PERCENT";
 interface CartLine {
   product: Product;
   quantity: number;
+  // Per-unit price actually charged. Starts at the catalog price and can be
+  // edited up or down at the register.
+  unitPriceCents: number;
   // Line discount in dollars (AMOUNT mode) — a total for the line, not per unit.
   discountCents: number;
-  // Line discount as a percent of the line's list value (PERCENT mode).
+  // Line discount as a percent of the priced line value (PERCENT mode).
   discPercent: number;
   discMode: DiscMode;
 }
 
-/** The line's list value before any discount. */
-function lineBaseCents(l: CartLine): number {
+/** Catalog list value of the line (before any manual price change). */
+function lineListCents(l: CartLine): number {
   return l.product.priceCents * l.quantity;
+}
+
+/** The line value the discount applies to: charged unit price × qty. */
+function linePricedCents(l: CartLine): number {
+  return l.unitPriceCents * l.quantity;
 }
 
 /** Effective line discount in cents, from whichever mode is active, clamped. */
 function resolveLineDiscount(l: CartLine): number {
-  const base = lineBaseCents(l);
+  const base = linePricedCents(l);
   const raw =
     l.discMode === "PERCENT" ? Math.round((base * l.discPercent) / 100) : l.discountCents;
   return Math.max(0, Math.min(base, raw));
+}
+
+/** What the customer pays for this line, before order-level discount. */
+function lineNetCents(l: CartLine): number {
+  return Math.max(0, linePricedCents(l) - resolveLineDiscount(l));
 }
 
 export default function RegisterPage() {
@@ -233,15 +246,15 @@ export default function RegisterPage() {
   }, [isSearching, searchHits, browseAll, allProducts, favorites, activeCategory]);
 
   const totals = useMemo(() => {
-    let subtotal = 0;
-    let lineDiscounts = 0;
+    let subtotal = 0; // catalog list value
+    let lineAdjust = 0; // list − charged, per line (negative = priced above list)
     const perLineAfter: number[] = [];
     for (const line of cart) {
-      const base = line.product.priceCents * line.quantity;
-      const disc = resolveLineDiscount(line);
-      subtotal += base;
-      lineDiscounts += disc;
-      perLineAfter.push(base - disc);
+      const list = lineListCents(line);
+      const net = lineNetCents(line);
+      subtotal += list;
+      lineAdjust += list - net;
+      perLineAfter.push(net);
     }
     const sumAfterLine = perLineAfter.reduce((a, b) => a + b, 0);
     const orderDisc =
@@ -280,10 +293,11 @@ export default function RegisterPage() {
       }
     });
 
-    const discount = lineDiscounts + orderDisc;
+    const discount = lineAdjust + orderDisc;
     const total = subtotal - discount + tax;
-    // "Customer total saving" = everything knocked off the list price.
-    const savedCents = discount;
+    // "Customer total saving" vs. catalog list — only when it's actually a saving.
+    const savedCents = Math.max(0, discount);
+    const overListCents = Math.max(0, -discount);
     const savedPct = subtotal > 0 ? (savedCents / subtotal) * 100 : 0;
     return {
       subtotal,
@@ -294,6 +308,7 @@ export default function RegisterPage() {
       sumAfterLine,
       orderDiscountResolved: orderDisc,
       savedCents,
+      overListCents,
       savedPct,
     };
   }, [cart, orderDiscountCents, orderDiscPercent, orderDiscMode, storeTaxRateBps]);
@@ -309,7 +324,14 @@ export default function RegisterPage() {
       }
       return [
         ...cur,
-        { product, quantity: 1, discountCents: 0, discPercent: 0, discMode: "AMOUNT" as const },
+        {
+          product,
+          quantity: 1,
+          unitPriceCents: product.priceCents,
+          discountCents: 0,
+          discPercent: 0,
+          discMode: "AMOUNT" as const,
+        },
       ];
     });
   }
@@ -332,7 +354,7 @@ export default function RegisterPage() {
     setCart((cur) =>
       cur.map((l) => {
         if (l.product.id !== productId || l.discMode === mode) return l;
-        const base = lineBaseCents(l);
+        const base = linePricedCents(l);
         const cents = resolveLineDiscount(l);
         return mode === "PERCENT"
           ? { ...l, discMode: mode, discPercent: base > 0 ? (cents / base) * 100 : 0 }
@@ -352,15 +374,30 @@ export default function RegisterPage() {
     });
   }
 
-  // Edit the line's charged amount directly — stored as an equivalent $ discount.
+  // Edit the line's total directly — sets the per-unit price (up or down) and
+  // clears any separate discount so the field shows exactly what's charged.
   function setLineTotal(productId: string, totalCents: number) {
     setCart((cur) =>
       cur.map((l) => {
-        if (l.product.id !== productId) return l;
-        const base = lineBaseCents(l);
-        const off = Math.max(0, Math.min(base, base - Math.max(0, totalCents)));
-        return { ...l, discMode: "AMOUNT", discountCents: off };
+        if (l.product.id !== productId || l.quantity <= 0) return l;
+        const unit = Math.max(0, Math.round(Math.max(0, totalCents) / l.quantity));
+        return {
+          ...l,
+          unitPriceCents: unit,
+          discMode: "AMOUNT",
+          discountCents: 0,
+          discPercent: 0,
+        };
       }),
+    );
+  }
+
+  // Reset a line's price back to the catalog price.
+  function resetLinePrice(productId: string) {
+    setCart((cur) =>
+      cur.map((l) =>
+        l.product.id === productId ? { ...l, unitPriceCents: l.product.priceCents } : l,
+      ),
     );
   }
 
@@ -408,6 +445,7 @@ export default function RegisterPage() {
             productId: l.product.id,
             quantity: l.quantity,
             discountCents: resolveLineDiscount(l),
+            unitPriceCents: l.unitPriceCents,
           })),
           orderDiscountCents: totals.orderDiscountResolved,
           paymentMethod,
@@ -612,11 +650,14 @@ export default function RegisterPage() {
                   const violation = totals.umrpViolations.find(
                     (v) => v.productId === line.product.id,
                   );
-                  const base = lineBaseCents(line);
+                  const listCents = lineListCents(line);
                   const lineDisc = resolveLineDiscount(line);
-                  const lineTotal = Math.max(0, base - lineDisc);
+                  const lineTotal = lineNetCents(line);
                   const unitNow = line.quantity > 0 ? Math.round(lineTotal / line.quantity) : 0;
-                  const savedPct = base > 0 ? Math.round((lineDisc / base) * 100) : 0;
+                  const lineSaved = listCents - lineTotal;
+                  const changePct =
+                    listCents > 0 ? Math.round((Math.abs(lineSaved) / listCents) * 100) : 0;
+                  const priceChanged = line.unitPriceCents !== line.product.priceCents;
                   return (
                   <li key={line.product.id} className="px-4 py-3">
                     <div className="flex items-start justify-between gap-2">
@@ -624,13 +665,26 @@ export default function RegisterPage() {
                         <p className="truncate text-sm font-medium">{line.product.name}</p>
                         <p className="text-xs text-zinc-400">
                           List {formatMoney(line.product.priceCents)} ea
-                          {lineDisc > 0 && (
+                          {(priceChanged || lineDisc > 0) && (
                             <>
                               {" · "}
-                              <span className="text-green-600">
-                                now {formatMoney(unitNow)} ea · save {formatMoney(lineDisc)} (
-                                {savedPct}%)
+                              <span
+                                className={lineSaved >= 0 ? "text-green-600" : "text-amber-600"}
+                              >
+                                now {formatMoney(unitNow)} ea ·{" "}
+                                {lineSaved >= 0
+                                  ? `save ${formatMoney(lineSaved)} (${changePct}%)`
+                                  : `+${formatMoney(-lineSaved)} over list (${changePct}%)`}
                               </span>
+                              {priceChanged && (
+                                <button
+                                  type="button"
+                                  onClick={() => resetLinePrice(line.product.id)}
+                                  className="ml-1 text-indigo-600 hover:underline"
+                                >
+                                  reset
+                                </button>
+                              )}
                             </>
                           )}
                         </p>
@@ -762,8 +816,15 @@ export default function RegisterPage() {
                 )}
               </div>
             </div>
-            <Row label="Subtotal" value={formatMoney(totals.subtotal)} />
-            <Row label="Discount" value={`− ${formatMoney(totals.discount)}`} />
+            <Row label="Subtotal (list)" value={formatMoney(totals.subtotal)} />
+            <Row
+              label={totals.discount >= 0 ? "Discount" : "Price adjustment"}
+              value={
+                totals.discount >= 0
+                  ? `− ${formatMoney(totals.discount)}`
+                  : `+ ${formatMoney(-totals.discount)}`
+              }
+            />
             <Row
               label={`Tax${storeTaxRateBps != null ? ` (${formatBps(storeTaxRateBps)})` : ""}`}
               value={formatMoney(totals.tax)}
@@ -778,6 +839,12 @@ export default function RegisterPage() {
                 <span>
                   {formatMoney(totals.savedCents)} ({Math.round(totals.savedPct)}% off)
                 </span>
+              </div>
+            )}
+            {totals.overListCents > 0 && (
+              <div className="flex items-center justify-between rounded bg-amber-50 px-2 py-1.5 font-medium text-amber-700">
+                <span>Over list price</span>
+                <span>+ {formatMoney(totals.overListCents)}</span>
               </div>
             )}
 
@@ -1083,17 +1150,20 @@ function ReceiptModal({
             <span>Total</span>
             <span>{formatMoney(sale.totalCents)}</span>
           </div>
-          {sale.discountCents > 0 && (
-            <div className="flex justify-between font-bold">
-              <span>You saved</span>
-              <span>
-                {formatMoney(sale.discountCents)}
-                {sale.subtotalCents > 0
-                  ? ` (${Math.round((sale.discountCents / sale.subtotalCents) * 100)}% off)`
-                  : ""}
-              </span>
-            </div>
-          )}
+          {(() => {
+            const listSub = sale.listSubtotalCents || sale.subtotalCents;
+            const saved = listSub - (sale.subtotalCents - sale.discountCents);
+            if (saved <= 0) return null;
+            return (
+              <div className="flex justify-between font-bold">
+                <span>You saved</span>
+                <span>
+                  {formatMoney(saved)}
+                  {listSub > 0 ? ` (${Math.round((saved / listSub) * 100)}% off)` : ""}
+                </span>
+              </div>
+            );
+          })()}
           <div className="flex justify-between">
             <span>{sale.paymentMethod}</span>
             <span>{formatMoney(sale.tenderedCents)}</span>

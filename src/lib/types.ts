@@ -183,6 +183,7 @@ export interface Sale {
   number: number;
   status: string;
   subtotalCents: number;
+  listSubtotalCents: number;
   discountCents: number;
   taxCents: number;
   taxRateBps: number;

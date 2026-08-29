@@ -142,6 +142,9 @@ model Sale {
   number        Int    @unique
   status        String @default("COMPLETED")
   subtotalCents Int
+  // Sum of catalog list price × qty, before any manual price change or
+  // discount. Used to show the customer's saving vs. list. 0 on old rows.
+  listSubtotalCents Int @default(0)
   discountCents Int    @default(0)
   taxCents      Int    @default(0)
   taxRateBps    Int    @default(0)
