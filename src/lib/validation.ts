@@ -12,7 +12,7 @@ export const productCreateSchema = z.object({
   description: z.string().trim().max(1000).optional().or(z.literal("")).transform((v) => (v ? v : undefined)),
   priceCents: z.number().int().min(0),
   costCents: z.number().int().min(0).default(0),
-  taxRateBps: z.number().int().min(0).max(100000).default(0),
+  umrpCents: z.number().int().min(0).default(0),
   trackStock: z.boolean().default(true),
   stock: z.number().int().default(0),
   categoryId: z.string().trim().min(1).optional().or(z.literal("")).transform((v) => (v ? v : undefined)),
@@ -31,7 +31,7 @@ export const productUpdateSchema = z.object({
   description: z.string().trim().max(1000).optional(),
   priceCents: z.number().int().min(0).optional(),
   costCents: z.number().int().min(0).optional(),
-  taxRateBps: z.number().int().min(0).max(100000).optional(),
+  umrpCents: z.number().int().min(0).optional(),
   trackStock: z.boolean().optional(),
   stock: z.number().int().optional(),
   categoryId: z.string().trim().min(1).optional(),
@@ -51,6 +51,7 @@ export const vendorCreateSchema = z.object({
   phone: z.string().trim().max(60).default(""),
   address: z.string().trim().max(400).default(""),
   notes: z.string().trim().max(1000).default(""),
+  freightMinimumCents: z.number().int().min(0).max(1_000_000_00).default(0),
 });
 
 export const vendorUpdateSchema = z.object({
@@ -60,6 +61,7 @@ export const vendorUpdateSchema = z.object({
   phone: z.string().trim().max(60).optional(),
   address: z.string().trim().max(400).optional(),
   notes: z.string().trim().max(1000).optional(),
+  freightMinimumCents: z.number().int().min(0).max(1_000_000_00).optional(),
 });
 
 export const saleItemSchema = z.object({
@@ -111,6 +113,8 @@ export const userCreateSchema = z.object({
   name: z.string().trim().min(1).max(120),
   password: z.string().min(8).max(200),
   role: z.enum(["MANAGER", "CASHIER"]),
+  // The store this employee is assigned to. Its tax rate applies to their sales.
+  storeId: z.string().trim().min(1).optional().or(z.literal("")).transform((v) => (v ? v : undefined)),
 });
 
 export const userUpdateSchema = z.object({
@@ -118,6 +122,36 @@ export const userUpdateSchema = z.object({
   password: z.string().min(8).max(200).optional(),
   role: z.enum(["MANAGER", "CASHIER"]).optional(),
   active: z.boolean().optional(),
+  // "" clears the assignment; a non-empty id sets it.
+  storeId: z.string().trim().max(64).nullable().optional(),
+});
+
+export const storeCreateSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  taxRateBps: z.number().int().min(0).max(100000).default(0),
+  address: z.string().trim().max(400).default(""),
+  phone: z.string().trim().max(60).default(""),
+  email: z.string().trim().max(160).default(""),
+  active: z.boolean().default(true),
+});
+
+export const storeUpdateSchema = z.object({
+  name: z.string().trim().min(1).max(120).optional(),
+  taxRateBps: z.number().int().min(0).max(100000).optional(),
+  address: z.string().trim().max(400).optional(),
+  phone: z.string().trim().max(60).optional(),
+  email: z.string().trim().max(160).optional(),
+  active: z.boolean().optional(),
+});
+
+export const companyUpdateSchema = z.object({
+  name: z.string().trim().max(160).default(""),
+  legalName: z.string().trim().max(160).default(""),
+  taxId: z.string().trim().max(60).default(""),
+  address: z.string().trim().max(400).default(""),
+  phone: z.string().trim().max(60).default(""),
+  email: z.string().trim().max(160).default(""),
+  website: z.string().trim().max(160).default(""),
 });
 
 export const shiftOpenSchema = z.object({

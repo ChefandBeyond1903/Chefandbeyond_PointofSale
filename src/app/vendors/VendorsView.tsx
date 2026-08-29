@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/client";
+import { formatMoney } from "@/lib/money";
+import { MoneyInput } from "@/components/MoneyInput";
 import type { Vendor } from "@/lib/types";
 
 type Draft = {
@@ -12,9 +14,18 @@ type Draft = {
   phone: string;
   address: string;
   notes: string;
+  freightMinimumCents: number;
 };
 
-const emptyDraft: Draft = { name: "", contact: "", email: "", phone: "", address: "", notes: "" };
+const emptyDraft: Draft = {
+  name: "",
+  contact: "",
+  email: "",
+  phone: "",
+  address: "",
+  notes: "",
+  freightMinimumCents: 0,
+};
 
 export function VendorsView() {
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -51,6 +62,7 @@ export function VendorsView() {
       phone: draft.phone,
       address: draft.address,
       notes: draft.notes,
+      freightMinimumCents: draft.freightMinimumCents,
     };
     try {
       if (draft.id) {
@@ -102,6 +114,7 @@ export function VendorsView() {
               <th className="px-4 py-2.5">Contact</th>
               <th className="px-4 py-2.5">Email</th>
               <th className="px-4 py-2.5">Phone</th>
+              <th className="px-4 py-2.5 text-right">Free-freight min.</th>
               <th className="px-4 py-2.5 text-right">Products</th>
               <th className="px-4 py-2.5"></th>
             </tr>
@@ -109,13 +122,13 @@ export function VendorsView() {
           <tbody className="divide-y divide-zinc-100">
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-zinc-400">
+                <td colSpan={7} className="px-4 py-8 text-center text-zinc-400">
                   Loading…
                 </td>
               </tr>
             ) : vendors.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-zinc-400">
+                <td colSpan={7} className="px-4 py-8 text-center text-zinc-400">
                   No vendors yet. Add one to start.
                 </td>
               </tr>
@@ -126,6 +139,9 @@ export function VendorsView() {
                   <td className="px-4 py-2.5 text-zinc-500">{v.contact || "—"}</td>
                   <td className="px-4 py-2.5 text-zinc-500">{v.email || "—"}</td>
                   <td className="px-4 py-2.5 text-zinc-500">{v.phone || "—"}</td>
+                  <td className="px-4 py-2.5 text-right text-zinc-500">
+                    {v.freightMinimumCents > 0 ? formatMoney(v.freightMinimumCents) : "—"}
+                  </td>
                   <td className="px-4 py-2.5 text-right text-zinc-500">{v.productCount ?? 0}</td>
                   <td className="px-4 py-2.5 text-right whitespace-nowrap">
                     <button
@@ -138,6 +154,7 @@ export function VendorsView() {
                           phone: v.phone,
                           address: v.address,
                           notes: v.notes,
+                          freightMinimumCents: v.freightMinimumCents,
                         })
                       }
                       className="btn-ghost text-xs"
@@ -210,6 +227,17 @@ export function VendorsView() {
                   value={draft.address}
                   onChange={(e) => setDraft({ ...draft, address: e.target.value })}
                 />
+              </div>
+              <div>
+                <label className="label">Free-freight minimum</label>
+                <MoneyInput
+                  cents={draft.freightMinimumCents}
+                  onCentsChange={(c) => setDraft({ ...draft, freightMinimumCents: c })}
+                />
+                <p className="mt-0.5 text-[11px] text-zinc-400">
+                  Order total needed for free freight. Leave 0 if none — ordering below it only
+                  warns, it never blocks the PO.
+                </p>
               </div>
               <div>
                 <label className="label">Notes</label>

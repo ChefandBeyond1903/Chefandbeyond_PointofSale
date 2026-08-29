@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUser, HttpError } from "@/lib/auth";
 import { saleCreateSchema } from "@/lib/validation";
 import { computeSale, type PricedInput } from "@/lib/sale";
+import { formatMoney } from "@/lib/money";
 import { ok, toErrorResponse } from "@/lib/api";
 
 export async function GET(req: NextRequest) {
@@ -46,6 +47,15 @@ export async function POST(req: NextRequest) {
     const user = await requireUser();
     const body = saleCreateSchema.parse(await req.json());
 
+    // Sales tax is the cashier's assigned-store rate, applied to every line.
+    const actor = await prisma.user.findUnique({
+      where: { id: user.id },
+      include: { store: true },
+    });
+    const taxRateBps = actor?.store?.taxRateBps ?? 0;
+    const storeId = actor?.storeId ?? null;
+    const storeNameSnapshot = actor?.store?.name ?? "";
+
     // Merge duplicate product lines defensively.
     const merged = new Map<string, { quantity: number; discountCents: number }>();
     for (const item of body.items) {
@@ -75,11 +85,27 @@ export async function POST(req: NextRequest) {
         unitPriceCents: p.priceCents,
         quantity: line.quantity,
         lineDiscountCents: line.discountCents,
-        taxRateBps: p.taxRateBps,
       });
     }
 
-    const computed = computeSale(priced, body.orderDiscountCents);
+    const computed = computeSale(priced, body.orderDiscountCents, taxRateBps);
+
+    // UMRP floor: after every discount, no line may fall below the product's
+    // minimum resale price. Hard stop — this is never bypassable.
+    const umrpById = new Map(products.map((p) => [p.id, p.umrpCents]));
+    for (const l of computed.lines) {
+      const umrp = umrpById.get(l.productId) ?? 0;
+      if (umrp <= 0) continue;
+      const netCents = l.unitPriceCents * l.quantity - l.discountCents;
+      if (netCents < umrp * l.quantity) {
+        const eachCents = Math.floor(netCents / l.quantity);
+        throw new HttpError(
+          400,
+          `"${l.nameSnapshot}" can't be sold below its minimum price of ${formatMoney(umrp)} each ` +
+            `(this sale works out to ${formatMoney(eachCents)}). Reduce the discount.`,
+        );
+      }
+    }
 
     const meta = new Map(
       products.map((p) => [p.id, { sku: p.sku, vendor: p.vendor, costCents: p.costCents }]),
@@ -153,12 +179,15 @@ export async function POST(req: NextRequest) {
           subtotalCents: computed.subtotalCents,
           discountCents: computed.discountCents,
           taxCents: computed.taxCents,
+          taxRateBps: computed.taxRateBps,
           totalCents: computed.totalCents,
           paymentMethod: body.paymentMethod,
           tenderedCents,
           changeCents,
           note: body.note,
           cashierId: user.id,
+          storeId,
+          storeNameSnapshot,
           shiftId: openShift?.id ?? null,
           customerId,
           customerNameSnapshot: cSnap.name,

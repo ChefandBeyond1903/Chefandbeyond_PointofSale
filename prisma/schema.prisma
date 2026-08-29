@@ -11,6 +11,37 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+/// The operating company. A single row, id = "company". Its details appear on
+/// receipts and invoices; individual locations live in Store.
+model Company {
+  id        String   @id @default("company")
+  name      String   @default("")
+  legalName String   @default("")
+  taxId     String   @default("")
+  address   String   @default("")
+  phone     String   @default("")
+  email     String   @default("")
+  website   String   @default("")
+  updatedAt DateTime @updatedAt
+}
+
+/// A physical store location. taxRateBps is basis points (975 = 9.75%) and is
+/// charged on every line of a sale rung by a cashier assigned to this store.
+model Store {
+  id         String   @id @default(cuid())
+  name       String   @unique
+  taxRateBps Int      @default(0)
+  address    String   @default("")
+  phone      String   @default("")
+  email      String   @default("")
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  users User[]
+  sales Sale[]
+}
+
 /// Staff who can sign in. role is "MANAGER" or "CASHIER".
 model User {
   id           String   @id @default(cuid())
@@ -22,9 +53,14 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  storeId String?
+  store   Store?  @relation(fields: [storeId], references: [id])
+
   sales          Sale[]
   shifts         Shift[]
   purchaseOrders PurchaseOrder[]
+
+  @@index([storeId])
 }
 
 model Category {
@@ -44,6 +80,9 @@ model Vendor {
   phone     String   @default("")
   address   String   @default("")
   notes     String   @default("")
+  // Order total (in cents) this vendor requires for free freight. 0 = none.
+  // Ordering below this only warns; it never blocks the purchase order.
+  freightMinimumCents Int @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -63,8 +102,8 @@ model Customer {
   sales     Sale[]
 }
 
-/// A sellable item. All money is stored as integer cents.
-/// taxRateBps is basis points: 800 = 8.00%.
+/// A sellable item. All money is stored as integer cents. Sales tax is not set
+/// per product — it comes from the cashier's Store (see Store.taxRateBps).
 model Product {
   id          String  @id @default(cuid())
   name        String
@@ -73,7 +112,9 @@ model Product {
   description String?
   priceCents  Int
   costCents   Int     @default(0)
-  taxRateBps  Int     @default(0)
+  // Unilateral minimum resale price, in cents. The item may never be sold
+  // below this — after every discount — at the register. 0 = no floor.
+  umrpCents   Int     @default(0)
   trackStock  Boolean @default(true)
   stock       Int     @default(0)
   active      Boolean @default(true)
@@ -103,11 +144,18 @@ model Sale {
   subtotalCents Int
   discountCents Int    @default(0)
   taxCents      Int    @default(0)
+  taxRateBps    Int    @default(0)
   totalCents    Int
   paymentMethod String
   tenderedCents Int    @default(0)
   changeCents   Int    @default(0)
   note          String?
+
+  // Store the sale was rung at (the cashier's assigned store). storeId may be
+  // null for historic rows; the snapshot freezes the name onto the invoice.
+  storeId           String?
+  store             Store?  @relation(fields: [storeId], references: [id])
+  storeNameSnapshot String  @default("")
 
   // Customer the invoice is billed to. customerId may be null (walk-in);
   // the snapshot fields freeze the details onto this invoice.
@@ -130,6 +178,7 @@ model Sale {
   @@index([createdAt])
   @@index([customerId])
   @@index([cashierId])
+  @@index([storeId])
 }
 
 model SaleItem {

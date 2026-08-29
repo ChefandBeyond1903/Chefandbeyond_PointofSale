@@ -14,6 +14,7 @@ const LINKS = [
   { href: "/purchase-orders", label: "Purchase Orders", managerOnly: true },
   { href: "/reports", label: "Reports", managerOnly: true },
   { href: "/users", label: "Staff", managerOnly: true },
+  { href: "/settings", label: "Settings", managerOnly: true },
 ];
 
 export function Nav({ user }: { user: SessionUser }) {

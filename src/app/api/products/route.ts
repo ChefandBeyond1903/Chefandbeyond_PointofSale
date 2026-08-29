@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireUser, requireRole } from "@/lib/auth";
+import { requireUser, requireRole, HttpError } from "@/lib/auth";
 import { productCreateSchema } from "@/lib/validation";
 import { ok, toErrorResponse } from "@/lib/api";
 
@@ -43,6 +43,9 @@ export async function POST(req: NextRequest) {
   try {
     await requireRole("MANAGER");
     const data = productCreateSchema.parse(await req.json());
+    if (data.umrpCents > 0 && data.priceCents < data.umrpCents) {
+      throw new HttpError(400, "Price can't be below the minimum resale price (UMRP)");
+    }
     const product = await prisma.product.create({
       data: {
         name: data.name,
@@ -51,7 +54,7 @@ export async function POST(req: NextRequest) {
         description: data.description,
         priceCents: data.priceCents,
         costCents: data.costCents,
-        taxRateBps: data.taxRateBps,
+        umrpCents: data.umrpCents,
         trackStock: data.trackStock,
         stock: data.stock,
         active: data.active,

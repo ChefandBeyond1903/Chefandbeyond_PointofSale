@@ -24,11 +24,21 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (body.role !== undefined) data.role = body.role;
     if (body.active !== undefined) data.active = body.active;
     if (body.password) data.passwordHash = await hashPassword(body.password);
+    if (body.storeId !== undefined) data.storeId = body.storeId ? body.storeId : null;
 
     const user = await prisma.user.update({
       where: { id },
       data,
-      select: { id: true, email: true, name: true, role: true, active: true, createdAt: true },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        active: true,
+        createdAt: true,
+        storeId: true,
+        store: { select: { id: true, name: true, taxRateBps: true } },
+      },
     });
     return ok({ user });
   } catch (err) {

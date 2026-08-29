@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/client";
-import { formatMoney, formatBps } from "@/lib/money";
+import { formatMoney } from "@/lib/money";
 import { MoneyInput } from "@/components/MoneyInput";
 import type { Category, Product } from "@/lib/types";
 
@@ -14,7 +14,7 @@ type Draft = {
   description: string;
   priceCents: number;
   costCents: number;
-  taxRatePct: string;
+  umrpCents: number;
   trackStock: boolean;
   stock: number;
   categoryId: string;
@@ -30,7 +30,7 @@ const emptyDraft: Draft = {
   description: "",
   priceCents: 0,
   costCents: 0,
-  taxRatePct: "0",
+  umrpCents: 0,
   trackStock: true,
   stock: 0,
   categoryId: "",
@@ -142,7 +142,7 @@ export function ProductManager() {
       description: p.description ?? "",
       priceCents: p.priceCents,
       costCents: p.costCents,
-      taxRatePct: (p.taxRateBps / 100).toString(),
+      umrpCents: p.umrpCents,
       trackStock: p.trackStock,
       stock: p.stock,
       categoryId: p.categoryId ?? "",
@@ -154,6 +154,10 @@ export function ProductManager() {
 
   async function save() {
     if (!draft) return;
+    if (draft.umrpCents > 0 && draft.priceCents < draft.umrpCents) {
+      setError("Price can't be below the minimum resale price (UMRP).");
+      return;
+    }
     setSaving(true);
     setError(null);
     const payload = {
@@ -163,7 +167,7 @@ export function ProductManager() {
       description: draft.description || undefined,
       priceCents: draft.priceCents,
       costCents: draft.costCents,
-      taxRateBps: Math.round(parseFloat(draft.taxRatePct || "0") * 100),
+      umrpCents: draft.umrpCents,
       trackStock: draft.trackStock,
       stock: draft.stock,
       categoryId: draft.categoryId || undefined,
@@ -269,7 +273,7 @@ export function ProductManager() {
               <th className="px-4 py-2.5">Vendor</th>
               <th className="px-4 py-2.5">Category</th>
               <th className="px-4 py-2.5 text-right">Price</th>
-              <th className="px-4 py-2.5 text-right">Tax</th>
+              <th className="px-4 py-2.5 text-right" title="Minimum resale price">Min price</th>
               <th className="px-4 py-2.5 text-right">Stock</th>
               <th className="px-4 py-2.5"></th>
             </tr>
@@ -304,7 +308,9 @@ export function ProductManager() {
                   <td className="px-4 py-2.5 text-zinc-500">{p.vendor || "—"}</td>
                   <td className="px-4 py-2.5 text-zinc-500">{p.category?.name ?? "—"}</td>
                   <td className="px-4 py-2.5 text-right">{formatMoney(p.priceCents)}</td>
-                  <td className="px-4 py-2.5 text-right text-zinc-500">{formatBps(p.taxRateBps)}</td>
+                  <td className="px-4 py-2.5 text-right text-zinc-500">
+                    {p.umrpCents > 0 ? formatMoney(p.umrpCents) : "—"}
+                  </td>
                   <td className="px-4 py-2.5 text-right">
                     {p.trackStock ? (
                       <span className={p.stock <= 0 ? "text-red-500" : ""}>{p.stock}</span>
@@ -377,14 +383,20 @@ export function ProductManager() {
                   onCentsChange={(c) => setDraft({ ...draft, costCents: c })}
                 />
               </div>
-              <div>
-                <label className="label">Tax rate %</label>
-                <input
-                  className="input"
-                  inputMode="decimal"
-                  value={draft.taxRatePct}
-                  onChange={(e) => setDraft({ ...draft, taxRatePct: e.target.value.replace(/[^0-9.]/g, "") })}
+              <div className="col-span-2">
+                <label className="label">Minimum price (UMRP)</label>
+                <MoneyInput
+                  cents={draft.umrpCents}
+                  onCentsChange={(c) => setDraft({ ...draft, umrpCents: c })}
                 />
+                <p className="mt-0.5 text-[11px] text-zinc-400">
+                  The register blocks any sale below this after discounts. Leave 0 for no floor.
+                </p>
+                {draft.umrpCents > 0 && draft.priceCents < draft.umrpCents && (
+                  <p className="mt-0.5 text-[11px] text-red-600">
+                    Price is below the minimum — raise the price or lower the UMRP.
+                  </p>
+                )}
               </div>
               <div>
                 <label className="label">Category</label>

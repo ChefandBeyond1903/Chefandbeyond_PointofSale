@@ -26,6 +26,22 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     await requireRole("MANAGER");
     const { id } = await params;
     const data = productUpdateSchema.parse(await req.json());
+
+    // Enforce: sticker price may never sit below the UMRP. Fall back to the
+    // stored values for whichever of the two isn't part of this update.
+    if (data.priceCents !== undefined || data.umrpCents !== undefined) {
+      const existing = await prisma.product.findUnique({
+        where: { id },
+        select: { priceCents: true, umrpCents: true },
+      });
+      if (!existing) throw new HttpError(404, "Product not found");
+      const price = data.priceCents ?? existing.priceCents;
+      const umrp = data.umrpCents ?? existing.umrpCents;
+      if (umrp > 0 && price < umrp) {
+        throw new HttpError(400, "Price can't be below the minimum resale price (UMRP)");
+      }
+    }
+
     const product = await prisma.product.update({
       where: { id },
       data,

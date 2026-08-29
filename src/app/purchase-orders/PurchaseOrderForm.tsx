@@ -242,6 +242,15 @@ export function PurchaseOrderForm({ id }: { id?: string }) {
   const catTotal = useMemo(() => catLines.reduce((s, l) => s + l.amountCents, 0), [catLines]);
   const grandTotal = itemTotal + catTotal;
 
+  // Free-freight minimum for the chosen vendor. Ordering below it warns only.
+  const selectedVendor = useMemo(
+    () => vendors.find((v) => v.name.trim().toLowerCase() === vendor.trim().toLowerCase()) ?? null,
+    [vendors, vendor],
+  );
+  const freightMinCents = selectedVendor?.freightMinimumCents ?? 0;
+  const freightShortfallCents =
+    freightMinCents > 0 && grandTotal < freightMinCents ? freightMinCents - grandTotal : 0;
+
   function addTag(raw: string) {
     const t = raw.trim();
     if (!t) return;
@@ -298,6 +307,16 @@ export function PurchaseOrderForm({ id }: { id?: string }) {
   async function save(send: boolean) {
     if (!vendor.trim()) {
       setError("Choose a vendor.");
+      return;
+    }
+    if (
+      freightShortfallCents > 0 &&
+      !confirm(
+        `This order is ${formatMoney(freightShortfallCents)} below ${selectedVendor?.name ?? "this vendor"}'s ` +
+          `free-freight minimum of ${formatMoney(freightMinCents)}. Freight charges may apply.\n\n` +
+          `Save the purchase order anyway?`,
+      )
+    ) {
       return;
     }
     setSaving(true);
@@ -439,6 +458,15 @@ export function PurchaseOrderForm({ id }: { id?: string }) {
             <p className="text-3xl font-bold">{formatMoney(grandTotal)}</p>
           </div>
         </div>
+
+        {freightShortfallCents > 0 && (
+          <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            <span className="font-medium">{formatMoney(freightShortfallCents)} under</span>{" "}
+            {selectedVendor?.name}&rsquo;s free-freight minimum of{" "}
+            {formatMoney(freightMinCents)}. Freight charges may apply — you can still save this
+            order.
+          </div>
+        )}
 
         {!headerCollapsed && (
           <>

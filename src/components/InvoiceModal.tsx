@@ -1,13 +1,21 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/client";
-import { formatMoney } from "@/lib/money";
-import type { InvoiceDetail, PurchaseOrder } from "@/lib/types";
+import { formatMoney, formatBps } from "@/lib/money";
+import type { InvoiceDetail, PurchaseOrder, Vendor } from "@/lib/types";
 
 const PO_STATUSES: PurchaseOrder["status"][] = ["OPEN", "SENT", "RECEIVED", "CANCELLED"];
 
-type Pick = { name: string; sku: string; max: number; qty: number; checked: boolean };
+type Pick = {
+  name: string;
+  sku: string;
+  max: number;
+  qty: number;
+  checked: boolean;
+  unitCostCents: number;
+};
 
 /**
  * Shows one invoice (a completed sale) and lets a manager raise a purchase
@@ -28,6 +36,8 @@ export function InvoiceModal({
   const [err, setErr] = useState<string | null>(null);
   const [pickerVendor, setPickerVendor] = useState<string | null>(null);
   const [picks, setPicks] = useState<Record<string, Pick>>({});
+  // vendor name -> free-freight minimum (cents); 0 / missing means none.
+  const [freightMins, setFreightMins] = useState<Record<string, number>>({});
 
   const load = useCallback(async () => {
     try {
@@ -39,6 +49,11 @@ export function InvoiceModal({
 
   useEffect(() => {
     load();
+    api<{ vendors: Vendor[] }>("/api/vendors")
+      .then((r) =>
+        setFreightMins(Object.fromEntries(r.vendors.map((v) => [v.name, v.freightMinimumCents]))),
+      )
+      .catch(() => {});
   }, [load]);
 
   function changed() {
@@ -48,7 +63,10 @@ export function InvoiceModal({
 
   // This vendor's invoice lines, merged by product.
   function vendorLines(vendor: string) {
-    const byProduct = new Map<string, { productId: string; name: string; sku: string; available: number }>();
+    const byProduct = new Map<
+      string,
+      { productId: string; name: string; sku: string; available: number; unitCostCents: number }
+    >();
     for (const it of detail?.sale.items ?? []) {
       if ((it.vendorSnapshot || "") !== vendor) continue;
       const g = byProduct.get(it.productId) ?? {
@@ -56,6 +74,7 @@ export function InvoiceModal({
         name: it.nameSnapshot,
         sku: it.skuSnapshot,
         available: 0,
+        unitCostCents: it.unitCostCents,
       };
       g.available += it.quantity;
       byProduct.set(it.productId, g);
@@ -67,7 +86,14 @@ export function InvoiceModal({
     setErr(null);
     const next: Record<string, Pick> = {};
     for (const l of vendorLines(vendor)) {
-      next[l.productId] = { name: l.name, sku: l.sku, max: l.available, qty: l.available, checked: true };
+      next[l.productId] = {
+        name: l.name,
+        sku: l.sku,
+        max: l.available,
+        qty: l.available,
+        checked: true,
+        unitCostCents: l.unitCostCents,
+      };
     }
     setPicks(next);
     setPickerVendor(vendor);
@@ -75,13 +101,27 @@ export function InvoiceModal({
 
   async function confirmPo() {
     if (!pickerVendor) return;
-    const items = Object.entries(picks)
-      .filter(([, p]) => p.checked && p.qty > 0)
-      .map(([productId, p]) => ({ productId, quantity: p.qty }));
+    const chosen = Object.entries(picks).filter(([, p]) => p.checked && p.qty > 0);
+    const items = chosen.map(([productId, p]) => ({ productId, quantity: p.qty }));
     if (items.length === 0) {
       setErr("Select at least one item.");
       return;
     }
+
+    const min = freightMins[pickerVendor] ?? 0;
+    const poCostCents = chosen.reduce((s, [, p]) => s + p.qty * p.unitCostCents, 0);
+    if (
+      min > 0 &&
+      poCostCents < min &&
+      !confirm(
+        `This purchase order is ${formatMoney(min - poCostCents)} below ${pickerVendor}'s ` +
+          `free-freight minimum of ${formatMoney(min)}. Freight charges may apply.\n\n` +
+          `Create the purchase order anyway?`,
+      )
+    ) {
+      return;
+    }
+
     setBusyVendor(pickerVendor);
     setErr(null);
     try {
@@ -136,6 +176,7 @@ export function InvoiceModal({
                 <p className="text-sm text-zinc-500">
                   {new Date(sale.createdAt).toLocaleString()} · {sale.cashier?.name ?? "—"} ·{" "}
                   {sale.paymentMethod}
+                  {sale.storeNameSnapshot ? ` · ${sale.storeNameSnapshot}` : ""}
                 </p>
                 {sale.customerNameSnapshot ? (
                   <p className="mt-1 text-sm">
@@ -196,7 +237,7 @@ export function InvoiceModal({
                 </tr>
                 <tr>
                   <td colSpan={4} className="py-1 text-right text-zinc-500">
-                    Tax
+                    Tax{sale.taxRateBps ? ` (${formatBps(sale.taxRateBps)})` : ""}
                   </td>
                   <td className="py-1 text-right">{formatMoney(sale.taxCents)}</td>
                 </tr>
@@ -225,7 +266,17 @@ export function InvoiceModal({
                   return (
                     <div key={v.vendor} className="rounded-md border border-zinc-200 text-sm">
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
-                        <span className="font-mono font-semibold">{po?.poNumber ?? v.poNumber}</span>
+                        {po ? (
+                          <Link
+                            href={`/purchase-orders/${po.id}`}
+                            className="font-mono font-semibold text-indigo-600 hover:underline"
+                            title="Open this purchase order"
+                          >
+                            {po.poNumber}
+                          </Link>
+                        ) : (
+                          <span className="font-mono font-semibold">{v.poNumber}</span>
+                        )}
                         <span className="font-medium">{v.vendor}</span>
                         <span className="text-zinc-400">
                           {v.quantity} item{v.quantity === 1 ? "" : "s"} · cost{" "}
@@ -234,6 +285,12 @@ export function InvoiceModal({
 
                         {po ? (
                           <div className="ml-auto flex items-center gap-2">
+                            <Link
+                              href={`/purchase-orders/${po.id}`}
+                              className="btn-ghost px-2 py-0.5 text-xs text-indigo-600"
+                            >
+                              Open
+                            </Link>
                             <select
                               value={po.status}
                               onChange={(e) => setPoStatus(po.id, e.target.value)}
@@ -268,6 +325,16 @@ export function InvoiceModal({
                           </button>
                         )}
                       </div>
+
+                      {!po &&
+                        (freightMins[v.vendor] ?? 0) > 0 &&
+                        v.costCents < (freightMins[v.vendor] ?? 0) && (
+                          <div className="border-t border-amber-100 bg-amber-50 px-3 py-1.5 text-xs text-amber-700">
+                            {formatMoney((freightMins[v.vendor] ?? 0) - v.costCents)} under this
+                            vendor&rsquo;s {formatMoney(freightMins[v.vendor] ?? 0)} free-freight
+                            minimum — freight may be charged.
+                          </div>
+                        )}
 
                       {picking && !po && (
                         <div className="border-t border-zinc-100 px-3 py-2">

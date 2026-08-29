@@ -7,6 +7,31 @@ export interface SessionUser {
   email: string;
   name: string;
   role: Role;
+  storeId?: string | null;
+  storeName?: string | null;
+  storeTaxRateBps?: number | null;
+}
+
+export interface Store {
+  id: string;
+  name: string;
+  taxRateBps: number;
+  address: string;
+  phone: string;
+  email: string;
+  active: boolean;
+  createdAt?: string;
+  _count?: { users: number; sales: number };
+}
+
+export interface Company {
+  name: string;
+  legalName: string;
+  taxId: string;
+  address: string;
+  phone: string;
+  email: string;
+  website: string;
 }
 
 export interface Category {
@@ -24,6 +49,7 @@ export interface Vendor {
   phone: string;
   address: string;
   notes: string;
+  freightMinimumCents: number;
   createdAt?: string;
   productCount?: number;
 }
@@ -49,7 +75,7 @@ export interface Product {
   description: string | null;
   priceCents: number;
   costCents: number;
-  taxRateBps: number;
+  umrpCents: number;
   trackStock: boolean;
   stock: number;
   active: boolean;
@@ -159,12 +185,15 @@ export interface Sale {
   subtotalCents: number;
   discountCents: number;
   taxCents: number;
+  taxRateBps: number;
   totalCents: number;
   paymentMethod: "CASH" | "CARD";
   tenderedCents: number;
   changeCents: number;
   note: string | null;
   createdAt: string;
+  storeId?: string | null;
+  storeNameSnapshot?: string;
   cashier?: { id: string; name: string };
   customer?: { id: string; name: string } | Customer | null;
   customerId?: string | null;
@@ -198,6 +227,8 @@ export interface ManagedUser {
   role: Role;
   active: boolean;
   createdAt: string;
+  storeId: string | null;
+  store?: { id: string; name: string; taxRateBps: number } | null;
   _count?: { sales: number };
 }
 

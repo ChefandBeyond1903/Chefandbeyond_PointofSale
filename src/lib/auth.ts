@@ -13,6 +13,10 @@ export interface SessionUser {
   email: string;
   name: string;
   role: Role;
+  // Populated by /api/auth/me from the database, not carried in the JWT.
+  storeId?: string | null;
+  storeName?: string | null;
+  storeTaxRateBps?: number | null;
 }
 
 function secret(): Uint8Array {

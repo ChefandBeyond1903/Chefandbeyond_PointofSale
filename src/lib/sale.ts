@@ -6,7 +6,6 @@ export interface PricedInput {
   unitPriceCents: number;
   quantity: number;
   lineDiscountCents: number;
-  taxRateBps: number;
 }
 
 export interface ComputedLine {
@@ -23,16 +22,22 @@ export interface ComputedSale {
   lines: ComputedLine[];
   subtotalCents: number; // sum of unitPrice * qty, before any discount
   discountCents: number; // total discounts (line + order)
+  taxRateBps: number; // the store rate applied to every line
   taxCents: number;
   totalCents: number; // subtotal - discount + tax
 }
 
 /**
- * Authoritative money math for a sale. The order-level discount is spread
- * across lines in proportion to each line's post-line-discount amount, so
- * tax is charged on what the customer actually pays.
+ * Authoritative money math for a sale. A single tax rate (the cashier's store
+ * rate, in basis points) is charged on every line. The order-level discount is
+ * spread across lines in proportion to each line's post-line-discount amount,
+ * so tax is charged on what the customer actually pays.
  */
-export function computeSale(inputs: PricedInput[], orderDiscountCents: number): ComputedSale {
+export function computeSale(
+  inputs: PricedInput[],
+  orderDiscountCents: number,
+  taxRateBps: number,
+): ComputedSale {
   const base = inputs.map((i) => i.unitPriceCents * i.quantity);
   const subtotalCents = base.reduce((a, b) => a + b, 0);
 
@@ -59,26 +64,26 @@ export function computeSale(inputs: PricedInput[], orderDiscountCents: number): 
 
   const lines: ComputedLine[] = inputs.map((input, idx) => {
     const net = afterLine[idx] - orderShare[idx];
-    const tax = taxOn(net, input.taxRateBps);
+    const tax = taxOn(net, taxRateBps);
     return {
       productId: input.productId,
       nameSnapshot: input.name,
       unitPriceCents: input.unitPriceCents,
       quantity: input.quantity,
       discountCents: lineDiscount[idx] + orderShare[idx],
-      taxRateBps: input.taxRateBps,
+      taxRateBps,
       lineTotalCents: net + tax,
     };
   });
 
   const discountCents = lineDiscount.reduce((a, b) => a + b, 0) + orderDiscount;
-  const taxCents = inputs.reduce((sum, input, idx) => {
+  const taxCents = lines.reduce((sum, _l, idx) => {
     const net = afterLine[idx] - orderShare[idx];
-    return sum + taxOn(net, input.taxRateBps);
+    return sum + taxOn(net, taxRateBps);
   }, 0);
   const totalCents = subtotalCents - discountCents + taxCents;
 
-  return { lines, subtotalCents, discountCents, taxCents, totalCents };
+  return { lines, subtotalCents, discountCents, taxRateBps, taxCents, totalCents };
 }
 
 function clamp(n: number, min: number, max: number): number {

@@ -2,21 +2,33 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/client";
-import type { ManagedUser, Role } from "@/lib/types";
+import { formatBps } from "@/lib/money";
+import type { ManagedUser, Role, Store } from "@/lib/types";
 
 export function UserManager({ currentUserId }: { currentUserId: string }) {
   const [users, setUsers] = useState<ManagedUser[]>([]);
+  const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
-  const [form, setForm] = useState({ name: "", email: "", password: "", role: "CASHIER" as Role });
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    password: "",
+    role: "CASHIER" as Role,
+    storeId: "",
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api<{ users: ManagedUser[] }>("/api/users");
-      setUsers(res.users);
+      const [u, s] = await Promise.all([
+        api<{ users: ManagedUser[] }>("/api/users"),
+        api<{ stores: Store[] }>("/api/stores?all=1"),
+      ]);
+      setUsers(u.users);
+      setStores(s.stores);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load staff");
     } finally {
@@ -34,7 +46,7 @@ export function UserManager({ currentUserId }: { currentUserId: string }) {
     setCreating(true);
     try {
       await api("/api/users", { method: "POST", body: JSON.stringify(form) });
-      setForm({ name: "", email: "", password: "", role: "CASHIER" });
+      setForm({ name: "", email: "", password: "", role: "CASHIER", storeId: "" });
       load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not create user");
@@ -63,13 +75,25 @@ export function UserManager({ currentUserId }: { currentUserId: string }) {
     patch(u.id, { password: pw });
   }
 
+  const activeStores = stores.filter((s) => s.active);
+
   return (
     <div className="w-full flex-1 p-4">
       <h1 className="mb-4 text-xl font-semibold">Staff</h1>
 
       {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      <form onSubmit={createUser} className="card mb-6 grid grid-cols-1 gap-3 p-4 sm:grid-cols-5">
+      {stores.length === 0 && (
+        <p className="mb-3 rounded bg-amber-50 px-3 py-2 text-sm text-amber-700">
+          No stores yet. Add one under{" "}
+          <a href="/settings" className="underline">
+            Settings
+          </a>{" "}
+          so staff can be assigned a location and tax rate.
+        </p>
+      )}
+
+      <form onSubmit={createUser} className="card mb-6 grid grid-cols-1 gap-3 p-4 sm:grid-cols-6">
         <input
           className="input sm:col-span-1"
           placeholder="Name"
@@ -93,14 +117,26 @@ export function UserManager({ currentUserId }: { currentUserId: string }) {
           onChange={(e) => setForm({ ...form, password: e.target.value })}
           required
         />
+        <select
+          className="input"
+          value={form.role}
+          onChange={(e) => setForm({ ...form, role: e.target.value as Role })}
+        >
+          <option value="CASHIER">Cashier</option>
+          <option value="MANAGER">Manager</option>
+        </select>
         <div className="flex gap-2">
           <select
             className="input"
-            value={form.role}
-            onChange={(e) => setForm({ ...form, role: e.target.value as Role })}
+            value={form.storeId}
+            onChange={(e) => setForm({ ...form, storeId: e.target.value })}
           >
-            <option value="CASHIER">Cashier</option>
-            <option value="MANAGER">Manager</option>
+            <option value="">No store</option>
+            {activeStores.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name} ({formatBps(s.taxRateBps)})
+              </option>
+            ))}
           </select>
           <button className="btn-primary whitespace-nowrap" disabled={creating}>
             Add
@@ -115,6 +151,7 @@ export function UserManager({ currentUserId }: { currentUserId: string }) {
               <th className="px-4 py-2.5">Name</th>
               <th className="px-4 py-2.5">Email</th>
               <th className="px-4 py-2.5">Role</th>
+              <th className="px-4 py-2.5">Store</th>
               <th className="px-4 py-2.5 text-right">Sales</th>
               <th className="px-4 py-2.5">Status</th>
               <th className="px-4 py-2.5"></th>
@@ -123,7 +160,7 @@ export function UserManager({ currentUserId }: { currentUserId: string }) {
           <tbody className="divide-y divide-zinc-100">
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-zinc-400">
+                <td colSpan={7} className="px-4 py-8 text-center text-zinc-400">
                   Loading…
                 </td>
               </tr>
@@ -146,6 +183,21 @@ export function UserManager({ currentUserId }: { currentUserId: string }) {
                       >
                         <option value="CASHIER">Cashier</option>
                         <option value="MANAGER">Manager</option>
+                      </select>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <select
+                        className="input h-8 w-44"
+                        value={u.storeId ?? ""}
+                        onChange={(e) => patch(u.id, { storeId: e.target.value })}
+                      >
+                        <option value="">No store</option>
+                        {stores.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name} ({formatBps(s.taxRateBps)})
+                            {!s.active ? " — inactive" : ""}
+                          </option>
+                        ))}
                       </select>
                     </td>
                     <td className="px-4 py-2.5 text-right text-zinc-500">{u._count?.sales ?? 0}</td>

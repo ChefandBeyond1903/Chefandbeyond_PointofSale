@@ -2,14 +2,43 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/client";
-import { formatMoney, taxOn } from "@/lib/money";
+import { formatMoney, formatBps, taxOn } from "@/lib/money";
 import { MoneyInput } from "@/components/MoneyInput";
-import type { Category, Customer, Product, Role, Sale, Shift, ShiftStats } from "@/lib/types";
+import { PercentInput } from "@/components/PercentInput";
+import type {
+  Category,
+  Company,
+  Customer,
+  Product,
+  Role,
+  Sale,
+  Shift,
+  ShiftStats,
+} from "@/lib/types";
+
+type DiscMode = "AMOUNT" | "PERCENT";
 
 interface CartLine {
   product: Product;
   quantity: number;
+  // Line discount in dollars (AMOUNT mode) — a total for the line, not per unit.
   discountCents: number;
+  // Line discount as a percent of the line's list value (PERCENT mode).
+  discPercent: number;
+  discMode: DiscMode;
+}
+
+/** The line's list value before any discount. */
+function lineBaseCents(l: CartLine): number {
+  return l.product.priceCents * l.quantity;
+}
+
+/** Effective line discount in cents, from whichever mode is active, clamped. */
+function resolveLineDiscount(l: CartLine): number {
+  const base = lineBaseCents(l);
+  const raw =
+    l.discMode === "PERCENT" ? Math.round((base * l.discPercent) / 100) : l.discountCents;
+  return Math.max(0, Math.min(base, raw));
 }
 
 export default function RegisterPage() {
@@ -25,6 +54,8 @@ export default function RegisterPage() {
 
   const [cart, setCart] = useState<CartLine[]>([]);
   const [orderDiscountCents, setOrderDiscountCents] = useState(0);
+  const [orderDiscPercent, setOrderDiscPercent] = useState(0);
+  const [orderDiscMode, setOrderDiscMode] = useState<DiscMode>("AMOUNT");
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [custId, setCustId] = useState<string | null>(null);
@@ -42,6 +73,9 @@ export default function RegisterPage() {
   const [receipt, setReceipt] = useState<Sale | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [role, setRole] = useState<Role | null>(null);
+  const [storeName, setStoreName] = useState<string | null>(null);
+  const [storeTaxRateBps, setStoreTaxRateBps] = useState<number | null>(null);
+  const [company, setCompany] = useState<Company | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const loadCatalog = useCallback(async () => {
@@ -100,8 +134,21 @@ export default function RegisterPage() {
     loadCatalog();
     loadShift();
     loadCustomers();
-    api<{ user: { role: Role } | null }>("/api/auth/me")
-      .then((r) => setRole(r.user?.role ?? null))
+    api<{
+      user: {
+        role: Role;
+        storeName?: string | null;
+        storeTaxRateBps?: number | null;
+      } | null;
+    }>("/api/auth/me")
+      .then((r) => {
+        setRole(r.user?.role ?? null);
+        setStoreName(r.user?.storeName ?? null);
+        setStoreTaxRateBps(r.user?.storeTaxRateBps ?? null);
+      })
+      .catch(() => {});
+    api<{ company: Company }>("/api/company")
+      .then((r) => setCompany(r.company))
       .catch(() => {});
   }, [loadCatalog, loadShift, loadCustomers]);
 
@@ -191,16 +238,26 @@ export default function RegisterPage() {
     const perLineAfter: number[] = [];
     for (const line of cart) {
       const base = line.product.priceCents * line.quantity;
-      const disc = Math.min(line.discountCents, base);
+      const disc = resolveLineDiscount(line);
       subtotal += base;
       lineDiscounts += disc;
       perLineAfter.push(base - disc);
     }
     const sumAfterLine = perLineAfter.reduce((a, b) => a + b, 0);
-    const orderDisc = Math.min(orderDiscountCents, sumAfterLine);
+    const orderDisc =
+      orderDiscMode === "PERCENT"
+        ? Math.min(sumAfterLine, Math.round((sumAfterLine * orderDiscPercent) / 100))
+        : Math.min(orderDiscountCents, sumAfterLine);
+    const rateBps = storeTaxRateBps ?? 0;
 
     let tax = 0;
     let allocated = 0;
+    const umrpViolations: {
+      productId: string;
+      name: string;
+      minEachCents: number;
+      eachCents: number;
+    }[] = [];
     cart.forEach((line, idx) => {
       const share =
         idx === cart.length - 1
@@ -210,12 +267,36 @@ export default function RegisterPage() {
             : 0;
       allocated += idx === cart.length - 1 ? 0 : share;
       const net = perLineAfter[idx] - share;
-      tax += taxOn(net, line.product.taxRateBps);
+      tax += taxOn(net, rateBps);
+
+      const umrp = line.product.umrpCents ?? 0;
+      if (umrp > 0 && line.quantity > 0 && net < umrp * line.quantity) {
+        umrpViolations.push({
+          productId: line.product.id,
+          name: line.product.name,
+          minEachCents: umrp,
+          eachCents: Math.floor(net / line.quantity),
+        });
+      }
     });
 
     const discount = lineDiscounts + orderDisc;
-    return { subtotal, discount, tax, total: subtotal - discount + tax };
-  }, [cart, orderDiscountCents]);
+    const total = subtotal - discount + tax;
+    // "Customer total saving" = everything knocked off the list price.
+    const savedCents = discount;
+    const savedPct = subtotal > 0 ? (savedCents / subtotal) * 100 : 0;
+    return {
+      subtotal,
+      discount,
+      tax,
+      total,
+      umrpViolations,
+      sumAfterLine,
+      orderDiscountResolved: orderDisc,
+      savedCents,
+      savedPct,
+    };
+  }, [cart, orderDiscountCents, orderDiscPercent, orderDiscMode, storeTaxRateBps]);
 
   function addToCart(product: Product) {
     setError(null);
@@ -226,7 +307,10 @@ export default function RegisterPage() {
         next[idx] = { ...next[idx], quantity: next[idx].quantity + 1 };
         return next;
       }
-      return [...cur, { product, quantity: 1, discountCents: 0 }];
+      return [
+        ...cur,
+        { product, quantity: 1, discountCents: 0, discPercent: 0, discMode: "AMOUNT" as const },
+      ];
     });
   }
 
@@ -238,13 +322,63 @@ export default function RegisterPage() {
     );
   }
 
-  function setLineDiscount(productId: string, cents: number) {
-    setCart((cur) => cur.map((l) => (l.product.id === productId ? { ...l, discountCents: cents } : l)));
+  function updateLine(productId: string, patch: Partial<CartLine>) {
+    setCart((cur) => cur.map((l) => (l.product.id === productId ? { ...l, ...patch } : l)));
+  }
+
+  // Switch a line between $ and % without losing the value: carry the current
+  // resolved discount across into the other unit.
+  function setLineDiscMode(productId: string, mode: DiscMode) {
+    setCart((cur) =>
+      cur.map((l) => {
+        if (l.product.id !== productId || l.discMode === mode) return l;
+        const base = lineBaseCents(l);
+        const cents = resolveLineDiscount(l);
+        return mode === "PERCENT"
+          ? { ...l, discMode: mode, discPercent: base > 0 ? (cents / base) * 100 : 0 }
+          : { ...l, discMode: mode, discountCents: cents };
+      }),
+    );
+  }
+
+  function setLineDiscAmount(productId: string, cents: number) {
+    updateLine(productId, { discMode: "AMOUNT", discountCents: Math.max(0, cents) });
+  }
+
+  function setLineDiscPercent(productId: string, pct: number) {
+    updateLine(productId, {
+      discMode: "PERCENT",
+      discPercent: Math.max(0, Math.min(100, pct)),
+    });
+  }
+
+  // Edit the line's charged amount directly — stored as an equivalent $ discount.
+  function setLineTotal(productId: string, totalCents: number) {
+    setCart((cur) =>
+      cur.map((l) => {
+        if (l.product.id !== productId) return l;
+        const base = lineBaseCents(l);
+        const off = Math.max(0, Math.min(base, base - Math.max(0, totalCents)));
+        return { ...l, discMode: "AMOUNT", discountCents: off };
+      }),
+    );
+  }
+
+  // Toggle the order discount unit, carrying the current value across.
+  function changeOrderDiscMode(mode: DiscMode) {
+    if (mode === orderDiscMode) return;
+    const s = totals.sumAfterLine;
+    const cents = totals.orderDiscountResolved;
+    if (mode === "PERCENT") setOrderDiscPercent(s > 0 ? (cents / s) * 100 : 0);
+    else setOrderDiscountCents(cents);
+    setOrderDiscMode(mode);
   }
 
   function clearCart() {
     setCart([]);
     setOrderDiscountCents(0);
+    setOrderDiscPercent(0);
+    setOrderDiscMode("AMOUNT");
     clearCustomer();
   }
 
@@ -273,9 +407,9 @@ export default function RegisterPage() {
           items: cart.map((l) => ({
             productId: l.product.id,
             quantity: l.quantity,
-            discountCents: l.discountCents,
+            discountCents: resolveLineDiscount(l),
           })),
-          orderDiscountCents,
+          orderDiscountCents: totals.orderDiscountResolved,
           paymentMethod,
           tenderedCents,
           ...(custId
@@ -306,7 +440,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="grid w-full flex-1 gap-4 p-4 lg:grid-cols-[1fr_400px]">
+    <div className="grid w-full flex-1 gap-4 p-4 lg:grid-cols-[1fr_460px]">
       {/* Catalog */}
       <section className="flex min-h-0 flex-col">
         <div className="mb-3 flex gap-2">
@@ -377,7 +511,21 @@ export default function RegisterPage() {
 
         <div className="card flex min-h-0 flex-1 flex-col">
           <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-3">
-            <h2 className="font-semibold">Current sale</h2>
+            <div className="min-w-0">
+              <h2 className="font-semibold">Current sale</h2>
+              <p className="truncate text-xs text-zinc-400">
+                {storeName ? (
+                  <>
+                    {storeName}
+                    {storeTaxRateBps != null && ` · tax ${formatBps(storeTaxRateBps)}`}
+                  </>
+                ) : (
+                  <span className="text-amber-600">
+                    No store assigned — sales ring at 0% tax
+                  </span>
+                )}
+              </p>
+            </div>
             {cart.length > 0 && (
               <button onClick={clearCart} className="btn-ghost text-xs">
                 Clear
@@ -460,13 +608,31 @@ export default function RegisterPage() {
               </p>
             ) : (
               <ul className="divide-y divide-zinc-100">
-                {cart.map((line) => (
+                {cart.map((line) => {
+                  const violation = totals.umrpViolations.find(
+                    (v) => v.productId === line.product.id,
+                  );
+                  const base = lineBaseCents(line);
+                  const lineDisc = resolveLineDiscount(line);
+                  const lineTotal = Math.max(0, base - lineDisc);
+                  const unitNow = line.quantity > 0 ? Math.round(lineTotal / line.quantity) : 0;
+                  const savedPct = base > 0 ? Math.round((lineDisc / base) * 100) : 0;
+                  return (
                   <li key={line.product.id} className="px-4 py-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">{line.product.name}</p>
                         <p className="text-xs text-zinc-400">
-                          {formatMoney(line.product.priceCents)} each
+                          List {formatMoney(line.product.priceCents)} ea
+                          {lineDisc > 0 && (
+                            <>
+                              {" · "}
+                              <span className="text-green-600">
+                                now {formatMoney(unitNow)} ea · save {formatMoney(lineDisc)} (
+                                {savedPct}%)
+                              </span>
+                            </>
+                          )}
                         </p>
                       </div>
                       <button
@@ -477,74 +643,155 @@ export default function RegisterPage() {
                         ✕
                       </button>
                     </div>
-                    <div className="mt-2 flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1">
+
+                    <div className="mt-2 flex items-center gap-1.5">
+                      <button
+                        onClick={() => setQty(line.product.id, line.quantity - 1)}
+                        className="btn-secondary h-7 w-7 shrink-0 !px-0"
+                      >
+                        −
+                      </button>
+                      <input
+                        className="input h-7 w-9 shrink-0 px-1 text-center"
+                        value={line.quantity}
+                        onChange={(e) => {
+                          const n = parseInt(e.target.value.replace(/\D/g, ""), 10);
+                          setQty(line.product.id, Number.isFinite(n) ? n : 0);
+                        }}
+                      />
+                      <button
+                        onClick={() => setQty(line.product.id, line.quantity + 1)}
+                        className="btn-secondary h-7 w-7 shrink-0 !px-0"
+                      >
+                        +
+                      </button>
+
+                      <div className="ml-1 flex shrink-0 overflow-hidden rounded-md border border-zinc-300 text-xs">
                         <button
-                          onClick={() => setQty(line.product.id, line.quantity - 1)}
-                          className="btn-secondary h-7 w-7 !px-0"
+                          type="button"
+                          onClick={() => setLineDiscMode(line.product.id, "AMOUNT")}
+                          className={`px-1.5 py-1 ${line.discMode === "AMOUNT" ? "bg-indigo-600 text-white" : "text-zinc-500"}`}
                         >
-                          −
+                          $
                         </button>
-                        <input
-                          className="input h-7 w-12 px-1 text-center"
-                          value={line.quantity}
-                          onChange={(e) => {
-                            const n = parseInt(e.target.value.replace(/\D/g, ""), 10);
-                            setQty(line.product.id, Number.isFinite(n) ? n : 0);
-                          }}
-                        />
                         <button
-                          onClick={() => setQty(line.product.id, line.quantity + 1)}
-                          className="btn-secondary h-7 w-7 !px-0"
+                          type="button"
+                          onClick={() => setLineDiscMode(line.product.id, "PERCENT")}
+                          className={`px-1.5 py-1 ${line.discMode === "PERCENT" ? "bg-indigo-600 text-white" : "text-zinc-500"}`}
                         >
-                          +
+                          %
                         </button>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <span className="text-xs text-zinc-400">disc</span>
+                      {line.discMode === "PERCENT" ? (
+                        <PercentInput
+                          value={line.discPercent}
+                          onValueChange={(n) => setLineDiscPercent(line.product.id, n)}
+                          className="input h-7 w-14 shrink-0 px-2 text-right text-xs"
+                          aria-label="Discount percent"
+                        />
+                      ) : (
                         <MoneyInput
-                          cents={line.discountCents}
-                          onCentsChange={(c) => setLineDiscount(line.product.id, c)}
-                          className="input h-7 w-20 px-2 text-right text-xs"
+                          cents={lineDisc}
+                          onCentsChange={(c) => setLineDiscAmount(line.product.id, c)}
+                          className="input h-7 w-20 shrink-0 px-2 text-right text-xs"
                         />
-                      </div>
-                      <span className="w-20 text-right text-sm font-semibold">
-                        {formatMoney(
-                          Math.max(
-                            0,
-                            line.product.priceCents * line.quantity - line.discountCents,
-                          ),
-                        )}
-                      </span>
+                      )}
+
+                      <MoneyInput
+                        cents={lineTotal}
+                        onCentsChange={(c) => setLineTotal(line.product.id, c)}
+                        className="input h-7 w-24 ml-auto shrink-0 px-2 text-right text-sm font-semibold"
+                      />
                     </div>
+                    {violation && (
+                      <p className="mt-2 whitespace-pre-line rounded bg-red-50 px-2 py-1.5 text-xs text-red-700">
+                        {`Below minimum price — reduce the discount:\n\n${violation.name}: min ${formatMoney(
+                          violation.minEachCents,
+                        )} each (now ${formatMoney(violation.eachCents)})`}
+                      </p>
+                    )}
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             )}
           </div>
 
           <div className="space-y-2 border-t border-zinc-100 px-4 py-3 text-sm">
             <div className="flex items-center justify-between">
-              <span className="text-zinc-500">Order discount</span>
-              <MoneyInput
-                cents={orderDiscountCents}
-                onCentsChange={setOrderDiscountCents}
-                className="input h-8 w-28 px-2 text-right"
-              />
+              <span className="text-zinc-500">
+                Order discount
+                {totals.orderDiscountResolved > 0 && (
+                  <span className="ml-1 text-xs text-green-600">
+                    − {formatMoney(totals.orderDiscountResolved)}
+                    {totals.sumAfterLine > 0 &&
+                      ` (${Math.round((totals.orderDiscountResolved / totals.sumAfterLine) * 100)}%)`}
+                  </span>
+                )}
+              </span>
+              <div className="flex items-center gap-1">
+                <div className="flex overflow-hidden rounded-md border border-zinc-300 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => changeOrderDiscMode("AMOUNT")}
+                    className={`px-2 py-1 ${orderDiscMode === "AMOUNT" ? "bg-indigo-600 text-white" : "text-zinc-500"}`}
+                  >
+                    $
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => changeOrderDiscMode("PERCENT")}
+                    className={`px-2 py-1 ${orderDiscMode === "PERCENT" ? "bg-indigo-600 text-white" : "text-zinc-500"}`}
+                  >
+                    %
+                  </button>
+                </div>
+                {orderDiscMode === "PERCENT" ? (
+                  <PercentInput
+                    value={orderDiscPercent}
+                    onValueChange={setOrderDiscPercent}
+                    className="input h-8 w-24 px-2 text-right"
+                    aria-label="Order discount percent"
+                  />
+                ) : (
+                  <MoneyInput
+                    cents={orderDiscountCents}
+                    onCentsChange={setOrderDiscountCents}
+                    className="input h-8 w-24 px-2 text-right"
+                  />
+                )}
+              </div>
             </div>
             <Row label="Subtotal" value={formatMoney(totals.subtotal)} />
             <Row label="Discount" value={`− ${formatMoney(totals.discount)}`} />
-            <Row label="Tax" value={formatMoney(totals.tax)} />
+            <Row
+              label={`Tax${storeTaxRateBps != null ? ` (${formatBps(storeTaxRateBps)})` : ""}`}
+              value={formatMoney(totals.tax)}
+            />
             <div className="flex items-center justify-between border-t border-zinc-100 pt-2 text-base font-bold">
               <span>Total</span>
               <span>{formatMoney(totals.total)}</span>
             </div>
+            {totals.savedCents > 0 && (
+              <div className="flex items-center justify-between rounded bg-green-50 px-2 py-1.5 font-medium text-green-700">
+                <span>You saved</span>
+                <span>
+                  {formatMoney(totals.savedCents)} ({Math.round(totals.savedPct)}% off)
+                </span>
+              </div>
+            )}
 
             {error && <p className="rounded bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
 
+            {totals.umrpViolations.length > 0 && (
+              <p className="text-xs text-red-700">
+                One or more items are below their minimum price — see the flagged lines above.
+              </p>
+            )}
+
             <button
               onClick={() => setPayOpen(true)}
-              disabled={cart.length === 0}
+              disabled={cart.length === 0 || totals.umrpViolations.length > 0}
               className="btn-primary mt-1 w-full py-3 text-base"
             >
               Charge {formatMoney(totals.total)}
@@ -562,7 +809,9 @@ export default function RegisterPage() {
         />
       )}
 
-      {receipt && <ReceiptModal sale={receipt} onClose={() => setReceipt(null)} />}
+      {receipt && (
+        <ReceiptModal sale={receipt} company={company} onClose={() => setReceipt(null)} />
+      )}
     </div>
   );
 }
@@ -779,12 +1028,30 @@ function PaymentModal({
   );
 }
 
-function ReceiptModal({ sale, onClose }: { sale: Sale; onClose: () => void }) {
+function ReceiptModal({
+  sale,
+  company,
+  onClose,
+}: {
+  sale: Sale;
+  company: Company | null;
+  onClose: () => void;
+}) {
+  const header = company?.name?.trim() || "CB POS";
   return (
     <Overlay onClose={onClose}>
       <div className="w-full max-w-sm">
         <div id="receipt" className="rounded-md border border-zinc-200 p-4 font-mono text-xs">
-          <p className="text-center text-sm font-bold">CB POS</p>
+          <p className="text-center text-sm font-bold">{header}</p>
+          {sale.storeNameSnapshot ? (
+            <p className="text-center text-zinc-500">{sale.storeNameSnapshot}</p>
+          ) : null}
+          {company?.address ? (
+            <p className="text-center text-zinc-500">{company.address}</p>
+          ) : null}
+          {company?.phone ? (
+            <p className="text-center text-zinc-500">{company.phone}</p>
+          ) : null}
           <p className="text-center text-zinc-500">Sale #{sale.number}</p>
           <p className="text-center text-zinc-500">{new Date(sale.createdAt).toLocaleString()}</p>
           {sale.customerNameSnapshot ? (
@@ -809,13 +1076,24 @@ function ReceiptModal({ sale, onClose }: { sale: Sale; onClose: () => void }) {
             <span>− {formatMoney(sale.discountCents)}</span>
           </div>
           <div className="flex justify-between">
-            <span>Tax</span>
+            <span>Tax{sale.taxRateBps ? ` (${formatBps(sale.taxRateBps)})` : ""}</span>
             <span>{formatMoney(sale.taxCents)}</span>
           </div>
           <div className="flex justify-between font-bold">
             <span>Total</span>
             <span>{formatMoney(sale.totalCents)}</span>
           </div>
+          {sale.discountCents > 0 && (
+            <div className="flex justify-between font-bold">
+              <span>You saved</span>
+              <span>
+                {formatMoney(sale.discountCents)}
+                {sale.subtotalCents > 0
+                  ? ` (${Math.round((sale.discountCents / sale.subtotalCents) * 100)}% off)`
+                  : ""}
+              </span>
+            </div>
+          )}
           <div className="flex justify-between">
             <span>{sale.paymentMethod}</span>
             <span>{formatMoney(sale.tenderedCents)}</span>
