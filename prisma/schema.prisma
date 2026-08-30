@@ -1,14 +1,15 @@
 // CB_POS — Retail point-of-sale
-// Dev uses SQLite. To move to Postgres: set provider = "postgresql",
-// point DATABASE_URL at your Postgres instance, then `npx prisma migrate deploy`.
+// Runs on Supabase Postgres. DATABASE_URL is the pooled (pgbouncer) connection;
+// DIRECT_URL is the direct connection Prisma uses for db push / migrations.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 /// The operating company. A single row, id = "company". Its details appear on
@@ -48,11 +49,13 @@ model Store {
 /// Staff who can sign in. role is "CASHIER", "MANAGER" (scoped to one store),
 /// or "ADMIN" (all stores, cross-store reports).
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String
-  passwordHash String
-  role         String   @default("CASHIER")
+  id     String  @id @default(cuid())
+  email  String  @unique
+  name   String
+  // Supabase Auth user id (auth.users.id). Identity and passwords live in
+  // Supabase; this row carries the POS role/store assignment.
+  authId String? @unique
+  role   String  @default("CASHIER")
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

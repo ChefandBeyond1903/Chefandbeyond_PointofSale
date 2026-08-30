@@ -1,7 +1,8 @@
-import { endSession } from "@/lib/auth";
+import { supabaseServer } from "@/lib/supabase";
 import { ok } from "@/lib/api";
 
 export async function POST() {
-  await endSession();
+  const supabase = await supabaseServer();
+  await supabase.auth.signOut();
   return ok({ ok: true });
 }

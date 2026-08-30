@@ -1,10 +1,42 @@
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
+import { createClient } from "@supabase/supabase-js";
 
 const prisma = new PrismaClient();
 
+function requiredEnv(name: string): string {
+  const v = process.env[name];
+  if (!v) throw new Error(`${name} must be set to seed staff accounts`);
+  return v;
+}
+
+const admin = createClient(
+  requiredEnv("NEXT_PUBLIC_SUPABASE_URL"),
+  requiredEnv("SUPABASE_SERVICE_ROLE_KEY"),
+  { auth: { autoRefreshToken: false, persistSession: false } },
+);
+
+/** Create (or find) the Supabase Auth user and return its id. */
+async function ensureAuthUser(email: string, password: string): Promise<string> {
+  const { data, error } = await admin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+  });
+  if (data.user) return data.user.id;
+
+  // Already exists — look it up (staff lists stay small, one page is enough).
+  const { data: list, error: listErr } = await admin.auth.admin.listUsers({
+    page: 1,
+    perPage: 1000,
+  });
+  if (listErr) throw listErr;
+  const existing = list.users.find((u) => u.email?.toLowerCase() === email);
+  if (!existing) throw error ?? new Error(`Could not create or find auth user ${email}`);
+  return existing.id;
+}
+
 async function main() {
-  const passwordHash = await bcrypt.hash("password123", 10);
+  const password = process.env.SEED_STAFF_PASSWORD ?? "password123";
 
   // Company (single row) ------------------------------------------------------
   await prisma.company.upsert({
@@ -35,41 +67,20 @@ async function main() {
     create: { name: "Chef and Beyond - Clarksville", taxRateBps: 600 },
   });
 
-  // Staff -----------------------------------------------------------------
-  await prisma.user.upsert({
-    where: { email: "admin@cbpos.local" },
-    update: { role: "ADMIN", storeId: null },
-    create: {
-      email: "admin@cbpos.local",
-      name: "Avery Admin",
-      passwordHash,
-      role: "ADMIN",
-    },
-  });
-
-  const manager = await prisma.user.upsert({
-    where: { email: "manager@cbpos.local" },
-    update: { storeId: nashville.id },
-    create: {
-      email: "manager@cbpos.local",
-      name: "Morgan Manager",
-      passwordHash,
-      role: "MANAGER",
-      storeId: nashville.id,
-    },
-  });
-
-  await prisma.user.upsert({
-    where: { email: "cashier@cbpos.local" },
-    update: { storeId: clarksville.id },
-    create: {
-      email: "cashier@cbpos.local",
-      name: "Casey Cashier",
-      passwordHash,
-      role: "CASHIER",
-      storeId: clarksville.id,
-    },
-  });
+  // Staff — identity in Supabase Auth, role/store in our User table --------
+  const staff = [
+    { email: "admin@cbpos.local", name: "Avery Admin", role: "ADMIN", storeId: null as string | null },
+    { email: "manager@cbpos.local", name: "Morgan Manager", role: "MANAGER", storeId: nashville.id },
+    { email: "cashier@cbpos.local", name: "Casey Cashier", role: "CASHIER", storeId: clarksville.id },
+  ];
+  for (const s of staff) {
+    const authId = await ensureAuthUser(s.email, password);
+    await prisma.user.upsert({
+      where: { email: s.email },
+      update: { role: s.role, storeId: s.storeId, authId },
+      create: { email: s.email, name: s.name, role: s.role, storeId: s.storeId, authId },
+    });
+  }
 
   const categories = ["Beverages", "Snacks", "Apparel", "Accessories", "Home"];
   const catByName: Record<string, string> = {};
@@ -130,11 +141,10 @@ async function main() {
   }
 
   console.log("Seed complete.");
-  console.log("  Admin login:   admin@cbpos.local / password123    (all stores)");
-  console.log("  Manager login: manager@cbpos.local / password123  (Nashville · 9.75%)");
-  console.log("  Cashier login: cashier@cbpos.local / password123  (Clarksville · 6%)");
+  console.log(`  Admin login:   admin@cbpos.local / ${password}    (all stores)`);
+  console.log(`  Manager login: manager@cbpos.local / ${password}  (Nashville · 9.75%)`);
+  console.log(`  Cashier login: cashier@cbpos.local / ${password}  (Clarksville · 6%)`);
   console.log(`  ${products.length} products across ${categories.length} categories.`);
-  void manager;
 }
 
 main()

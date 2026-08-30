@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { hashPassword, HttpError } from "@/lib/auth";
+import { HttpError } from "@/lib/auth";
+import { supabaseAdmin } from "@/lib/supabase";
 import { requireScopedUser } from "@/lib/scope";
 import { userUpdateSchema } from "@/lib/validation";
 import { ok, toErrorResponse } from "@/lib/api";
@@ -28,7 +29,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     const target = await prisma.user.findUnique({
       where: { id },
-      select: { id: true, role: true, storeId: true, createdById: true },
+      select: { id: true, role: true, storeId: true, createdById: true, authId: true },
     });
     if (!target) throw new HttpError(404, "User not found");
 
@@ -52,7 +53,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     const data: Record<string, unknown> = {};
     if (body.name !== undefined) data.name = body.name;
-    if (body.password) data.passwordHash = await hashPassword(body.password);
+    if (body.password) {
+      if (!target.authId) throw new HttpError(409, "This account has no linked login");
+      const { error } = await supabaseAdmin().auth.admin.updateUserById(target.authId, {
+        password: body.password,
+      });
+      if (error) throw new HttpError(500, `Could not update password: ${error.message}`);
+    }
     if (body.active !== undefined) data.active = body.active;
 
     // Role changes: cashiers can't; managers can set CASHIER/MANAGER only.

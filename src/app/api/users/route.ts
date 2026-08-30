@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { hashPassword, HttpError } from "@/lib/auth";
+import { HttpError } from "@/lib/auth";
+import { supabaseAdmin } from "@/lib/supabase";
 import { requireScopedUser } from "@/lib/scope";
 import { userCreateSchema } from "@/lib/validation";
 import { ok, toErrorResponse } from "@/lib/api";
@@ -73,18 +74,40 @@ export async function POST(req: NextRequest) {
     }
     // ADMIN: role and store as given.
 
-    const user = await prisma.user.create({
-      data: {
-        email: body.email.toLowerCase(),
-        name: body.name,
-        role,
-        passwordHash: await hashPassword(body.password),
-        storeId,
-        createdById: actor.id,
-      },
-      select: userSelect,
+    const email = body.email.toLowerCase();
+    if (await prisma.user.findUnique({ where: { email }, select: { id: true } })) {
+      throw new HttpError(409, "A user with that email already exists");
+    }
+
+    // Identity lives in Supabase Auth; the POS row carries role/store.
+    const admin = supabaseAdmin();
+    const { data: created, error: authErr } = await admin.auth.admin.createUser({
+      email,
+      password: body.password,
+      email_confirm: true,
     });
-    return ok({ user: { ...user, editable: true } }, 201);
+    if (authErr || !created.user) {
+      throw new HttpError(409, authErr?.message ?? "Could not create the account");
+    }
+
+    try {
+      const user = await prisma.user.create({
+        data: {
+          email,
+          name: body.name,
+          role,
+          authId: created.user.id,
+          storeId,
+          createdById: actor.id,
+        },
+        select: userSelect,
+      });
+      return ok({ user: { ...user, editable: true } }, 201);
+    } catch (err) {
+      // Don't leave an orphaned auth account behind.
+      await admin.auth.admin.deleteUser(created.user.id).catch(() => {});
+      throw err;
+    }
   } catch (err) {
     return toErrorResponse(err);
   }
