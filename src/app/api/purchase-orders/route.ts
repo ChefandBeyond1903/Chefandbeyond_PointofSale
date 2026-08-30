@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
 // Standalone purchase order entered on the PO form (no invoice).
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireScopedRole("MANAGER", "ADMIN");
+    const user = await requireScopedRole("CASHIER", "MANAGER", "ADMIN");
     const f = purchaseOrderFormSchema.parse(await req.json());
 
     const poNumber = await uniquePoNumber(f.poNumber);

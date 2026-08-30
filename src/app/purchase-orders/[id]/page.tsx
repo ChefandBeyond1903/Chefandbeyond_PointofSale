@@ -10,5 +10,5 @@ export default async function EditPurchaseOrderPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/purchase-orders");
   const { id } = await params;
-  return <PurchaseOrderForm id={id} readOnly={user.role === "CASHIER"} />;
+  return <PurchaseOrderForm id={id} />;
 }

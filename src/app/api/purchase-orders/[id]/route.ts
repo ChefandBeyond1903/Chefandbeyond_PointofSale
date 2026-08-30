@@ -41,7 +41,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
-    const actor = await requireScopedRole("MANAGER", "ADMIN");
+    const actor = await requireScopedRole("CASHIER", "MANAGER", "ADMIN");
     const { id } = await params;
     await loadScoped(id, actor);
     const f = purchaseOrderPatchSchema.parse(await req.json());
@@ -125,7 +125,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
 export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
-    const actor = await requireScopedRole("MANAGER", "ADMIN");
+    const actor = await requireScopedRole("CASHIER", "MANAGER", "ADMIN");
     const { id } = await params;
     await loadScoped(id, actor);
     await prisma.purchaseOrder.delete({ where: { id } });

@@ -11,7 +11,7 @@ type Params = { params: Promise<{ id: string }> };
 // PO number = invoice number + a letter, one per vendor, A-Z by vendor name.
 export async function POST(req: NextRequest, { params }: Params) {
   try {
-    const user = await requireScopedRole("MANAGER", "ADMIN");
+    const user = await requireScopedRole("CASHIER", "MANAGER", "ADMIN");
     const { id } = await params;
     const body = purchaseOrderCreateSchema.parse(await req.json());
 
