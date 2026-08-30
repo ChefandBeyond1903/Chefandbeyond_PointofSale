@@ -18,7 +18,7 @@ const STATUS_STYLE: Record<string, string> = {
   CANCELLED: "bg-zinc-100 text-zinc-500",
 };
 
-export function PurchaseOrdersView() {
+export function PurchaseOrdersView({ canManage = true }: { canManage?: boolean }) {
   const router = useRouter();
   const [pos, setPos] = useState<PurchaseOrder[]>([]);
   const [filter, setFilter] = useState<StatusFilter>("ALL");
@@ -89,12 +89,16 @@ export function PurchaseOrdersView() {
             </button>
           ))}
         </div>
-        <button onClick={() => setFromInvoiceOpen((v) => !v)} className="btn-secondary">
-          From invoice…
-        </button>
-        <button onClick={() => router.push("/purchase-orders/new")} className="btn-primary">
-          New purchase order
-        </button>
+        {canManage && (
+          <>
+            <button onClick={() => setFromInvoiceOpen((v) => !v)} className="btn-secondary">
+              From invoice…
+            </button>
+            <button onClick={() => router.push("/purchase-orders/new")} className="btn-primary">
+              New purchase order
+            </button>
+          </>
+        )}
       </div>
 
       {fromInvoiceOpen && (
@@ -200,6 +204,7 @@ export function PurchaseOrdersView() {
           saleId={openSaleId}
           onClose={() => setOpenSaleId(null)}
           onChanged={load}
+          canManage={canManage}
         />
       )}
     </div>

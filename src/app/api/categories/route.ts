@@ -19,7 +19,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    await requireRole("MANAGER");
+    await requireRole("MANAGER", "ADMIN");
     const body = categoryCreateSchema.parse(await req.json());
     const category = await prisma.category.create({ data: { name: body.name } });
     return ok({ category }, 201);

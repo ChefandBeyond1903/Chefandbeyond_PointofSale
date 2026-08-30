@@ -8,7 +8,7 @@ type Params = { params: Promise<{ id: string }> };
 
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
-    await requireRole("MANAGER");
+    await requireRole("MANAGER", "ADMIN");
     const { id } = await params;
     const data = vendorUpdateSchema.parse(await req.json());
 
@@ -33,7 +33,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
 export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
-    await requireRole("MANAGER");
+    await requireRole("MANAGER", "ADMIN");
     const { id } = await params;
     // Removes the directory entry only; products keep their vendor name.
     await prisma.vendor.delete({ where: { id } });

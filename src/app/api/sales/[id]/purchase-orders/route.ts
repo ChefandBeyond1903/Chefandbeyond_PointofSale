@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireRole, HttpError } from "@/lib/auth";
+import { HttpError } from "@/lib/auth";
+import { requireScopedRole, scopeStoreId } from "@/lib/scope";
 import { purchaseOrderCreateSchema } from "@/lib/validation";
 import { ok, toErrorResponse } from "@/lib/api";
 
@@ -10,7 +11,7 @@ type Params = { params: Promise<{ id: string }> };
 // PO number = invoice number + a letter, one per vendor, A-Z by vendor name.
 export async function POST(req: NextRequest, { params }: Params) {
   try {
-    const user = await requireRole("MANAGER");
+    const user = await requireScopedRole("MANAGER", "ADMIN");
     const { id } = await params;
     const body = purchaseOrderCreateSchema.parse(await req.json());
 
@@ -19,6 +20,9 @@ export async function POST(req: NextRequest, { params }: Params) {
       include: { items: true, purchaseOrders: { select: { vendor: true } } },
     });
     if (!sale) throw new HttpError(404, "Invoice not found");
+
+    const scoped = scopeStoreId(user);
+    if (scoped && sale.storeId !== scoped) throw new HttpError(404, "Invoice not found");
 
     if (sale.purchaseOrders.some((po) => po.vendor === body.vendor)) {
       throw new HttpError(409, `A purchase order for "${body.vendor}" already exists on this invoice`);
@@ -85,6 +89,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         subtotalCents,
         note: body.note,
         saleId: sale.id,
+        storeId: sale.storeId,
         createdById: user.id,
         items: { create: items },
       },

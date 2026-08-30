@@ -3,18 +3,21 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import type { SessionUser } from "@/lib/types";
+import type { Role, SessionUser } from "@/lib/types";
 import { api } from "@/lib/client";
 
-const LINKS = [
-  { href: "/", label: "Register", managerOnly: false },
-  { href: "/products", label: "Products", managerOnly: true },
-  { href: "/vendors", label: "Vendors", managerOnly: true },
-  { href: "/customers", label: "Customers", managerOnly: true },
-  { href: "/purchase-orders", label: "Purchase Orders", managerOnly: true },
-  { href: "/reports", label: "Reports", managerOnly: true },
-  { href: "/users", label: "Staff", managerOnly: true },
-  { href: "/settings", label: "Settings", managerOnly: true },
+const ALL: Role[] = ["CASHIER", "MANAGER", "ADMIN"];
+const STAFF_UP: Role[] = ["MANAGER", "ADMIN"];
+
+const LINKS: { href: string; label: string; roles: Role[] }[] = [
+  { href: "/", label: "Register", roles: ALL },
+  { href: "/products", label: "Products", roles: ALL },
+  { href: "/vendors", label: "Vendors", roles: ALL },
+  { href: "/customers", label: "Customers", roles: ALL },
+  { href: "/purchase-orders", label: "Purchase Orders", roles: ALL },
+  { href: "/reports", label: "Reports", roles: STAFF_UP },
+  { href: "/users", label: "Staff", roles: ALL },
+  { href: "/settings", label: "Settings", roles: STAFF_UP },
 ];
 
 export function Nav({ user }: { user: SessionUser }) {
@@ -22,7 +25,7 @@ export function Nav({ user }: { user: SessionUser }) {
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
 
-  const links = LINKS.filter((l) => !l.managerOnly || user.role === "MANAGER");
+  const links = LINKS.filter((l) => l.roles.includes(user.role));
 
   async function logout() {
     setLoggingOut(true);

@@ -26,7 +26,7 @@ export async function GET() {
 
 export async function PUT(req: NextRequest) {
   try {
-    await requireRole("MANAGER");
+    await requireRole("ADMIN");
     const data = companyUpdateSchema.parse(await req.json());
     const company = await prisma.company.upsert({
       where: { id: "company" },

@@ -1,6 +1,6 @@
 // Shared shapes for API responses used by client components.
 
-export type Role = "MANAGER" | "CASHIER";
+export type Role = "CASHIER" | "MANAGER" | "ADMIN";
 
 export interface SessionUser {
   id: string;
@@ -134,6 +134,7 @@ export interface PurchaseOrder {
   status: PurchaseOrderStatus;
   subtotalCents: number;
   note: string | null;
+  storeId?: string | null;
 
   email: string;
   ccBcc: string;
@@ -233,20 +234,41 @@ export interface ManagedUser {
   createdAt: string;
   storeId: string | null;
   store?: { id: string; name: string; taxRateBps: number } | null;
+  createdById?: string | null;
+  createdBy?: { id: string; name: string } | null;
   _count?: { sales: number };
+  /** Whether the requesting user is allowed to edit this row. */
+  editable?: boolean;
+}
+
+export interface ProfitRow {
+  key: string;
+  label: string;
+  saleCount: number;
+  netCents: number; // ex-tax revenue after discounts
+  costCents: number;
+  profitCents: number;
+  marginPct: number;
 }
 
 export interface ReportSummary {
   range: { from: string; to: string };
+  scope: { allStores: boolean; storeId: string | null; storeName: string | null };
+  stores: { id: string; name: string }[];
   totals: {
     saleCount: number;
     grossCents: number;
     subtotalCents: number;
     taxCents: number;
     discountCents: number;
+    costCents: number;
+    profitCents: number;
+    marginPct: number;
     itemsSold: number;
     averageSaleCents: number;
   };
+  byStore: ProfitRow[];
+  byStaff: ProfitRow[];
   byPaymentMethod: { method: string; count: number; totalCents: number }[];
   topProducts: { productId: string; name: string; quantity: number; revenueCents: number }[];
   recentSales: {
@@ -254,9 +276,11 @@ export interface ReportSummary {
     number: number;
     createdAt: string;
     cashier: string;
+    store: string;
     customer: string;
     paymentMethod: string;
     itemCount: number;
     totalCents: number;
+    profitCents: number;
   }[];
 }

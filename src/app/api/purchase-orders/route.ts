@@ -1,14 +1,14 @@
 import { NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { requireScopedUser, requireScopedRole, scopeStoreId } from "@/lib/scope";
 import { ok, toErrorResponse } from "@/lib/api";
 import { purchaseOrderFormSchema } from "@/lib/validation";
 import { computeSubtotalCents, lineCreateData, uniquePoNumber } from "@/lib/purchaseOrder";
 
 export async function GET(req: NextRequest) {
   try {
-    await requireRole("MANAGER");
+    const actor = await requireScopedUser();
     const { searchParams } = new URL(req.url);
     const take = Math.min(Number(searchParams.get("take") ?? 100), 500);
     const vendor = searchParams.get("vendor")?.trim();
@@ -16,6 +16,8 @@ export async function GET(req: NextRequest) {
     const saleId = searchParams.get("saleId")?.trim();
 
     const where: Prisma.PurchaseOrderWhereInput = {};
+    const scopedStore = scopeStoreId(actor);
+    if (scopedStore) where.storeId = scopedStore;
     if (vendor) where.vendor = vendor;
     if (status) where.status = status;
     if (saleId) where.saleId = saleId;
@@ -39,7 +41,7 @@ export async function GET(req: NextRequest) {
 // Standalone purchase order entered on the PO form (no invoice).
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireRole("MANAGER");
+    const user = await requireScopedRole("MANAGER", "ADMIN");
     const f = purchaseOrderFormSchema.parse(await req.json());
 
     const poNumber = await uniquePoNumber(f.poNumber);
@@ -51,6 +53,7 @@ export async function POST(req: NextRequest) {
         vendor: f.vendor,
         status: f.status,
         subtotalCents,
+        storeId: user.storeId ?? null,
         email: f.email,
         ccBcc: f.ccBcc,
         mailingAddress: f.mailingAddress,

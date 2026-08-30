@@ -15,11 +15,13 @@ export async function POST(req: NextRequest) {
     const valid = await verifyPassword(body.password, user.passwordHash);
     if (!valid) return genericError();
 
+    const role =
+      user.role === "ADMIN" ? "ADMIN" : user.role === "MANAGER" ? "MANAGER" : "CASHIER";
     const sessionUser = {
       id: user.id,
       email: user.email,
       name: user.name,
-      role: user.role === "MANAGER" ? ("MANAGER" as const) : ("CASHIER" as const),
+      role: role as "CASHIER" | "MANAGER" | "ADMIN",
     };
     await startSession(sessionUser);
     return ok({ user: sessionUser });

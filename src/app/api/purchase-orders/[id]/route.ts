@@ -1,17 +1,28 @@
 import { NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireRole, HttpError } from "@/lib/auth";
+import { HttpError } from "@/lib/auth";
+import { requireScopedUser, requireScopedRole, scopeStoreId } from "@/lib/scope";
 import { purchaseOrderPatchSchema } from "@/lib/validation";
 import { computeSubtotalCents, itemAmountCents } from "@/lib/purchaseOrder";
 import { ok, toErrorResponse } from "@/lib/api";
 
 type Params = { params: Promise<{ id: string }> };
 
+/** 404 unless the caller's store scope covers this PO. */
+async function loadScoped(id: string, actor: Awaited<ReturnType<typeof requireScopedUser>>) {
+  const scoped = scopeStoreId(actor);
+  const po = await prisma.purchaseOrder.findUnique({ where: { id }, select: { storeId: true } });
+  if (!po || (scoped && po.storeId !== scoped)) {
+    throw new HttpError(404, "Purchase order not found");
+  }
+}
+
 export async function GET(_req: NextRequest, { params }: Params) {
   try {
-    await requireRole("MANAGER");
+    const actor = await requireScopedUser();
     const { id } = await params;
+    await loadScoped(id, actor);
     const po = await prisma.purchaseOrder.findUnique({
       where: { id },
       include: {
@@ -30,8 +41,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
-    await requireRole("MANAGER");
+    const actor = await requireScopedRole("MANAGER", "ADMIN");
     const { id } = await params;
+    await loadScoped(id, actor);
     const f = purchaseOrderPatchSchema.parse(await req.json());
 
     const data: Prisma.PurchaseOrderUpdateInput = {};
@@ -113,8 +125,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
 export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
-    await requireRole("MANAGER");
+    const actor = await requireScopedRole("MANAGER", "ADMIN");
     const { id } = await params;
+    await loadScoped(id, actor);
     await prisma.purchaseOrder.delete({ where: { id } });
     return ok({ ok: true });
   } catch (err) {

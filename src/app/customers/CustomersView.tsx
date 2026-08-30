@@ -16,7 +16,7 @@ type Draft = {
 
 const emptyDraft: Draft = { name: "", email: "", phone: "", company: "", address: "", notes: "" };
 
-export function CustomersView() {
+export function CustomersView({ canManage = true }: { canManage?: boolean }) {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
@@ -95,9 +95,13 @@ export function CustomersView() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-        <button onClick={() => setDraft({ ...emptyDraft })} className="btn-primary ml-auto">
-          + New customer
-        </button>
+        {canManage ? (
+          <button onClick={() => setDraft({ ...emptyDraft })} className="btn-primary ml-auto">
+            + New customer
+          </button>
+        ) : (
+          <span className="ml-auto text-xs text-zinc-400">View only</span>
+        )}
       </div>
 
       <p className="mb-3 text-xs text-zinc-400">
@@ -142,25 +146,34 @@ export function CustomersView() {
                   <td className="px-4 py-2.5 text-zinc-500">{c.phone || "—"}</td>
                   <td className="px-4 py-2.5 text-right text-zinc-500">{c._count?.sales ?? 0}</td>
                   <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                    <button
-                      onClick={() =>
-                        setDraft({
-                          id: c.id,
-                          name: c.name,
-                          email: c.email,
-                          phone: c.phone,
-                          company: c.company,
-                          address: c.address,
-                          notes: c.notes,
-                        })
-                      }
-                      className="btn-ghost text-xs"
-                    >
-                      Edit
-                    </button>
-                    <button onClick={() => remove(c)} className="btn-ghost text-xs text-red-500">
-                      Delete
-                    </button>
+                    {canManage ? (
+                      <>
+                        <button
+                          onClick={() =>
+                            setDraft({
+                              id: c.id,
+                              name: c.name,
+                              email: c.email,
+                              phone: c.phone,
+                              company: c.company,
+                              address: c.address,
+                              notes: c.notes,
+                            })
+                          }
+                          className="btn-ghost text-xs"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => remove(c)}
+                          className="btn-ghost text-xs text-red-500"
+                        >
+                          Delete
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-xs text-zinc-300">—</span>
+                    )}
                   </td>
                 </tr>
               ))

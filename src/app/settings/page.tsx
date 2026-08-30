@@ -5,6 +5,6 @@ import { SettingsView } from "./SettingsView";
 export default async function SettingsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/settings");
-  if (user.role !== "MANAGER") redirect("/");
-  return <SettingsView />;
+  if (user.role === "CASHIER") redirect("/");
+  return <SettingsView isAdmin={user.role === "ADMIN"} />;
 }

@@ -5,6 +5,5 @@ import { ProductManager } from "./ProductManager";
 export default async function ProductsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/products");
-  if (user.role !== "MANAGER") redirect("/");
-  return <ProductManager />;
+  return <ProductManager canManage={user.role !== "CASHIER"} />;
 }

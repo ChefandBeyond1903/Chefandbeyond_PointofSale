@@ -8,7 +8,7 @@ type Params = { params: Promise<{ id: string }> };
 
 export async function GET(_req: NextRequest, { params }: Params) {
   try {
-    await requireRole("MANAGER");
+    await requireRole("MANAGER", "ADMIN");
     const { id } = await params;
     const customer = await prisma.customer.findUnique({
       where: { id },
@@ -30,7 +30,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
-    await requireRole("MANAGER");
+    await requireRole("MANAGER", "ADMIN");
     const { id } = await params;
     const data = customerUpdateSchema.parse(await req.json());
     const customer = await prisma.customer.update({ where: { id }, data });
@@ -42,7 +42,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
 export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
-    await requireRole("MANAGER");
+    await requireRole("MANAGER", "ADMIN");
     const { id } = await params;
     // Past sales keep their customer snapshot; only the directory link clears.
     await prisma.customer.delete({ where: { id } });

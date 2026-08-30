@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    await requireRole("MANAGER");
+    await requireRole("MANAGER", "ADMIN");
     const data = productCreateSchema.parse(await req.json());
     if (data.umrpCents > 0 && data.priceCents < data.umrpCents) {
       throw new HttpError(400, "Price can't be below the minimum resale price (UMRP)");

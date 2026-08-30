@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireUser, HttpError } from "@/lib/auth";
+import { requireScopedUser, scopeStoreId } from "@/lib/scope";
 import { saleCreateSchema } from "@/lib/validation";
 import { computeSale, type PricedInput } from "@/lib/sale";
 import { formatMoney } from "@/lib/money";
@@ -9,7 +10,7 @@ import { ok, toErrorResponse } from "@/lib/api";
 
 export async function GET(req: NextRequest) {
   try {
-    await requireUser();
+    const actor = await requireScopedUser();
     const { searchParams } = new URL(req.url);
     const take = Math.min(Number(searchParams.get("take") ?? 50), 200);
     const from = searchParams.get("from");
@@ -18,6 +19,9 @@ export async function GET(req: NextRequest) {
     const number = Number(searchParams.get("number"));
 
     const where: Prisma.SaleWhereInput = {};
+    // Non-admins only ever see their own store's sales.
+    const scopedStore = scopeStoreId(actor);
+    if (scopedStore) where.storeId = scopedStore;
     if (cashierId) where.cashierId = cashierId;
     if (Number.isInteger(number) && number > 0) where.number = number;
     if (from || to) {

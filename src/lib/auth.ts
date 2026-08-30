@@ -6,7 +6,8 @@ import { SignJWT, jwtVerify, type JWTPayload } from "jose";
 export const SESSION_COOKIE = "cb_pos_session";
 const MAX_AGE_SECONDS = 60 * 60 * 12; // 12 hours
 
-export type Role = "MANAGER" | "CASHIER";
+export type Role = "CASHIER" | "MANAGER" | "ADMIN";
+export const ROLES: Role[] = ["CASHIER", "MANAGER", "ADMIN"];
 
 export interface SessionUser {
   id: string;
@@ -55,7 +56,8 @@ export async function readSessionToken(token: string): Promise<SessionUser | nul
 
 export function payloadToUser(payload: JWTPayload): SessionUser | null {
   if (!payload.sub || typeof payload.email !== "string") return null;
-  const role = payload.role === "MANAGER" ? "MANAGER" : "CASHIER";
+  const role: Role =
+    payload.role === "ADMIN" ? "ADMIN" : payload.role === "MANAGER" ? "MANAGER" : "CASHIER";
   return {
     id: payload.sub,
     email: payload.email,

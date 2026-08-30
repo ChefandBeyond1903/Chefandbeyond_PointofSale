@@ -87,7 +87,7 @@ function move<T>(arr: T[], from: number, to: number): T[] {
   return next;
 }
 
-export function PurchaseOrderForm({ id }: { id?: string }) {
+export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readOnly?: boolean }) {
   const router = useRouter();
   const isEdit = !!id;
 
@@ -381,11 +381,19 @@ export function PurchaseOrderForm({ id }: { id?: string }) {
         <h1 className="text-xl font-semibold">
           {isEdit ? `Purchase order ${poNumber}` : "New purchase order"}
         </h1>
+        {readOnly && (
+          <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs text-zinc-500">
+            View only
+          </span>
+        )}
       </div>
 
       {error && (
         <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
       )}
+
+      <fieldset disabled={readOnly} className="contents">
+      {/* fieldset[disabled] makes the whole PO read-only for cashiers */}
 
       {/* ============ HEADER ============ */}
       <section className="card mb-4 p-4">
@@ -922,8 +930,10 @@ export function PurchaseOrderForm({ id }: { id?: string }) {
       </section>
 
       <p className="mt-3 text-center text-xs text-zinc-400">Privacy</p>
+      </fieldset>
 
       {/* ============ ACTION BAR ============ */}
+      {!readOnly && (
       <div className="no-print fixed inset-x-0 bottom-0 z-40 border-t border-zinc-200 bg-white/95 backdrop-blur">
         <div className="flex w-full flex-wrap items-center gap-2 px-4 py-2.5">
           <button onClick={() => router.push("/purchase-orders")} className="btn-secondary">
@@ -951,6 +961,7 @@ export function PurchaseOrderForm({ id }: { id?: string }) {
           </button>
         </div>
       </div>
+      )}
     </div>
   );
 }

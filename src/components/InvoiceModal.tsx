@@ -26,10 +26,12 @@ export function InvoiceModal({
   saleId,
   onClose,
   onChanged,
+  canManage = true,
 }: {
   saleId: string;
   onClose: () => void;
   onChanged?: () => void;
+  canManage?: boolean;
 }) {
   const [detail, setDetail] = useState<InvoiceDetail | null>(null);
   const [busyVendor, setBusyVendor] = useState<string | null>(null);
@@ -299,6 +301,7 @@ export function InvoiceModal({
                             <select
                               value={po.status}
                               onChange={(e) => setPoStatus(po.id, e.target.value)}
+                              disabled={!canManage}
                               className="input h-7 w-32 text-xs"
                             >
                               {PO_STATUSES.map((s) => (
@@ -307,13 +310,17 @@ export function InvoiceModal({
                                 </option>
                               ))}
                             </select>
-                            <button
-                              onClick={() => deletePo(po.id)}
-                              className="btn-ghost px-2 py-0.5 text-xs text-red-500"
-                            >
-                              Delete
-                            </button>
+                            {canManage && (
+                              <button
+                                onClick={() => deletePo(po.id)}
+                                className="btn-ghost px-2 py-0.5 text-xs text-red-500"
+                              >
+                                Delete
+                              </button>
+                            )}
                           </div>
+                        ) : !canManage ? (
+                          <span className="ml-auto text-xs text-zinc-400">No PO yet</span>
                         ) : picking ? (
                           <button
                             onClick={() => setPickerVendor(null)}

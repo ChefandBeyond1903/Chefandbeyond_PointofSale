@@ -87,6 +87,7 @@ function LoginForm() {
 
         <div className="mt-4 rounded-md border border-zinc-200 bg-white p-3 text-xs text-zinc-500">
           <p className="font-medium text-zinc-600">Demo accounts</p>
+          <p>admin@cbpos.local / password123</p>
           <p>manager@cbpos.local / password123</p>
           <p>cashier@cbpos.local / password123</p>
         </div>

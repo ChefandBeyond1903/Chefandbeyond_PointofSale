@@ -39,7 +39,7 @@ const emptyDraft: Draft = {
   vendor: "",
 };
 
-export function ProductManager() {
+export function ProductManager({ canManage = true }: { canManage?: boolean }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [q, setQ] = useState("");
@@ -235,9 +235,13 @@ export function ProductManager() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-        <button onClick={startCreate} className="btn-primary ml-auto">
-          + New product
-        </button>
+        {canManage ? (
+          <button onClick={startCreate} className="btn-primary ml-auto">
+            + New product
+          </button>
+        ) : (
+          <span className="ml-auto text-xs text-zinc-400">View only</span>
+        )}
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
@@ -247,16 +251,20 @@ export function ProductManager() {
             {c.name} · {c._count?.products ?? 0}
           </span>
         ))}
-        <input
-          className="input h-8 w-40"
-          placeholder="New category"
-          value={newCategory}
-          onChange={(e) => setNewCategory(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && addCategory()}
-        />
-        <button onClick={addCategory} className="btn-secondary h-8">
-          Add
-        </button>
+        {canManage && (
+          <>
+            <input
+              className="input h-8 w-40"
+              placeholder="New category"
+              value={newCategory}
+              onChange={(e) => setNewCategory(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addCategory()}
+            />
+            <button onClick={addCategory} className="btn-secondary h-8">
+              Add
+            </button>
+          </>
+        )}
       </div>
 
       {error && !draft && (
@@ -290,12 +298,13 @@ export function ProductManager() {
                 <tr key={p.id} className={p.active ? "" : "opacity-50"}>
                   <td className="px-3 py-2.5">
                     <button
-                      onClick={() => toggleFavorite(p)}
+                      onClick={() => canManage && toggleFavorite(p)}
+                      disabled={!canManage}
                       aria-label={p.favorite ? "Remove from register" : "Show on register"}
-                      title={p.favorite ? "Showing on register — click to remove" : "Show on register home"}
+                      title={p.favorite ? "Showing on register" : "Show on register home"}
                       className={`text-lg leading-none transition-colors ${
-                        p.favorite ? "text-amber-500" : "text-zinc-300 hover:text-zinc-400"
-                      }`}
+                        p.favorite ? "text-amber-500" : "text-zinc-300"
+                      } ${canManage ? "hover:text-zinc-400" : "cursor-default"}`}
                     >
                       {p.favorite ? "★" : "☆"}
                     </button>
@@ -319,13 +328,22 @@ export function ProductManager() {
                     )}
                   </td>
                   <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                    <button onClick={() => startEdit(p)} className="btn-ghost text-xs">
-                      Edit
-                    </button>
-                    {p.active && (
-                      <button onClick={() => archive(p)} className="btn-ghost text-xs text-red-500">
-                        Archive
-                      </button>
+                    {canManage ? (
+                      <>
+                        <button onClick={() => startEdit(p)} className="btn-ghost text-xs">
+                          Edit
+                        </button>
+                        {p.active && (
+                          <button
+                            onClick={() => archive(p)}
+                            className="btn-ghost text-xs text-red-500"
+                          >
+                            Archive
+                          </button>
+                        )}
+                      </>
+                    ) : (
+                      <span className="text-xs text-zinc-300">—</span>
                     )}
                   </td>
                 </tr>

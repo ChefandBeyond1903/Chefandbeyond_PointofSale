@@ -23,7 +23,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
-    await requireRole("MANAGER");
+    await requireRole("MANAGER", "ADMIN");
     const { id } = await params;
     const data = productUpdateSchema.parse(await req.json());
 
@@ -56,7 +56,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 // Soft delete: keeps sale history intact.
 export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
-    await requireRole("MANAGER");
+    await requireRole("MANAGER", "ADMIN");
     const { id } = await params;
     const product = await prisma.product.update({
       where: { id },

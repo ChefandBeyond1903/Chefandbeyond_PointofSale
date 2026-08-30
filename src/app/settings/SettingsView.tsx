@@ -15,12 +15,12 @@ const EMPTY_COMPANY: Company = {
   website: "",
 };
 
-export function SettingsView() {
+export function SettingsView({ isAdmin = false }: { isAdmin?: boolean }) {
   return (
     <div className="w-full flex-1 space-y-6 p-4">
       <h1 className="text-xl font-semibold">Settings</h1>
-      <CompanyCard />
-      <StoresCard />
+      {isAdmin && <CompanyCard />}
+      <StoresCard isAdmin={isAdmin} />
     </div>
   );
 }
@@ -134,7 +134,7 @@ function pctToBps(pct: string): number {
   return Number.isFinite(n) ? Math.round(n * 100) : 0;
 }
 
-function StoresCard() {
+function StoresCard({ isAdmin }: { isAdmin: boolean }) {
   const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -146,14 +146,20 @@ function StoresCard() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await api<{ stores: Store[] }>("/api/stores?all=1");
-      setStores(r.stores);
+      const [r, me] = await Promise.all([
+        api<{ stores: Store[] }>("/api/stores?all=1"),
+        isAdmin
+          ? Promise.resolve({ user: null as { storeId?: string | null } | null })
+          : api<{ user: { storeId?: string | null } | null }>("/api/auth/me"),
+      ]);
+      const mine = me.user?.storeId ?? null;
+      setStores(isAdmin ? r.stores : r.stores.filter((s) => s.id === mine));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load stores");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => {
     load();
@@ -206,13 +212,16 @@ function StoresCard() {
 
   async function saveEdit() {
     if (!editId) return;
-    await patch(editId, {
-      name: edit.name.trim(),
-      taxRateBps: pctToBps(edit.taxRatePct),
+    const body: Record<string, unknown> = {
       address: edit.address.trim(),
       phone: edit.phone.trim(),
       email: edit.email.trim(),
-    });
+    };
+    if (isAdmin) {
+      body.name = edit.name.trim();
+      body.taxRateBps = pctToBps(edit.taxRatePct);
+    }
+    await patch(editId, body);
     setEditId(null);
   }
 
@@ -231,44 +240,49 @@ function StoresCard() {
     <section className="card p-5">
       <h2 className="mb-1 font-semibold">Stores</h2>
       <p className="mb-4 text-sm text-zinc-500">
-        Each store has its own sales-tax rate. A sale is taxed at the rate of the store its cashier
-        is assigned to.
+        {isAdmin
+          ? "Each store has its own sales-tax rate. A sale is taxed at the rate of the store its cashier is assigned to."
+          : "Your store's contact details. Name and tax rate are set by an admin."}
       </p>
 
       {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      <form onSubmit={create} className="mb-5 grid gap-2 sm:grid-cols-[1.4fr_0.6fr_1.4fr_1fr_auto]">
-        <input
-          className="input"
-          placeholder="Store name"
-          value={draft.name}
-          onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-          required
-        />
-        <input
-          className="input"
-          inputMode="decimal"
-          placeholder="Tax %"
-          value={draft.taxRatePct}
-          onChange={(e) => setDraft({ ...draft, taxRatePct: e.target.value.replace(/[^0-9.]/g, "") })}
-          required
-        />
-        <input
-          className="input"
-          placeholder="Address"
-          value={draft.address}
-          onChange={(e) => setDraft({ ...draft, address: e.target.value })}
-        />
-        <input
-          className="input"
-          placeholder="Phone"
-          value={draft.phone}
-          onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
-        />
-        <button className="btn-primary whitespace-nowrap" disabled={creating}>
-          Add store
-        </button>
-      </form>
+      {isAdmin && (
+        <form onSubmit={create} className="mb-5 grid gap-2 sm:grid-cols-[1.4fr_0.6fr_1.4fr_1fr_auto]">
+          <input
+            className="input"
+            placeholder="Store name"
+            value={draft.name}
+            onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+            required
+          />
+          <input
+            className="input"
+            inputMode="decimal"
+            placeholder="Tax %"
+            value={draft.taxRatePct}
+            onChange={(e) =>
+              setDraft({ ...draft, taxRatePct: e.target.value.replace(/[^0-9.]/g, "") })
+            }
+            required
+          />
+          <input
+            className="input"
+            placeholder="Address"
+            value={draft.address}
+            onChange={(e) => setDraft({ ...draft, address: e.target.value })}
+          />
+          <input
+            className="input"
+            placeholder="Phone"
+            value={draft.phone}
+            onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
+          />
+          <button className="btn-primary whitespace-nowrap" disabled={creating}>
+            Add store
+          </button>
+        </form>
+      )}
 
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
@@ -304,6 +318,7 @@ function StoresCard() {
                       <input
                         className="input h-8"
                         value={edit.name}
+                        disabled={!isAdmin}
                         onChange={(e) => setEdit({ ...edit, name: e.target.value })}
                       />
                     </td>
@@ -312,6 +327,7 @@ function StoresCard() {
                         className="input h-8 w-20 text-right"
                         inputMode="decimal"
                         value={edit.taxRatePct}
+                        disabled={!isAdmin}
                         onChange={(e) =>
                           setEdit({ ...edit, taxRatePct: e.target.value.replace(/[^0-9.]/g, "") })
                         }
@@ -364,19 +380,23 @@ function StoresCard() {
                       <button onClick={() => startEdit(s)} className="btn-ghost text-xs">
                         Edit
                       </button>
-                      <button
-                        onClick={() => patch(s.id, { active: !s.active })}
-                        className="btn-ghost text-xs"
-                      >
-                        {s.active ? "Deactivate" : "Reactivate"}
-                      </button>
-                      {(s._count?.users ?? 0) === 0 && (s._count?.sales ?? 0) === 0 && (
-                        <button
-                          onClick={() => remove(s)}
-                          className="btn-ghost text-xs text-red-500"
-                        >
-                          Delete
-                        </button>
+                      {isAdmin && (
+                        <>
+                          <button
+                            onClick={() => patch(s.id, { active: !s.active })}
+                            className="btn-ghost text-xs"
+                          >
+                            {s.active ? "Deactivate" : "Reactivate"}
+                          </button>
+                          {(s._count?.users ?? 0) === 0 && (s._count?.sales ?? 0) === 0 && (
+                            <button
+                              onClick={() => remove(s)}
+                              className="btn-ghost text-xs text-red-500"
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </>
                       )}
                     </td>
                   </tr>

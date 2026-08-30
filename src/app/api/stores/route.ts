@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    await requireRole("MANAGER");
+    await requireRole("ADMIN");
     const data = storeCreateSchema.parse(await req.json());
     const store = await prisma.store.create({
       data,

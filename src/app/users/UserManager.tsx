@@ -5,12 +5,33 @@ import { api, ApiError } from "@/lib/client";
 import { formatBps } from "@/lib/money";
 import type { ManagedUser, Role, Store } from "@/lib/types";
 
-export function UserManager({ currentUserId }: { currentUserId: string }) {
+const ROLE_LABEL: Record<Role, string> = {
+  CASHIER: "Cashier",
+  MANAGER: "Manager",
+  ADMIN: "Admin",
+};
+
+export function UserManager({
+  currentUserId,
+  currentRole,
+}: {
+  currentUserId: string;
+  currentRole: Role;
+}) {
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+
+  // Which roles this user may hand out.
+  const assignableRoles: Role[] =
+    currentRole === "ADMIN"
+      ? ["CASHIER", "MANAGER", "ADMIN"]
+      : currentRole === "MANAGER"
+        ? ["CASHIER", "MANAGER"]
+        : ["CASHIER"];
+  const canChooseStore = currentRole === "ADMIN";
 
   const [form, setForm] = useState({
     name: "",
@@ -25,7 +46,7 @@ export function UserManager({ currentUserId }: { currentUserId: string }) {
     try {
       const [u, s] = await Promise.all([
         api<{ users: ManagedUser[] }>("/api/users"),
-        api<{ stores: Store[] }>("/api/stores?all=1"),
+        api<{ stores: Store[] }>("/api/stores?all=1").catch(() => ({ stores: [] as Store[] })),
       ]);
       setUsers(u.users);
       setStores(s.stores);
@@ -45,7 +66,14 @@ export function UserManager({ currentUserId }: { currentUserId: string }) {
     setError(null);
     setCreating(true);
     try {
-      await api("/api/users", { method: "POST", body: JSON.stringify(form) });
+      const payload: Record<string, unknown> = {
+        name: form.name,
+        email: form.email,
+        password: form.password,
+        role: assignableRoles.includes(form.role) ? form.role : "CASHIER",
+      };
+      if (canChooseStore && form.storeId) payload.storeId = form.storeId;
+      await api("/api/users", { method: "POST", body: JSON.stringify(payload) });
       setForm({ name: "", email: "", password: "", role: "CASHIER", storeId: "" });
       load();
     } catch (err) {
@@ -75,27 +103,25 @@ export function UserManager({ currentUserId }: { currentUserId: string }) {
     patch(u.id, { password: pw });
   }
 
-  const activeStores = stores.filter((s) => s.active);
-
   return (
     <div className="w-full flex-1 p-4">
-      <h1 className="mb-4 text-xl font-semibold">Staff</h1>
+      <h1 className="mb-1 text-xl font-semibold">Staff</h1>
+      <p className="mb-4 text-xs text-zinc-400">
+        {currentRole === "ADMIN"
+          ? "All staff across every store."
+          : currentRole === "MANAGER"
+            ? "Staff assigned to your store."
+            : "Staff accounts you have created."}
+      </p>
 
       {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      {stores.length === 0 && (
-        <p className="mb-3 rounded bg-amber-50 px-3 py-2 text-sm text-amber-700">
-          No stores yet. Add one under{" "}
-          <a href="/settings" className="underline">
-            Settings
-          </a>{" "}
-          so staff can be assigned a location and tax rate.
-        </p>
-      )}
-
-      <form onSubmit={createUser} className="card mb-6 grid grid-cols-1 gap-3 p-4 sm:grid-cols-6">
+      <form
+        onSubmit={createUser}
+        className="card mb-6 grid grid-cols-1 gap-3 p-4 sm:grid-cols-6"
+      >
         <input
-          className="input sm:col-span-1"
+          className="input"
           placeholder="Name"
           value={form.name}
           onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -117,27 +143,38 @@ export function UserManager({ currentUserId }: { currentUserId: string }) {
           onChange={(e) => setForm({ ...form, password: e.target.value })}
           required
         />
-        <select
-          className="input"
-          value={form.role}
-          onChange={(e) => setForm({ ...form, role: e.target.value as Role })}
-        >
-          <option value="CASHIER">Cashier</option>
-          <option value="MANAGER">Manager</option>
-        </select>
-        <div className="flex gap-2">
+        {assignableRoles.length > 1 ? (
           <select
             className="input"
-            value={form.storeId}
-            onChange={(e) => setForm({ ...form, storeId: e.target.value })}
+            value={form.role}
+            onChange={(e) => setForm({ ...form, role: e.target.value as Role })}
           >
-            <option value="">No store</option>
-            {activeStores.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name} ({formatBps(s.taxRateBps)})
+            {assignableRoles.map((r) => (
+              <option key={r} value={r}>
+                {ROLE_LABEL[r]}
               </option>
             ))}
           </select>
+        ) : (
+          <div className="input flex items-center text-zinc-500">Cashier</div>
+        )}
+        <div className="flex gap-2">
+          {canChooseStore && (
+            <select
+              className="input"
+              value={form.storeId}
+              onChange={(e) => setForm({ ...form, storeId: e.target.value })}
+            >
+              <option value="">No store</option>
+              {stores
+                .filter((s) => s.active)
+                .map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({formatBps(s.taxRateBps)})
+                  </option>
+                ))}
+            </select>
+          )}
           <button className="btn-primary whitespace-nowrap" disabled={creating}>
             Add
           </button>
@@ -152,6 +189,7 @@ export function UserManager({ currentUserId }: { currentUserId: string }) {
               <th className="px-4 py-2.5">Email</th>
               <th className="px-4 py-2.5">Role</th>
               <th className="px-4 py-2.5">Store</th>
+              <th className="px-4 py-2.5">Created by</th>
               <th className="px-4 py-2.5 text-right">Sales</th>
               <th className="px-4 py-2.5">Status</th>
               <th className="px-4 py-2.5"></th>
@@ -160,13 +198,23 @@ export function UserManager({ currentUserId }: { currentUserId: string }) {
           <tbody className="divide-y divide-zinc-100">
             {loading ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-zinc-400">
+                <td colSpan={8} className="px-4 py-8 text-center text-zinc-400">
                   Loading…
+                </td>
+              </tr>
+            ) : users.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="px-4 py-8 text-center text-zinc-400">
+                  No staff to show.
                 </td>
               </tr>
             ) : (
               users.map((u) => {
                 const self = u.id === currentUserId;
+                const editable = u.editable && !self;
+                const roleChoices = assignableRoles.includes(u.role)
+                  ? assignableRoles
+                  : [u.role, ...assignableRoles];
                 return (
                   <tr key={u.id} className={u.active ? "" : "opacity-50"}>
                     <td className="px-4 py-2.5 font-medium">
@@ -175,31 +223,42 @@ export function UserManager({ currentUserId }: { currentUserId: string }) {
                     </td>
                     <td className="px-4 py-2.5 text-zinc-500">{u.email}</td>
                     <td className="px-4 py-2.5">
-                      <select
-                        className="input h-8 w-32"
-                        value={u.role}
-                        disabled={self}
-                        onChange={(e) => patch(u.id, { role: e.target.value })}
-                      >
-                        <option value="CASHIER">Cashier</option>
-                        <option value="MANAGER">Manager</option>
-                      </select>
+                      {editable && !self ? (
+                        <select
+                          className="input h-8 w-28"
+                          value={u.role}
+                          onChange={(e) => patch(u.id, { role: e.target.value })}
+                        >
+                          {roleChoices.map((r) => (
+                            <option key={r} value={r}>
+                              {ROLE_LABEL[r]}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="text-zinc-600">{ROLE_LABEL[u.role]}</span>
+                      )}
                     </td>
                     <td className="px-4 py-2.5">
-                      <select
-                        className="input h-8 w-44"
-                        value={u.storeId ?? ""}
-                        onChange={(e) => patch(u.id, { storeId: e.target.value })}
-                      >
-                        <option value="">No store</option>
-                        {stores.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.name} ({formatBps(s.taxRateBps)})
-                            {!s.active ? " — inactive" : ""}
-                          </option>
-                        ))}
-                      </select>
+                      {canChooseStore && editable ? (
+                        <select
+                          className="input h-8 w-44"
+                          value={u.storeId ?? ""}
+                          onChange={(e) => patch(u.id, { storeId: e.target.value })}
+                        >
+                          <option value="">No store</option>
+                          {stores.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name}
+                              {!s.active ? " — inactive" : ""}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="text-zinc-500">{u.store?.name ?? "—"}</span>
+                      )}
                     </td>
+                    <td className="px-4 py-2.5 text-zinc-400">{u.createdBy?.name ?? "—"}</td>
                     <td className="px-4 py-2.5 text-right text-zinc-500">{u._count?.sales ?? 0}</td>
                     <td className="px-4 py-2.5">
                       {u.active ? (
@@ -209,16 +268,23 @@ export function UserManager({ currentUserId }: { currentUserId: string }) {
                       )}
                     </td>
                     <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                      <button onClick={() => resetPassword(u)} className="btn-ghost text-xs">
-                        Reset password
-                      </button>
-                      {!self && (
-                        <button
-                          onClick={() => patch(u.id, { active: !u.active })}
-                          className="btn-ghost text-xs"
-                        >
-                          {u.active ? "Deactivate" : "Reactivate"}
-                        </button>
+                      {editable ? (
+                        <>
+                          <button
+                            onClick={() => resetPassword(u)}
+                            className="btn-ghost text-xs"
+                          >
+                            Reset password
+                          </button>
+                          <button
+                            onClick={() => patch(u.id, { active: !u.active })}
+                            className="btn-ghost text-xs"
+                          >
+                            {u.active ? "Deactivate" : "Reactivate"}
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-xs text-zinc-300">—</span>
                       )}
                     </td>
                   </tr>

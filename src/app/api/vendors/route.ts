@@ -24,7 +24,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    await requireRole("MANAGER");
+    await requireRole("MANAGER", "ADMIN");
     const data = vendorCreateSchema.parse(await req.json());
     const vendor = await prisma.vendor.create({ data });
     return ok({ vendor }, 201);

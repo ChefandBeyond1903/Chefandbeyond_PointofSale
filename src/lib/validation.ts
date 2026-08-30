@@ -115,7 +115,7 @@ export const userCreateSchema = z.object({
   email: z.string().email(),
   name: z.string().trim().min(1).max(120),
   password: z.string().min(8).max(200),
-  role: z.enum(["MANAGER", "CASHIER"]),
+  role: z.enum(["CASHIER", "MANAGER", "ADMIN"]),
   // The store this employee is assigned to. Its tax rate applies to their sales.
   storeId: z.string().trim().min(1).optional().or(z.literal("")).transform((v) => (v ? v : undefined)),
 });
@@ -123,7 +123,7 @@ export const userCreateSchema = z.object({
 export const userUpdateSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
   password: z.string().min(8).max(200).optional(),
-  role: z.enum(["MANAGER", "CASHIER"]).optional(),
+  role: z.enum(["CASHIER", "MANAGER", "ADMIN"]).optional(),
   active: z.boolean().optional(),
   // "" clears the assignment; a non-empty id sets it.
   storeId: z.string().trim().max(64).nullable().optional(),

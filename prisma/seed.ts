@@ -36,6 +36,17 @@ async function main() {
   });
 
   // Staff -----------------------------------------------------------------
+  await prisma.user.upsert({
+    where: { email: "admin@cbpos.local" },
+    update: { role: "ADMIN", storeId: null },
+    create: {
+      email: "admin@cbpos.local",
+      name: "Avery Admin",
+      passwordHash,
+      role: "ADMIN",
+    },
+  });
+
   const manager = await prisma.user.upsert({
     where: { email: "manager@cbpos.local" },
     update: { storeId: nashville.id },
@@ -112,6 +123,7 @@ async function main() {
   }
 
   console.log("Seed complete.");
+  console.log("  Admin login:   admin@cbpos.local / password123    (all stores)");
   console.log("  Manager login: manager@cbpos.local / password123  (Nashville · 9.75%)");
   console.log("  Cashier login: cashier@cbpos.local / password123  (Clarksville · 6%)");
   console.log(`  ${products.length} products across ${categories.length} categories.`);

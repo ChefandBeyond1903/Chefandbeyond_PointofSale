@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    await requireRole("MANAGER");
+    await requireRole("MANAGER", "ADMIN");
     const data = customerCreateSchema.parse(await req.json());
     const customer = await prisma.customer.create({ data });
     return ok({ customer }, 201);
