@@ -15,6 +15,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
       include: {
         items: true,
         cashier: { select: { id: true, name: true } },
+        salesperson: { select: { id: true, name: true } },
         customer: true,
         purchaseOrders: {
           orderBy: { poNumber: "asc" },

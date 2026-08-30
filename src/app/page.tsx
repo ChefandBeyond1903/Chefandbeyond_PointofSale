@@ -86,9 +86,12 @@ export default function RegisterPage() {
   const [receipt, setReceipt] = useState<Sale | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [role, setRole] = useState<Role | null>(null);
+  const [meId, setMeId] = useState<string | null>(null);
   const [storeName, setStoreName] = useState<string | null>(null);
   const [storeTaxRateBps, setStoreTaxRateBps] = useState<number | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
+  const [salespeople, setSalespeople] = useState<{ id: string; name: string }[]>([]);
+  const [salespersonId, setSalespersonId] = useState<string>(""); // "" = signed-in operator
   const searchRef = useRef<HTMLInputElement>(null);
 
   const loadCatalog = useCallback(async () => {
@@ -149,6 +152,7 @@ export default function RegisterPage() {
     loadCustomers();
     api<{
       user: {
+        id: string;
         role: Role;
         storeName?: string | null;
         storeTaxRateBps?: number | null;
@@ -156,12 +160,16 @@ export default function RegisterPage() {
     }>("/api/auth/me")
       .then((r) => {
         setRole(r.user?.role ?? null);
+        setMeId(r.user?.id ?? null);
         setStoreName(r.user?.storeName ?? null);
         setStoreTaxRateBps(r.user?.storeTaxRateBps ?? null);
       })
       .catch(() => {});
     api<{ company: Company }>("/api/company")
       .then((r) => setCompany(r.company))
+      .catch(() => {});
+    api<{ people: { id: string; name: string }[] }>("/api/salespeople")
+      .then((r) => setSalespeople(r.people))
       .catch(() => {});
   }, [loadCatalog, loadShift, loadCustomers]);
 
@@ -450,6 +458,7 @@ export default function RegisterPage() {
           orderDiscountCents: totals.orderDiscountResolved,
           paymentMethod,
           tenderedCents,
+          ...(salespersonId && salespersonId !== meId ? { salespersonId } : {}),
           ...(custId
             ? { customerId: custId }
             : custName.trim()
@@ -570,6 +579,30 @@ export default function RegisterPage() {
               </button>
             )}
           </div>
+
+          {/* Salesperson */}
+          {salespeople.length > 1 && (
+            <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-2 text-xs">
+              <span className="text-zinc-400">Salesperson</span>
+              <select
+                className="input h-8 flex-1"
+                value={salespersonId}
+                onChange={(e) => setSalespersonId(e.target.value)}
+              >
+                <option value="">Me</option>
+                {salespeople
+                  .filter((p) => p.id !== meId)
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+              </select>
+              {salespersonId && salespersonId !== meId && (
+                <span className="whitespace-nowrap text-amber-600">credited to another</span>
+              )}
+            </div>
+          )}
 
           {/* Customer */}
           <div className="border-b border-zinc-100 px-4 py-3">
@@ -1125,6 +1158,9 @@ function ReceiptModal({
           )}
           <p className="text-center text-zinc-500">Sale #{sale.number}</p>
           <p className="text-center text-zinc-500">{new Date(sale.createdAt).toLocaleString()}</p>
+          {sale.salesperson?.name ? (
+            <p className="text-center text-zinc-500">Served by: {sale.salesperson.name}</p>
+          ) : null}
           {sale.customerNameSnapshot ? (
             <p className="text-center text-zinc-500">Customer: {sale.customerNameSnapshot}</p>
           ) : null}

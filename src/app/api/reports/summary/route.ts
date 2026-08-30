@@ -52,6 +52,8 @@ export async function GET(req: NextRequest) {
           customerNameSnapshot: true,
           cashierId: true,
           cashier: { select: { name: true } },
+          salespersonId: true,
+          salesperson: { select: { name: true } },
           items: {
             select: {
               productId: true,
@@ -133,8 +135,11 @@ export async function GET(req: NextRequest) {
       st.profit += saleNet - saleCost;
       byStore.set(storeKey, st);
 
-      const staff = byStaff.get(s.cashierId) ?? {
-        label: s.cashier?.name ?? "—",
+      // Credit the salesperson (falls back to the cashier for legacy rows).
+      const staffId = s.salespersonId ?? s.cashierId;
+      const staffName = s.salesperson?.name ?? s.cashier?.name ?? "—";
+      const staff = byStaff.get(staffId) ?? {
+        label: staffName,
         saleCount: 0,
         net: 0,
         cost: 0,
@@ -144,7 +149,7 @@ export async function GET(req: NextRequest) {
       staff.net += saleNet;
       staff.cost += saleCost;
       staff.profit += saleNet - saleCost;
-      byStaff.set(s.cashierId, staff);
+      byStaff.set(staffId, staff);
 
       const m = byMethod.get(s.paymentMethod) ?? { count: 0, totalCents: 0 };
       m.count += 1;
@@ -157,6 +162,7 @@ export async function GET(req: NextRequest) {
           number: s.number,
           createdAt: s.createdAt.toISOString(),
           cashier: s.cashier?.name ?? "—",
+          salesperson: s.salesperson?.name ?? s.cashier?.name ?? "—",
           store: storeLabel,
           customer: s.customerNameSnapshot || "",
           paymentMethod: s.paymentMethod,

@@ -63,7 +63,8 @@ model User {
   createdBy   User?   @relation("UserCreatedBy", fields: [createdById], references: [id])
   createdUsers User[] @relation("UserCreatedBy")
 
-  sales          Sale[]
+  sales          Sale[]          @relation("SaleCashier")
+  salesCredited  Sale[]          @relation("SaleSalesperson")
   shifts         Shift[]
   purchaseOrders PurchaseOrder[]
 
@@ -181,8 +182,13 @@ model Sale {
   customerPhoneSnapshot   String    @default("")
   customerAddressSnapshot String    @default("")
 
+  // The operator who was signed in and rang the sale.
   cashierId String
-  cashier   User   @relation(fields: [cashierId], references: [id])
+  cashier   User   @relation("SaleCashier", fields: [cashierId], references: [id])
+  // The salesperson credited with the sale. Defaults to the cashier; the
+  // operator can switch it at the register. Null on legacy rows (= cashier).
+  salespersonId String?
+  salesperson   User?  @relation("SaleSalesperson", fields: [salespersonId], references: [id])
   shiftId   String?
   shift     Shift?  @relation(fields: [shiftId], references: [id])
 
@@ -193,6 +199,7 @@ model Sale {
   @@index([createdAt])
   @@index([customerId])
   @@index([cashierId])
+  @@index([salespersonId])
   @@index([storeId])
 }
 

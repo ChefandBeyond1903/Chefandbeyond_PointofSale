@@ -170,7 +170,7 @@ export function ReportsView({ isAdmin = false }: { isAdmin?: boolean }) {
                           {data.scope.allStores && (
                             <td className="py-2 text-zinc-400">{s.store}</td>
                           )}
-                          <td className="py-2 text-zinc-500">{s.customer || s.cashier}</td>
+                          <td className="py-2 text-zinc-500">{s.customer || s.salesperson}</td>
                           <td className="py-2 text-right text-green-600">
                             {formatMoney(s.profitCents)}
                           </td>

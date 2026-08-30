@@ -200,6 +200,8 @@ export interface Sale {
   storePhoneSnapshot?: string;
   storeEmailSnapshot?: string;
   cashier?: { id: string; name: string };
+  salespersonId?: string | null;
+  salesperson?: { id: string; name: string } | null;
   customer?: { id: string; name: string } | Customer | null;
   customerId?: string | null;
   customerNameSnapshot?: string;
@@ -276,6 +278,7 @@ export interface ReportSummary {
     number: number;
     createdAt: string;
     cashier: string;
+    salesperson: string;
     store: string;
     customer: string;
     paymentMethod: string;

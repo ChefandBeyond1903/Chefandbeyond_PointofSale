@@ -4,7 +4,8 @@ import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify, type JWTPayload } from "jose";
 
 export const SESSION_COOKIE = "cb_pos_session";
-const MAX_AGE_SECONDS = 60 * 60 * 12; // 12 hours
+const MAX_AGE_SECONDS = 60 * 60 * 12; // 12 hours (default)
+const REMEMBER_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days ("remember me")
 
 export type Role = "CASHIER" | "MANAGER" | "ADMIN";
 export const ROLES: Role[] = ["CASHIER", "MANAGER", "ADMIN"];
@@ -36,12 +37,15 @@ export function verifyPassword(plain: string, hash: string): Promise<boolean> {
   return bcrypt.compare(plain, hash);
 }
 
-export async function createSessionToken(user: SessionUser): Promise<string> {
+export async function createSessionToken(
+  user: SessionUser,
+  maxAgeSeconds = MAX_AGE_SECONDS,
+): Promise<string> {
   return new SignJWT({ email: user.email, name: user.name, role: user.role })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(user.id)
     .setIssuedAt()
-    .setExpirationTime(`${MAX_AGE_SECONDS}s`)
+    .setExpirationTime(`${maxAgeSeconds}s`)
     .sign(secret());
 }
 
@@ -66,15 +70,16 @@ export function payloadToUser(payload: JWTPayload): SessionUser | null {
   };
 }
 
-export async function startSession(user: SessionUser): Promise<void> {
-  const token = await createSessionToken(user);
+export async function startSession(user: SessionUser, remember = false): Promise<void> {
+  const maxAge = remember ? REMEMBER_AGE_SECONDS : MAX_AGE_SECONDS;
+  const token = await createSessionToken(user, maxAge);
   const store = await cookies();
   store.set(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: MAX_AGE_SECONDS,
+    maxAge,
   });
 }
 

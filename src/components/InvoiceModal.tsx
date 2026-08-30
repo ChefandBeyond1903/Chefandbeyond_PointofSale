@@ -176,7 +176,12 @@ export function InvoiceModal({
               <div>
                 <h2 className="text-lg font-semibold">Invoice #{sale.number}</h2>
                 <p className="text-sm text-zinc-500">
-                  {new Date(sale.createdAt).toLocaleString()} · {sale.cashier?.name ?? "—"} ·{" "}
+                  {new Date(sale.createdAt).toLocaleString()} ·{" "}
+                  {sale.salesperson?.name ?? sale.cashier?.name ?? "—"}
+                  {sale.salesperson && sale.cashier && sale.salesperson.id !== sale.cashier.id
+                    ? ` (rung by ${sale.cashier.name})`
+                    : ""}
+                  {" · "}
                   {sale.paymentMethod}
                   {sale.storeNameSnapshot ? ` · ${sale.storeNameSnapshot}` : ""}
                 </p>

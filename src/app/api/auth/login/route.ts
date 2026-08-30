@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
       name: user.name,
       role: role as "CASHIER" | "MANAGER" | "ADMIN",
     };
-    await startSession(sessionUser);
+    await startSession(sessionUser, body.remember);
     return ok({ user: sessionUser });
   } catch (err) {
     return toErrorResponse(err);

@@ -36,6 +36,7 @@ export async function GET(req: NextRequest) {
       take,
       include: {
         cashier: { select: { id: true, name: true } },
+        salesperson: { select: { id: true, name: true } },
         customer: { select: { id: true, name: true } },
         items: true,
       },
@@ -62,6 +63,22 @@ export async function POST(req: NextRequest) {
     const storeAddressSnapshot = actor?.store?.address ?? "";
     const storePhoneSnapshot = actor?.store?.phone ?? "";
     const storeEmailSnapshot = actor?.store?.email ?? "";
+
+    // Credit the sale to the chosen salesperson (defaults to the operator).
+    // They must be an active user in the same store (any active user for admin).
+    let salespersonId = user.id;
+    if (body.salespersonId && body.salespersonId !== user.id) {
+      const sp = await prisma.user.findFirst({
+        where: {
+          id: body.salespersonId,
+          active: true,
+          ...(actor?.role === "ADMIN" ? {} : { storeId: actor?.storeId ?? "__none__" }),
+        },
+        select: { id: true },
+      });
+      if (!sp) throw new HttpError(400, "That salesperson isn't available for this store");
+      salespersonId = sp.id;
+    }
 
     // Merge duplicate product lines defensively.
     const merged = new Map<
@@ -205,6 +222,7 @@ export async function POST(req: NextRequest) {
           changeCents,
           note: body.note,
           cashierId: user.id,
+          salespersonId,
           storeId,
           storeNameSnapshot,
           storeAddressSnapshot,
@@ -234,6 +252,7 @@ export async function POST(req: NextRequest) {
         include: {
           items: true,
           cashier: { select: { id: true, name: true } },
+          salesperson: { select: { id: true, name: true } },
           customer: true,
         },
       });
