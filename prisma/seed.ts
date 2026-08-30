@@ -105,8 +105,9 @@ async function main() {
     { name: "Ceramic Mug", sku: "HOM-002", barcode: "0000000000123", category: "Home", priceCents: 999, costCents: 300, stock: 60 },
   ];
 
+  const storeIds = [nashville.id, clarksville.id];
   for (const p of products) {
-    await prisma.product.upsert({
+    const row = await prisma.product.upsert({
       where: { sku: p.sku },
       update: {},
       create: {
@@ -115,11 +116,17 @@ async function main() {
         barcode: p.barcode,
         priceCents: p.priceCents,
         costCents: p.costCents,
-        stock: p.stock,
         trackStock: true,
         categoryId: catByName[p.category],
       },
     });
+    for (const storeId of storeIds) {
+      await prisma.storeInventory.upsert({
+        where: { productId_storeId: { productId: row.id, storeId } },
+        update: {},
+        create: { productId: row.id, storeId, quantity: p.stock },
+      });
+    }
   }
 
   console.log("Seed complete.");

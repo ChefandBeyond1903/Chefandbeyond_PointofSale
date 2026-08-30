@@ -41,6 +41,7 @@ model Store {
   users          User[]
   sales          Sale[]
   purchaseOrders PurchaseOrder[]
+  inventory      StoreInventory[]
 }
 
 /// Staff who can sign in. role is "CASHIER", "MANAGER" (scoped to one store),
@@ -124,8 +125,8 @@ model Product {
   // Unilateral minimum resale price, in cents. The item may never be sold
   // below this — after every discount — at the register. 0 = no floor.
   umrpCents   Int     @default(0)
+  // Whether stock is counted at all. Quantities live per-store in StoreInventory.
   trackStock  Boolean @default(true)
-  stock       Int     @default(0)
   active      Boolean @default(true)
   favorite    Boolean @default(false)
   vendor      String  @default("")
@@ -137,11 +138,28 @@ model Product {
   updatedAt DateTime            @updatedAt
   saleItems SaleItem[]
   poItems   PurchaseOrderItem[]
+  inventory StoreInventory[]
 
   @@index([categoryId])
   @@index([active])
   @@index([favorite])
   @@index([vendor])
+}
+
+/// On-hand quantity of one product at one store. Rows are created on demand
+/// (first receipt, sale, or manual adjustment) and may go negative (overselling
+/// is allowed).
+model StoreInventory {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  quantity  Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@unique([productId, storeId])
+  @@index([storeId])
 }
 
 /// A completed (or voided) transaction. status is "COMPLETED" or "VOIDED".
@@ -288,6 +306,8 @@ model PurchaseOrderItem {
   skuSnapshot     String @default("")
   description     String @default("")
   quantity        Int
+  // Units received so far against this line (supports partial / corrected receipts).
+  receivedQuantity Int   @default(0)
   unitCostCents   Int
   lineCostCents   Int
   customerProject String @default("")

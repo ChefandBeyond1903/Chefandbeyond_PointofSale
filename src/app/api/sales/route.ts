@@ -257,13 +257,17 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      for (const p of products) {
-        if (!p.trackStock) continue;
-        const line = merged.get(p.id)!;
-        await tx.product.update({
-          where: { id: p.id },
-          data: { stock: { decrement: line.quantity } },
-        });
+      // Draw stock down from the selling store's inventory (may go negative).
+      if (storeId) {
+        for (const p of products) {
+          if (!p.trackStock) continue;
+          const line = merged.get(p.id)!;
+          await tx.storeInventory.upsert({
+            where: { productId_storeId: { productId: p.id, storeId } },
+            create: { productId: p.id, storeId, quantity: -line.quantity },
+            update: { quantity: { decrement: line.quantity } },
+          });
+        }
       }
 
       return created;

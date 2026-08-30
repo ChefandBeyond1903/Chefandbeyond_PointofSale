@@ -5,15 +5,17 @@ import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
 import { InvoiceModal } from "@/components/InvoiceModal";
+import { ReceiveModal } from "@/components/ReceiveModal";
 import type { PurchaseOrder, Sale } from "@/lib/types";
 
-const STATUSES = ["ALL", "OPEN", "CLOSED", "SENT", "RECEIVED", "CANCELLED"] as const;
+const STATUSES = ["ALL", "OPEN", "CLOSED", "SENT", "PARTIAL", "RECEIVED", "CANCELLED"] as const;
 type StatusFilter = (typeof STATUSES)[number];
 
 const STATUS_STYLE: Record<string, string> = {
   OPEN: "bg-amber-100 text-amber-700",
   CLOSED: "bg-zinc-200 text-zinc-600",
   SENT: "bg-blue-100 text-blue-700",
+  PARTIAL: "bg-orange-100 text-orange-700",
   RECEIVED: "bg-green-100 text-green-700",
   CANCELLED: "bg-zinc-100 text-zinc-500",
 };
@@ -26,6 +28,7 @@ export function PurchaseOrdersView({ canManage = true }: { canManage?: boolean }
   const [error, setError] = useState<string | null>(null);
 
   const [openSaleId, setOpenSaleId] = useState<string | null>(null);
+  const [receiveId, setReceiveId] = useState<string | null>(null);
   const [fromInvoiceOpen, setFromInvoiceOpen] = useState(false);
   const [invoiceNo, setInvoiceNo] = useState("");
   const [resolving, setResolving] = useState(false);
@@ -135,21 +138,23 @@ export function PurchaseOrdersView({ canManage = true }: { canManage?: boolean }
               <th className="px-4 py-2.5">Vendor</th>
               <th className="px-4 py-2.5">Invoice</th>
               <th className="px-4 py-2.5 text-right">Items</th>
+              <th className="px-4 py-2.5 text-right">Received</th>
               <th className="px-4 py-2.5 text-right">Cost</th>
               <th className="px-4 py-2.5">Status</th>
               <th className="px-4 py-2.5">Created</th>
+              <th className="px-4 py-2.5"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-100">
             {loading ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-zinc-400">
+                <td colSpan={9} className="px-4 py-8 text-center text-zinc-400">
                   Loading…
                 </td>
               </tr>
             ) : pos.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-zinc-400">
+                <td colSpan={9} className="px-4 py-8 text-center text-zinc-400">
                   No purchase orders{filter === "ALL" ? " yet" : ` with status ${filter}`}.
                 </td>
               </tr>
@@ -178,6 +183,13 @@ export function PurchaseOrdersView({ canManage = true }: { canManage?: boolean }
                     )}
                   </td>
                   <td className="px-4 py-2.5 text-right text-zinc-500">{po._count?.items ?? 0}</td>
+                  <td className="px-4 py-2.5 text-right text-zinc-500 tabular-nums">
+                    {(() => {
+                      const ord = (po.items ?? []).reduce((s, i) => s + i.quantity, 0);
+                      const rec = (po.items ?? []).reduce((s, i) => s + i.receivedQuantity, 0);
+                      return ord ? `${rec} / ${ord}` : "—";
+                    })()}
+                  </td>
                   <td className="px-4 py-2.5 text-right">{formatMoney(po.subtotalCents)}</td>
                   <td className="px-4 py-2.5">
                     <span
@@ -192,6 +204,22 @@ export function PurchaseOrdersView({ canManage = true }: { canManage?: boolean }
                     {new Date(po.createdAt).toLocaleDateString()}
                     {po.createdBy ? ` · ${po.createdBy.name}` : ""}
                   </td>
+                  <td className="px-4 py-2.5 text-right">
+                    {canManage &&
+                      (po.items ?? []).length > 0 &&
+                      po.status !== "CANCELLED" &&
+                      po.status !== "RECEIVED" && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setReceiveId(po.id);
+                          }}
+                          className="btn-secondary h-7 text-xs"
+                        >
+                          Receive
+                        </button>
+                      )}
+                  </td>
                 </tr>
               ))
             )}
@@ -205,6 +233,14 @@ export function PurchaseOrdersView({ canManage = true }: { canManage?: boolean }
           onClose={() => setOpenSaleId(null)}
           onChanged={load}
           canManage={canManage}
+        />
+      )}
+
+      {receiveId && (
+        <ReceiveModal
+          poId={receiveId}
+          onClose={() => setReceiveId(null)}
+          onReceived={load}
         />
       )}
     </div>

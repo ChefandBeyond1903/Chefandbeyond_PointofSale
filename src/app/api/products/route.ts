@@ -1,13 +1,14 @@
 import { NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireUser, requireRole, HttpError } from "@/lib/auth";
+import { requireRole, HttpError } from "@/lib/auth";
+import { requireScopedUser } from "@/lib/scope";
 import { productCreateSchema } from "@/lib/validation";
 import { ok, toErrorResponse } from "@/lib/api";
 
 export async function GET(req: NextRequest) {
   try {
-    await requireUser();
+    const actor = await requireScopedUser();
     const { searchParams } = new URL(req.url);
     const q = searchParams.get("q")?.trim();
     const categoryId = searchParams.get("categoryId")?.trim();
@@ -27,11 +28,28 @@ export async function GET(req: NextRequest) {
       ];
     }
 
-    const products = await prisma.product.findMany({
+    const rows = await prisma.product.findMany({
       where,
       orderBy: { name: "asc" },
       take,
       include: { category: { select: { id: true, name: true } } },
+    });
+
+    // Attach on-hand for the caller's store (total across stores for an admin).
+    const inv = await prisma.storeInventory.findMany({
+      where: { productId: { in: rows.map((p) => p.id) } },
+      select: { productId: true, storeId: true, quantity: true },
+    });
+    const byProduct = new Map<string, { total: number; forStore: number }>();
+    for (const i of inv) {
+      const e = byProduct.get(i.productId) ?? { total: 0, forStore: 0 };
+      e.total += i.quantity;
+      if (actor.storeId && i.storeId === actor.storeId) e.forStore += i.quantity;
+      byProduct.set(i.productId, e);
+    }
+    const products = rows.map((p) => {
+      const e = byProduct.get(p.id);
+      return { ...p, stock: actor.storeId ? (e?.forStore ?? 0) : (e?.total ?? 0) };
     });
     return ok({ products });
   } catch (err) {
@@ -56,7 +74,6 @@ export async function POST(req: NextRequest) {
         costCents: data.costCents,
         umrpCents: data.umrpCents,
         trackStock: data.trackStock,
-        stock: data.stock,
         active: data.active,
         favorite: data.favorite,
         vendor: data.vendor,

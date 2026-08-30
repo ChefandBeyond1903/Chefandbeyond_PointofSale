@@ -77,6 +77,7 @@ export interface Product {
   costCents: number;
   umrpCents: number;
   trackStock: boolean;
+  /** On-hand at the requesting user's store (total across stores for an admin). */
   stock: number;
   active: boolean;
   favorite: boolean;
@@ -85,6 +86,25 @@ export interface Product {
   category: { id: string; name: string } | null;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface InventoryRow {
+  productId: string;
+  name: string;
+  sku: string;
+  vendor: string;
+  trackStock: boolean;
+  active: boolean;
+  byStore: Record<string, number>; // storeId -> quantity
+  total: number;
+}
+
+export interface InventorySnapshot {
+  stores: { id: string; name: string; active: boolean }[];
+  rows: InventoryRow[];
+  /** Store the caller may adjust ("" / null = admin, any store). */
+  editableStoreId: string | null;
+  canAdjust: boolean;
 }
 
 export interface SaleItem {
@@ -101,7 +121,13 @@ export interface SaleItem {
   lineTotalCents: number;
 }
 
-export type PurchaseOrderStatus = "OPEN" | "CLOSED" | "SENT" | "RECEIVED" | "CANCELLED";
+export type PurchaseOrderStatus =
+  | "OPEN"
+  | "CLOSED"
+  | "SENT"
+  | "PARTIAL"
+  | "RECEIVED"
+  | "CANCELLED";
 
 export interface PurchaseOrderItem {
   id: string;
@@ -110,6 +136,7 @@ export interface PurchaseOrderItem {
   skuSnapshot: string;
   description: string;
   quantity: number;
+  receivedQuantity: number;
   unitCostCents: number;
   lineCostCents: number;
   customerProject: string;

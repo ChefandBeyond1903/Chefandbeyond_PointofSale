@@ -15,7 +15,6 @@ export const productCreateSchema = z.object({
   costCents: z.number().int().min(0).default(0),
   umrpCents: z.number().int().min(0).default(0),
   trackStock: z.boolean().default(true),
-  stock: z.number().int().default(0),
   categoryId: z.string().trim().min(1).optional().or(z.literal("")).transform((v) => (v ? v : undefined)),
   active: z.boolean().default(true),
   favorite: z.boolean().default(false),
@@ -34,7 +33,6 @@ export const productUpdateSchema = z.object({
   costCents: z.number().int().min(0).optional(),
   umrpCents: z.number().int().min(0).optional(),
   trackStock: z.boolean().optional(),
-  stock: z.number().int().optional(),
   categoryId: z.string().trim().min(1).optional(),
   active: z.boolean().optional(),
   favorite: z.boolean().optional(),
@@ -43,6 +41,25 @@ export const productUpdateSchema = z.object({
 
 export const categoryCreateSchema = z.object({
   name: z.string().trim().min(1).max(100),
+});
+
+// Receiving items against a purchase order.
+export const poReceiveSchema = z.object({
+  lines: z
+    .array(
+      z.object({
+        itemId: z.string().min(1),
+        receiveQty: z.number().int(), // may be negative to correct an over-receipt
+      }),
+    )
+    .min(1),
+});
+
+// Set the on-hand quantity of a product at a store (absolute value).
+export const inventoryAdjustSchema = z.object({
+  productId: z.string().min(1),
+  storeId: z.string().min(1),
+  quantity: z.number().int(),
 });
 
 export const vendorCreateSchema = z.object({
@@ -185,13 +202,13 @@ export const purchaseOrderCreateSchema = z.object({
 });
 
 export const purchaseOrderUpdateSchema = z.object({
-  status: z.enum(["OPEN", "SENT", "RECEIVED", "CANCELLED"]).optional(),
+  status: z.enum(["OPEN", "SENT", "PARTIAL", "RECEIVED", "CANCELLED"]).optional(),
   note: z.string().trim().max(500).optional(),
 });
 
 // ---- Full purchase-order form (standalone entry / edit) ----
 
-const PO_STATUS = z.enum(["OPEN", "CLOSED", "SENT", "RECEIVED", "CANCELLED"]);
+const PO_STATUS = z.enum(["OPEN", "CLOSED", "SENT", "PARTIAL", "RECEIVED", "CANCELLED"]);
 
 const poCategoryLineSchema = z.object({
   category: z.string().trim().max(200).default(""),

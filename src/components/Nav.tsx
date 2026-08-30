@@ -15,6 +15,7 @@ const LINKS: { href: string; label: string; roles: Role[] }[] = [
   { href: "/vendors", label: "Vendors", roles: ALL },
   { href: "/customers", label: "Customers", roles: ALL },
   { href: "/purchase-orders", label: "Purchase Orders", roles: ALL },
+  { href: "/inventory", label: "Inventory", roles: ALL },
   { href: "/reports", label: "Reports", roles: ALL },
   { href: "/users", label: "Staff", roles: ALL },
   { href: "/settings", label: "Settings", roles: STAFF_UP },

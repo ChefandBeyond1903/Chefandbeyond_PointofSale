@@ -16,7 +16,6 @@ type Draft = {
   costCents: number;
   umrpCents: number;
   trackStock: boolean;
-  stock: number;
   categoryId: string;
   active: boolean;
   favorite: boolean;
@@ -32,7 +31,6 @@ const emptyDraft: Draft = {
   costCents: 0,
   umrpCents: 0,
   trackStock: true,
-  stock: 0,
   categoryId: "",
   active: true,
   favorite: false,
@@ -144,7 +142,6 @@ export function ProductManager({ canManage = true }: { canManage?: boolean }) {
       costCents: p.costCents,
       umrpCents: p.umrpCents,
       trackStock: p.trackStock,
-      stock: p.stock,
       categoryId: p.categoryId ?? "",
       active: p.active,
       favorite: p.favorite,
@@ -169,7 +166,6 @@ export function ProductManager({ canManage = true }: { canManage?: boolean }) {
       costCents: draft.costCents,
       umrpCents: draft.umrpCents,
       trackStock: draft.trackStock,
-      stock: draft.stock,
       categoryId: draft.categoryId || undefined,
       active: draft.active,
       favorite: draft.favorite,
@@ -282,7 +278,9 @@ export function ProductManager({ canManage = true }: { canManage?: boolean }) {
               <th className="px-4 py-2.5">Category</th>
               <th className="px-4 py-2.5 text-right">Price</th>
               <th className="px-4 py-2.5 text-right" title="Minimum resale price">Min price</th>
-              <th className="px-4 py-2.5 text-right">Stock</th>
+              <th className="px-4 py-2.5 text-right" title="On-hand at your store (total for admins)">
+                In stock
+              </th>
               <th className="px-4 py-2.5"></th>
             </tr>
           </thead>
@@ -515,16 +513,9 @@ export function ProductManager({ canManage = true }: { canManage?: boolean }) {
                   Track stock
                 </label>
                 {draft.trackStock && (
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm text-zinc-500">Qty</label>
-                    <input
-                      className="input h-8 w-24"
-                      value={draft.stock}
-                      onChange={(e) =>
-                        setDraft({ ...draft, stock: parseInt(e.target.value.replace(/[^0-9-]/g, ""), 10) || 0 })
-                      }
-                    />
-                  </div>
+                  <span className="text-xs text-zinc-400">
+                    Quantities are managed per store on the Inventory page and by receiving POs.
+                  </span>
                 )}
                 <label className="ml-auto flex items-center gap-2 text-sm">
                   <input
