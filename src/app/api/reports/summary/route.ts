@@ -16,7 +16,9 @@ function pct(profit: number, net: number): number {
 
 export async function GET(req: NextRequest) {
   try {
-    const user = await requireScopedRole("MANAGER", "ADMIN");
+    const user = await requireScopedRole("CASHIER", "MANAGER", "ADMIN");
+    // Cashiers get a cut-down report: top products and invoices only, no money.
+    const limited = user.role === "CASHIER";
     const { searchParams } = new URL(req.url);
     const now = new Date();
     const from = searchParams.get("from") ? new Date(searchParams.get("from")!) : startOfDay(now);
@@ -191,6 +193,43 @@ export async function GET(req: NextRequest) {
         }))
         .sort((a, b) => b.profitCents - a.profitCents);
 
+    const topProducts = [...byProduct.entries()]
+      .map(([productId, v]) => ({ productId, ...v }))
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 10);
+
+    // A cashier's report carries no money figures — only counts, top sellers
+    // and the invoice list (with per-invoice profit stripped).
+    if (limited) {
+      return ok({
+        range: { from: from.toISOString(), to: to.toISOString() },
+        scope: {
+          allStores: false,
+          storeId: storeId ?? null,
+          storeName: storeId ? (storeNameById.get(storeId) ?? null) : null,
+        },
+        stores: [],
+        limited: true,
+        totals: {
+          saleCount,
+          grossCents: 0,
+          subtotalCents: 0,
+          taxCents: 0,
+          discountCents: 0,
+          costCents: 0,
+          profitCents: 0,
+          marginPct: 0,
+          itemsSold,
+          averageSaleCents: 0,
+        },
+        byStore: [],
+        byStaff: [],
+        byPaymentMethod: [],
+        topProducts,
+        recentSales: recentSales.map((s) => ({ ...s, profitCents: 0 })),
+      });
+    }
+
     return ok({
       range: { from: from.toISOString(), to: to.toISOString() },
       scope: {
@@ -199,6 +238,7 @@ export async function GET(req: NextRequest) {
         storeName: storeId ? (storeNameById.get(storeId) ?? null) : null,
       },
       stores: user.role === "ADMIN" ? stores : [],
+      limited: false,
       totals: {
         saleCount,
         grossCents,
@@ -218,10 +258,7 @@ export async function GET(req: NextRequest) {
         count: v.count,
         totalCents: v.totalCents,
       })),
-      topProducts: [...byProduct.entries()]
-        .map(([productId, v]) => ({ productId, ...v }))
-        .sort((a, b) => b.quantity - a.quantity)
-        .slice(0, 10),
+      topProducts,
       recentSales,
     });
   } catch (err) {

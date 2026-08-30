@@ -257,6 +257,8 @@ export interface ReportSummary {
   range: { from: string; to: string };
   scope: { allStores: boolean; storeId: string | null; storeName: string | null };
   stores: { id: string; name: string }[];
+  /** Cashier view: money figures stripped, only top products + invoices. */
+  limited: boolean;
   totals: {
     saleCount: number;
     grossCents: number;

@@ -17,7 +17,13 @@ function rangeFor(key: RangeKey): { from: string; to: string } {
   return { from: from.toISOString(), to: to.toISOString() };
 }
 
-export function ReportsView({ isAdmin = false }: { isAdmin?: boolean }) {
+export function ReportsView({
+  isAdmin = false,
+  limited = false,
+}: {
+  isAdmin?: boolean;
+  limited?: boolean;
+}) {
   const [rangeKey, setRangeKey] = useState<RangeKey>("today");
   const [storeId, setStoreId] = useState<string>(""); // "" = all stores (admin only)
   const [data, setData] = useState<ReportSummary | null>(null);
@@ -91,35 +97,38 @@ export function ReportsView({ isAdmin = false }: { isAdmin?: boolean }) {
         <p className="text-sm text-zinc-500">Loading…</p>
       ) : (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <Stat label="Gross sales" value={formatMoney(data.totals.grossCents)} />
-            <Stat label="Net (pre-tax)" value={formatMoney(data.totals.subtotalCents - data.totals.discountCents)} />
-            <Stat label="Cost of goods" value={formatMoney(data.totals.costCents)} />
-            <Stat
-              label="Net profit"
-              value={formatMoney(data.totals.profitCents)}
-              sub={`${data.totals.marginPct}% margin`}
-              accent
-            />
-            <Stat label="Transactions" value={String(data.totals.saleCount)} />
-            <Stat label="Items sold" value={String(data.totals.itemsSold)} />
-            <Stat label="Tax collected" value={formatMoney(data.totals.taxCents)} />
-            <Stat label="Avg. sale" value={formatMoney(data.totals.averageSaleCents)} />
-          </div>
+          {!limited && (
+            <>
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                <Stat label="Gross sales" value={formatMoney(data.totals.grossCents)} />
+                <Stat
+                  label="Net (pre-tax)"
+                  value={formatMoney(data.totals.subtotalCents - data.totals.discountCents)}
+                />
+                <Stat label="Cost of goods" value={formatMoney(data.totals.costCents)} />
+                <Stat
+                  label="Net profit"
+                  value={formatMoney(data.totals.profitCents)}
+                  sub={`${data.totals.marginPct}% margin`}
+                  accent
+                />
+                <Stat label="Transactions" value={String(data.totals.saleCount)} />
+                <Stat label="Items sold" value={String(data.totals.itemsSold)} />
+                <Stat label="Tax collected" value={formatMoney(data.totals.taxCents)} />
+                <Stat label="Avg. sale" value={formatMoney(data.totals.averageSaleCents)} />
+              </div>
 
-          {data.byStore.length > 1 && (
-            <ProfitTable
-              title="By store"
-              rows={data.byStore}
-              firstCol="Store"
-            />
+              {data.byStore.length > 1 && (
+                <ProfitTable title="By store" rows={data.byStore} firstCol="Store" />
+              )}
+
+              <ProfitTable
+                title="Net profit by sales staff"
+                rows={data.byStaff}
+                firstCol="Sales staff"
+              />
+            </>
           )}
-
-          <ProfitTable
-            title="Net profit by sales staff"
-            rows={data.byStaff}
-            firstCol="Sales staff"
-          />
 
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="card p-4">
@@ -171,9 +180,11 @@ export function ReportsView({ isAdmin = false }: { isAdmin?: boolean }) {
                             <td className="py-2 text-zinc-400">{s.store}</td>
                           )}
                           <td className="py-2 text-zinc-500">{s.customer || s.salesperson}</td>
-                          <td className="py-2 text-right text-green-600">
-                            {formatMoney(s.profitCents)}
-                          </td>
+                          {!limited && (
+                            <td className="py-2 text-right text-green-600">
+                              {formatMoney(s.profitCents)}
+                            </td>
+                          )}
                           <td className="py-2 text-right font-medium">{formatMoney(s.totalCents)}</td>
                         </tr>
                       ))}
@@ -187,7 +198,11 @@ export function ReportsView({ isAdmin = false }: { isAdmin?: boolean }) {
       )}
 
       {openInvoiceId && (
-        <InvoiceModal saleId={openInvoiceId} onClose={() => setOpenInvoiceId(null)} />
+        <InvoiceModal
+          saleId={openInvoiceId}
+          onClose={() => setOpenInvoiceId(null)}
+          canManage={!limited}
+        />
       )}
     </div>
   );
