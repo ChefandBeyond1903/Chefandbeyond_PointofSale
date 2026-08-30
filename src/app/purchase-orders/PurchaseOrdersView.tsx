@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
 import { InvoiceModal } from "@/components/InvoiceModal";
-import { ReceiveModal } from "@/components/ReceiveModal";
+import { BillModal } from "@/components/BillModal";
 import type { PurchaseOrder, Sale } from "@/lib/types";
 
 const STATUSES = ["ALL", "OPEN", "CLOSED", "SENT", "PARTIAL", "RECEIVED", "CANCELLED"] as const;
@@ -237,10 +237,10 @@ export function PurchaseOrdersView({ canManage = true }: { canManage?: boolean }
       )}
 
       {receiveId && (
-        <ReceiveModal
+        <BillModal
           poId={receiveId}
           onClose={() => setReceiveId(null)}
-          onReceived={load}
+          onDone={load}
         />
       )}
     </div>

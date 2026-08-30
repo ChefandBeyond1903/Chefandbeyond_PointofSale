@@ -144,6 +144,40 @@ export interface PurchaseOrderItem {
   sortOrder: number;
 }
 
+export type BillStatus = "OPEN" | "PAID";
+
+export interface BillItem {
+  id: string;
+  poItemId: string | null;
+  productId: string | null;
+  nameSnapshot: string;
+  skuSnapshot: string;
+  quantity: number;
+  unitCostCents: number;
+  lineCostCents: number;
+}
+
+export interface Bill {
+  id: string;
+  billNumber: string;
+  vendor: string;
+  billDate: string;
+  dueDate: string | null;
+  terms: string;
+  memo: string;
+  status: BillStatus;
+  paidAt: string | null;
+  subtotalCents: number;
+  storeId: string | null;
+  poId: string | null;
+  createdAt: string;
+  po?: { id: string; poNumber: string } | null;
+  store?: { id: string; name: string } | null;
+  createdBy?: { id: string; name: string } | null;
+  items?: BillItem[];
+  _count?: { items: number };
+}
+
 export interface PurchaseOrderCategoryLine {
   id: string;
   category: string;

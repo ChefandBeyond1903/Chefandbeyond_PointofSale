@@ -43,16 +43,37 @@ export const categoryCreateSchema = z.object({
   name: z.string().trim().min(1).max(100),
 });
 
-// Receiving items against a purchase order.
-export const poReceiveSchema = z.object({
+// Accepts an ISO datetime or a plain "YYYY-MM-DD".
+const dateInput = z
+  .string()
+  .trim()
+  .refine((s) => !s || !Number.isNaN(Date.parse(s)), "Invalid date");
+
+// Receive items against a purchase order and record a vendor bill.
+export const billCreateSchema = z.object({
+  billNumber: z.string().trim().max(120).default(""),
+  billDate: dateInput.optional(),
+  dueDate: dateInput.optional().nullable(),
+  terms: z.string().trim().max(40).default(""),
+  memo: z.string().trim().max(2000).default(""),
   lines: z
     .array(
       z.object({
         itemId: z.string().min(1),
         receiveQty: z.number().int(), // may be negative to correct an over-receipt
+        unitCostCents: z.number().int().min(0),
       }),
     )
     .min(1),
+});
+
+export const billUpdateSchema = z.object({
+  billNumber: z.string().trim().max(120).optional(),
+  billDate: dateInput.optional(),
+  dueDate: dateInput.optional().nullable(),
+  terms: z.string().trim().max(40).optional(),
+  memo: z.string().trim().max(2000).optional(),
+  status: z.enum(["OPEN", "PAID"]).optional(),
 });
 
 // Set the on-hand quantity of a product at a store (absolute value).

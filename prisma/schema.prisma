@@ -42,6 +42,7 @@ model Store {
   sales          Sale[]
   purchaseOrders PurchaseOrder[]
   inventory      StoreInventory[]
+  bills          Bill[]
 }
 
 /// Staff who can sign in. role is "CASHIER", "MANAGER" (scoped to one store),
@@ -68,6 +69,7 @@ model User {
   salesCredited  Sale[]          @relation("SaleSalesperson")
   shifts         Shift[]
   purchaseOrders PurchaseOrder[]
+  bills          Bill[]
 
   @@index([storeId])
   @@index([createdById])
@@ -139,6 +141,7 @@ model Product {
   saleItems SaleItem[]
   poItems   PurchaseOrderItem[]
   inventory StoreInventory[]
+  billItems BillItem[]
 
   @@index([categoryId])
   @@index([active])
@@ -293,6 +296,7 @@ model PurchaseOrder {
   updatedAt     DateTime                    @updatedAt
   items         PurchaseOrderItem[]
   categoryLines PurchaseOrderCategoryLine[]
+  bills         Bill[]
 
   @@index([vendor])
   @@index([status])
@@ -318,8 +322,62 @@ model PurchaseOrderItem {
   po        PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
   productId String?
   product   Product?      @relation(fields: [productId], references: [id])
+  billItems BillItem[]
 
   @@index([poId])
+  @@index([productId])
+}
+
+/// A vendor bill (accounts payable), usually created when receiving a PO.
+/// A PO can have several bills against it (partial receipts).
+/// status: "OPEN" | "PAID".
+model Bill {
+  id            String    @id @default(cuid())
+  billNumber    String    @default("") // the vendor's own invoice number
+  vendor        String
+  billDate      DateTime  @default(now())
+  dueDate       DateTime?
+  terms         String    @default("") // "", "Due on receipt", "Net 15", ...
+  memo          String    @default("")
+  status        String    @default("OPEN")
+  paidAt        DateTime?
+  subtotalCents Int       @default(0)
+
+  storeId String?
+  store   Store?  @relation(fields: [storeId], references: [id])
+  poId    String?
+  po      PurchaseOrder? @relation(fields: [poId], references: [id], onDelete: SetNull)
+
+  createdById String
+  createdBy   User   @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  items       BillItem[]
+
+  @@index([vendor])
+  @@index([storeId])
+  @@index([poId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+model BillItem {
+  id            String  @id @default(cuid())
+  nameSnapshot  String  @default("")
+  skuSnapshot   String  @default("")
+  quantity      Int
+  unitCostCents Int
+  lineCostCents Int
+
+  billId   String
+  bill     Bill    @relation(fields: [billId], references: [id], onDelete: Cascade)
+  poItemId String?
+  poItem   PurchaseOrderItem? @relation(fields: [poItemId], references: [id], onDelete: SetNull)
+  productId String?
+  product  Product? @relation(fields: [productId], references: [id])
+
+  @@index([billId])
+  @@index([poItemId])
   @@index([productId])
 }
 
