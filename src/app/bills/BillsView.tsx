@@ -20,6 +20,7 @@ function daysFromNow(s: string | null) {
 export function BillsView({ canManage }: { canManage: boolean }) {
   const [bills, setBills] = useState<Bill[]>([]);
   const [filter, setFilter] = useState<Filter>("OPEN");
+  const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -28,23 +29,22 @@ export function BillsView({ canManage }: { canManage: boolean }) {
     setLoading(true);
     setError(null);
     try {
-      const qs =
-        filter === "ALL"
-          ? ""
-          : filter === "OVERDUE"
-            ? "?overdue=1"
-            : `?status=${filter}`;
-      const res = await api<{ bills: Bill[] }>(`/api/bills${qs}`);
+      const params = new URLSearchParams();
+      if (filter === "OVERDUE") params.set("overdue", "1");
+      else if (filter !== "ALL") params.set("status", filter);
+      if (q.trim()) params.set("q", q.trim());
+      const res = await api<{ bills: Bill[] }>(`/api/bills?${params.toString()}`);
       setBills(res.bills);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load bills");
     } finally {
       setLoading(false);
     }
-  }, [filter]);
+  }, [filter, q]);
 
   useEffect(() => {
-    load();
+    const t = setTimeout(load, 200);
+    return () => clearTimeout(t);
   }, [load]);
 
   const totalOpen = useMemo(
@@ -54,7 +54,7 @@ export function BillsView({ canManage }: { canManage: boolean }) {
 
   return (
     <div className="w-full flex-1 p-4">
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+      <div className="mb-3 flex flex-wrap items-center gap-3">
         <h1 className="text-xl font-semibold">Bills</h1>
         <span className="text-sm text-zinc-400">
           {bills.filter((b) => b.status === "OPEN").length} open · {formatMoney(totalOpen)} payable
@@ -72,6 +72,21 @@ export function BillsView({ canManage }: { canManage: boolean }) {
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <input
+          className="input max-w-md"
+          placeholder="Search bill #, vendor, PO, item, SKU, memo, amount…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+        {q && (
+          <button onClick={() => setQ("")} className="btn-ghost text-xs">
+            Clear
+          </button>
+        )}
+        <span className="text-xs text-zinc-400">{bills.length} shown</span>
       </div>
 
       <p className="mb-3 text-xs text-zinc-400">

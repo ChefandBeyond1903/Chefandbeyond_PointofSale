@@ -12,6 +12,7 @@ export async function GET(req: NextRequest) {
     const vendor = searchParams.get("vendor")?.trim();
     const poId = searchParams.get("poId")?.trim();
     const overdue = searchParams.get("overdue") === "1";
+    const q = searchParams.get("q")?.trim();
 
     const where: Prisma.BillWhereInput = {};
     const scoped = scopeStoreId(actor);
@@ -22,6 +23,35 @@ export async function GET(req: NextRequest) {
     if (overdue) {
       where.status = "OPEN";
       where.dueDate = { lt: new Date() };
+    }
+
+    // Free-text search across everything on the bill — header, PO, store, memo,
+    // terms, line items, and (when it parses as money) the amount.
+    if (q) {
+      const or: Prisma.BillWhereInput[] = [
+        { billNumber: { contains: q } },
+        { vendor: { contains: q } },
+        { memo: { contains: q } },
+        { terms: { contains: q } },
+        { po: { poNumber: { contains: q } } },
+        { store: { name: { contains: q } } },
+        { createdBy: { name: { contains: q } } },
+        {
+          items: {
+            some: {
+              OR: [{ nameSnapshot: { contains: q } }, { skuSnapshot: { contains: q } }],
+            },
+          },
+        },
+      ];
+      const money = Number.parseFloat(q.replace(/[$,\s]/g, ""));
+      if (Number.isFinite(money)) {
+        const cents = Math.round(money * 100);
+        or.push({ subtotalCents: cents });
+        or.push({ subtotalCents: { gte: cents, lt: cents + 100 } }); // whole-dollar match
+        or.push({ items: { some: { unitCostCents: cents } } });
+      }
+      where.OR = or;
     }
 
     const bills = await prisma.bill.findMany({
