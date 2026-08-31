@@ -583,10 +583,10 @@ export default function RegisterPage() {
           {/* Salesperson — always available to a manager/admin; for a plain
              cashier only when there's actually someone else to pick. */}
           {(salespeople.length > 1 || role === "MANAGER" || role === "ADMIN") && (
-            <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-2 text-xs">
-              <span className="text-zinc-400">Salesperson</span>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-zinc-100 px-4 py-2 text-xs">
+              <span className="shrink-0 whitespace-nowrap text-zinc-400">Salesperson</span>
               <select
-                className="input h-8 flex-1"
+                className="input h-8 min-w-40 flex-1"
                 value={salespersonId}
                 onChange={(e) => setSalespersonId(e.target.value)}
               >
@@ -600,7 +600,7 @@ export default function RegisterPage() {
                   ))}
               </select>
               {salespersonId && salespersonId !== meId && (
-                <span className="whitespace-nowrap text-amber-600">credited to another</span>
+                <span className="shrink-0 whitespace-nowrap text-amber-600">credited to another</span>
               )}
             </div>
           )}
