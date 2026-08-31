@@ -521,10 +521,32 @@ export function ProductManager({ canManage = true }: { canManage?: boolean }) {
                     </button>
                   </td>
                   <td className="px-4 py-2.5 font-medium">
-                    {p.name}
+                    {canManage ? (
+                      <button
+                        onClick={() => startEdit(p)}
+                        className="text-left hover:text-indigo-600 hover:underline"
+                        title="Edit product"
+                      >
+                        {p.name}
+                      </button>
+                    ) : (
+                      p.name
+                    )}
                     {!p.active && <span className="ml-2 text-xs text-zinc-400">(archived)</span>}
                   </td>
-                  <td className="px-4 py-2.5 text-zinc-500">{p.sku}</td>
+                  <td className="px-4 py-2.5 text-zinc-500">
+                    {canManage ? (
+                      <button
+                        onClick={() => startEdit(p)}
+                        className="hover:text-indigo-600 hover:underline"
+                        title="Edit product"
+                      >
+                        {p.sku}
+                      </button>
+                    ) : (
+                      p.sku
+                    )}
+                  </td>
                   <td className="px-4 py-2.5 text-zinc-500">{p.vendor || "—"}</td>
                   <td className="px-4 py-2.5 text-zinc-500">{p.category?.name ?? "—"}</td>
                   <td className="px-4 py-2.5 text-right">{formatMoney(p.priceCents)}</td>
