@@ -580,8 +580,9 @@ export default function RegisterPage() {
             )}
           </div>
 
-          {/* Salesperson */}
-          {salespeople.length > 1 && (
+          {/* Salesperson — always available to a manager/admin; for a plain
+             cashier only when there's actually someone else to pick. */}
+          {(salespeople.length > 1 || role === "MANAGER" || role === "ADMIN") && (
             <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-2 text-xs">
               <span className="text-zinc-400">Salesperson</span>
               <select
