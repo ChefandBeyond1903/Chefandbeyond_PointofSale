@@ -490,7 +490,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="grid w-full flex-1 gap-4 p-4 lg:grid-cols-[1fr_460px]">
+    <div className="grid w-full flex-1 gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_460px]">
       {/* Catalog */}
       <section className="flex min-h-0 flex-col">
         <div className="mb-3 flex gap-2">

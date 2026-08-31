@@ -496,8 +496,8 @@ export function ProductManager({ canManage = true }: { canManage?: boolean }) {
         </div>
       )}
 
-      <div className="card overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="card overflow-x-auto">
+        <table className="w-full min-w-[820px] text-sm">
           <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
             <tr>
               {canManage && (
