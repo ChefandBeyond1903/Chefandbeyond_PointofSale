@@ -3,7 +3,11 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireRole, HttpError } from "@/lib/auth";
 import { requireScopedUser } from "@/lib/scope";
-import { productCreateSchema } from "@/lib/validation";
+import {
+  productBulkDeleteSchema,
+  productBulkUpdateSchema,
+  productCreateSchema,
+} from "@/lib/validation";
 import { ok, toErrorResponse } from "@/lib/api";
 
 export async function GET(req: NextRequest) {
@@ -82,6 +86,52 @@ export async function POST(req: NextRequest) {
       include: { category: { select: { id: true, name: true } } },
     });
     return ok({ product }, 201);
+  } catch (err) {
+    return toErrorResponse(err);
+  }
+}
+
+// Bulk edit from the Products page: move/clear category (and/or set active) on
+// many products at once. Per-product PATCH lives at /api/products/[id].
+export async function PATCH(req: NextRequest) {
+  try {
+    await requireRole("MANAGER", "ADMIN");
+    const { ids, categoryId, active } = productBulkUpdateSchema.parse(await req.json());
+
+    const data: Prisma.ProductUncheckedUpdateManyInput = {};
+    if (categoryId !== undefined) {
+      if (categoryId !== null) {
+        const cat = await prisma.category.findUnique({
+          where: { id: categoryId },
+          select: { id: true },
+        });
+        if (!cat) throw new HttpError(400, "Category not found");
+      }
+      data.categoryId = categoryId;
+    }
+    if (active !== undefined) data.active = active;
+
+    const { count } = await prisma.product.updateMany({
+      where: { id: { in: ids } },
+      data,
+    });
+    return ok({ count });
+  } catch (err) {
+    return toErrorResponse(err);
+  }
+}
+
+// Bulk soft-delete (archive): hides the products from the register but keeps
+// sale history intact, matching the single-product DELETE.
+export async function DELETE(req: NextRequest) {
+  try {
+    await requireRole("MANAGER", "ADMIN");
+    const { ids } = productBulkDeleteSchema.parse(await req.json());
+    const { count } = await prisma.product.updateMany({
+      where: { id: { in: ids } },
+      data: { active: false },
+    });
+    return ok({ count });
   } catch (err) {
     return toErrorResponse(err);
   }

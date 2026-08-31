@@ -39,6 +39,23 @@ export const productUpdateSchema = z.object({
   vendor: z.string().trim().max(120).optional(),
 });
 
+// Bulk operations on the Products page: act on a set of product ids at once.
+// `categoryId` may be a string (move), null (clear the category), or omitted
+// (leave it). At least one mutating field must be present.
+export const productBulkUpdateSchema = z
+  .object({
+    ids: z.array(z.string().min(1)).min(1).max(1000),
+    categoryId: z.string().trim().min(1).nullable().optional(),
+    active: z.boolean().optional(),
+  })
+  .refine((v) => v.categoryId !== undefined || v.active !== undefined, {
+    message: "Nothing to update",
+  });
+
+export const productBulkDeleteSchema = z.object({
+  ids: z.array(z.string().min(1)).min(1).max(1000),
+});
+
 export const categoryCreateSchema = z.object({
   name: z.string().trim().min(1).max(100),
 });

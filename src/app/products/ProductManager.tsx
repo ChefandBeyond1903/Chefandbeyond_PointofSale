@@ -48,6 +48,11 @@ export function ProductManager({ canManage = true }: { canManage?: boolean }) {
   const [newCategory, setNewCategory] = useState("");
   const [vendorNames, setVendorNames] = useState<string[]>([]);
 
+  // Bulk selection / actions.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkCategoryId, setBulkCategoryId] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
+
   // Inline "add vendor" state for the product modal.
   const [addingVendor, setAddingVendor] = useState(false);
   const [newVendor, setNewVendor] = useState({ name: "", email: "", phone: "" });
@@ -64,6 +69,11 @@ export function ProductManager({ canManage = true }: { canManage?: boolean }) {
       setProducts(p.products);
       setCategories(c.categories);
       setVendorNames(v.vendors.map((x) => x.name));
+      // Drop any selected ids that no longer exist.
+      setSelected((cur) => {
+        const live = new Set(p.products.map((x) => x.id));
+        return new Set([...cur].filter((id) => live.has(id)));
+      });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load");
     } finally {
@@ -112,6 +122,81 @@ export function ProductManager({ canManage = true }: { canManage?: boolean }) {
         (p.barcode ?? "").toLowerCase().includes(s),
     );
   }, [products, q]);
+
+  const filteredIds = useMemo(() => filtered.map((p) => p.id), [filtered]);
+  const allFilteredSelected =
+    filteredIds.length > 0 && filteredIds.every((id) => selected.has(id));
+  const someFilteredSelected = filteredIds.some((id) => selected.has(id));
+
+  function toggleOne(id: string) {
+    setSelected((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAllFiltered() {
+    setSelected((cur) => {
+      if (filteredIds.every((id) => cur.has(id))) {
+        const next = new Set(cur);
+        filteredIds.forEach((id) => next.delete(id));
+        return next;
+      }
+      return new Set([...cur, ...filteredIds]);
+    });
+  }
+
+  function clearSelection() {
+    setSelected(new Set());
+    setBulkCategoryId("");
+  }
+
+  async function bulkMoveCategory() {
+    if (selected.size === 0 || !bulkCategoryId) return;
+    setBulkBusy(true);
+    setError(null);
+    try {
+      await api("/api/products", {
+        method: "PATCH",
+        body: JSON.stringify({
+          ids: [...selected],
+          categoryId: bulkCategoryId === "__none__" ? null : bulkCategoryId,
+        }),
+      });
+      clearSelection();
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not move products");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function bulkArchive() {
+    if (selected.size === 0) return;
+    if (
+      !confirm(
+        `Archive ${selected.size} product(s)? They will no longer appear on the register.`,
+      )
+    )
+      return;
+    setBulkBusy(true);
+    setError(null);
+    try {
+      await api("/api/products", {
+        method: "DELETE",
+        body: JSON.stringify({ ids: [...selected] }),
+      });
+      clearSelection();
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not archive products");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
 
   function resetVendorAdd() {
     setAddingVendor(false);
@@ -267,10 +352,61 @@ export function ProductManager({ canManage = true }: { canManage?: boolean }) {
         <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
       )}
 
+      {canManage && selected.size > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm">
+          <span className="font-medium">{selected.size} selected</span>
+          <button onClick={clearSelection} className="btn-ghost h-8 text-xs">
+            Clear
+          </button>
+          <span className="mx-1 h-4 w-px bg-zinc-300" />
+          <select
+            className="input h-8 w-52"
+            value={bulkCategoryId}
+            onChange={(e) => setBulkCategoryId(e.target.value)}
+            disabled={bulkBusy}
+          >
+            <option value="">Move to category…</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+            <option value="__none__">— Remove category —</option>
+          </select>
+          <button
+            onClick={bulkMoveCategory}
+            disabled={bulkBusy || !bulkCategoryId}
+            className="btn-secondary h-8"
+          >
+            Apply
+          </button>
+          <button
+            onClick={bulkArchive}
+            disabled={bulkBusy}
+            className="btn-ghost ml-auto h-8 text-xs text-red-600"
+          >
+            Archive selected
+          </button>
+        </div>
+      )}
+
       <div className="card overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
             <tr>
+              {canManage && (
+                <th className="w-10 px-3 py-2.5">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all"
+                    checked={allFilteredSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = !allFilteredSelected && someFilteredSelected;
+                    }}
+                    onChange={toggleAllFiltered}
+                  />
+                </th>
+              )}
               <th className="w-10 px-3 py-2.5" title="Show on register">★</th>
               <th className="px-4 py-2.5">Name</th>
               <th className="px-4 py-2.5">SKU</th>
@@ -287,13 +423,26 @@ export function ProductManager({ canManage = true }: { canManage?: boolean }) {
           <tbody className="divide-y divide-zinc-100">
             {loading ? (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-zinc-400">
+                <td
+                  colSpan={canManage ? 10 : 9}
+                  className="px-4 py-8 text-center text-zinc-400"
+                >
                   Loading…
                 </td>
               </tr>
             ) : (
               filtered.map((p) => (
                 <tr key={p.id} className={p.active ? "" : "opacity-50"}>
+                  {canManage && (
+                    <td className="px-3 py-2.5">
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${p.name}`}
+                        checked={selected.has(p.id)}
+                        onChange={() => toggleOne(p.id)}
+                      />
+                    </td>
+                  )}
                   <td className="px-3 py-2.5">
                     <button
                       onClick={() => canManage && toggleFavorite(p)}
