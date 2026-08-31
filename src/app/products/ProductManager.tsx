@@ -174,25 +174,55 @@ export function ProductManager({ canManage = true }: { canManage?: boolean }) {
     }
   }
 
-  async function bulkArchive() {
+  async function bulkSetActive(active: boolean) {
+    if (selected.size === 0) return;
+    setBulkBusy(true);
+    setError(null);
+    try {
+      await api("/api/products", {
+        method: "PATCH",
+        body: JSON.stringify({ ids: [...selected], active }),
+      });
+      clearSelection();
+      load();
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : `Could not ${active ? "activate" : "deactivate"} products`,
+      );
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function bulkDelete() {
     if (selected.size === 0) return;
     if (
       !confirm(
-        `Archive ${selected.size} product(s)? They will no longer appear on the register.`,
+        `Permanently delete ${selected.size} product(s)?\n\n` +
+          `This can't be undone. Any product that appears on a past sale is ` +
+          `archived instead so invoices stay intact.`,
       )
     )
       return;
     setBulkBusy(true);
     setError(null);
     try {
-      await api("/api/products", {
+      const res = await api<{ deleted: number; archived: number }>("/api/products", {
         method: "DELETE",
-        body: JSON.stringify({ ids: [...selected] }),
+        body: JSON.stringify({ ids: [...selected], hard: true }),
       });
       clearSelection();
       load();
+      if (res.archived > 0) {
+        setError(
+          `${res.deleted} deleted. ${res.archived} kept as archived because they ` +
+            `appear on past sales.`,
+        );
+      }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not archive products");
+      setError(err instanceof ApiError ? err.message : "Could not delete products");
     } finally {
       setBulkBusy(false);
     }
@@ -380,12 +410,28 @@ export function ProductManager({ canManage = true }: { canManage?: boolean }) {
           >
             Apply
           </button>
+          <span className="mx-1 h-4 w-px bg-zinc-300" />
           <button
-            onClick={bulkArchive}
+            onClick={() => bulkSetActive(true)}
+            disabled={bulkBusy}
+            className="btn-ghost h-8 text-xs"
+          >
+            Activate
+          </button>
+          <button
+            onClick={() => bulkSetActive(false)}
+            disabled={bulkBusy}
+            className="btn-ghost h-8 text-xs"
+            title="Set inactive — hides from the register, keeps the record"
+          >
+            Archive
+          </button>
+          <button
+            onClick={bulkDelete}
             disabled={bulkBusy}
             className="btn-ghost ml-auto h-8 text-xs text-red-600"
           >
-            Archive selected
+            Delete
           </button>
         </div>
       )}

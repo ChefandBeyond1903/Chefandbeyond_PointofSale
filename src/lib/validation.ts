@@ -54,6 +54,9 @@ export const productBulkUpdateSchema = z
 
 export const productBulkDeleteSchema = z.object({
   ids: z.array(z.string().min(1)).min(1).max(1000),
+  // hard:true permanently removes rows that no sale references (sale-referenced
+  // ones fall back to archive). Default is archive-only (active:false).
+  hard: z.boolean().optional().default(false),
 });
 
 export const categoryCreateSchema = z.object({

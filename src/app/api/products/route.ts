@@ -32,28 +32,24 @@ export async function GET(req: NextRequest) {
       ];
     }
 
+    // One round trip: pull each product with its per-store inventory rows, then
+    // reduce to the on-hand figure for the caller's store (total for an admin).
     const rows = await prisma.product.findMany({
       where,
       orderBy: { name: "asc" },
       take,
-      include: { category: { select: { id: true, name: true } } },
+      include: {
+        category: { select: { id: true, name: true } },
+        inventory: { select: { storeId: true, quantity: true } },
+      },
     });
 
-    // Attach on-hand for the caller's store (total across stores for an admin).
-    const inv = await prisma.storeInventory.findMany({
-      where: { productId: { in: rows.map((p) => p.id) } },
-      select: { productId: true, storeId: true, quantity: true },
-    });
-    const byProduct = new Map<string, { total: number; forStore: number }>();
-    for (const i of inv) {
-      const e = byProduct.get(i.productId) ?? { total: 0, forStore: 0 };
-      e.total += i.quantity;
-      if (actor.storeId && i.storeId === actor.storeId) e.forStore += i.quantity;
-      byProduct.set(i.productId, e);
-    }
-    const products = rows.map((p) => {
-      const e = byProduct.get(p.id);
-      return { ...p, stock: actor.storeId ? (e?.forStore ?? 0) : (e?.total ?? 0) };
+    const products = rows.map(({ inventory, ...p }) => {
+      const stock = inventory.reduce(
+        (sum, i) => (actor.storeId ? (i.storeId === actor.storeId ? sum + i.quantity : sum) : sum + i.quantity),
+        0,
+      );
+      return { ...p, stock };
     });
     return ok({ products });
   } catch (err) {
@@ -121,17 +117,57 @@ export async function PATCH(req: NextRequest) {
   }
 }
 
-// Bulk soft-delete (archive): hides the products from the register but keeps
-// sale history intact, matching the single-product DELETE.
+// Bulk delete. Default (hard:false) archives — active:false, keeping sale
+// history, same as the single-product DELETE. hard:true permanently removes
+// every selected product that no sale line references; any that ARE referenced
+// are archived instead so invoices stay intact. Returns how many of each.
 export async function DELETE(req: NextRequest) {
   try {
     await requireRole("MANAGER", "ADMIN");
-    const { ids } = productBulkDeleteSchema.parse(await req.json());
-    const { count } = await prisma.product.updateMany({
-      where: { id: { in: ids } },
-      data: { active: false },
+    const { ids, hard } = productBulkDeleteSchema.parse(await req.json());
+
+    if (!hard) {
+      const { count } = await prisma.product.updateMany({
+        where: { id: { in: ids } },
+        data: { active: false },
+      });
+      return ok({ archived: count, deleted: 0 });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const referenced = new Set(
+        (
+          await tx.saleItem.findMany({
+            where: { productId: { in: ids } },
+            select: { productId: true },
+            distinct: ["productId"],
+          })
+        ).map((r) => r.productId),
+      );
+      const removable = ids.filter((id) => !referenced.has(id));
+
+      if (removable.length) {
+        // Detach optional references, then let StoreInventory cascade on delete.
+        await tx.purchaseOrderItem.updateMany({
+          where: { productId: { in: removable } },
+          data: { productId: null },
+        });
+        await tx.billItem.updateMany({
+          where: { productId: { in: removable } },
+          data: { productId: null },
+        });
+        await tx.product.deleteMany({ where: { id: { in: removable } } });
+      }
+      if (referenced.size) {
+        await tx.product.updateMany({
+          where: { id: { in: [...referenced] } },
+          data: { active: false },
+        });
+      }
+      return { deleted: removable.length, archived: referenced.size };
     });
-    return ok({ count });
+
+    return ok(result);
   } catch (err) {
     return toErrorResponse(err);
   }
