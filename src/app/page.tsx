@@ -87,6 +87,7 @@ export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
   const [role, setRole] = useState<Role | null>(null);
   const [meId, setMeId] = useState<string | null>(null);
+  const [meName, setMeName] = useState<string | null>(null);
   const [storeName, setStoreName] = useState<string | null>(null);
   const [storeTaxRateBps, setStoreTaxRateBps] = useState<number | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
@@ -153,6 +154,7 @@ export default function RegisterPage() {
     api<{
       user: {
         id: string;
+        name?: string | null;
         role: Role;
         storeName?: string | null;
         storeTaxRateBps?: number | null;
@@ -161,6 +163,7 @@ export default function RegisterPage() {
       .then((r) => {
         setRole(r.user?.role ?? null);
         setMeId(r.user?.id ?? null);
+        setMeName(r.user?.name ?? null);
         setStoreName(r.user?.storeName ?? null);
         setStoreTaxRateBps(r.user?.storeTaxRateBps ?? null);
       })
@@ -590,7 +593,9 @@ export default function RegisterPage() {
                 value={salespersonId}
                 onChange={(e) => setSalespersonId(e.target.value)}
               >
-                <option value="">Me</option>
+                <option value="">
+                  {meName ?? salespeople.find((p) => p.id === meId)?.name ?? "Me"}
+                </option>
                 {salespeople
                   .filter((p) => p.id !== meId)
                   .map((p) => (
