@@ -10,12 +10,33 @@ export async function GET(_req: NextRequest, { params }: Params) {
   try {
     await requireUser();
     const { id } = await params;
-    const product = await prisma.product.findUnique({
-      where: { id },
-      include: { category: { select: { id: true, name: true } } },
-    });
+    const [product, stores] = await Promise.all([
+      prisma.product.findUnique({
+        where: { id },
+        include: {
+          category: { select: { id: true, name: true } },
+          inventory: { select: { storeId: true, quantity: true } },
+        },
+      }),
+      prisma.store.findMany({
+        where: { active: true },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true },
+      }),
+    ]);
     if (!product) throw new HttpError(404, "Product not found");
-    return ok({ product });
+
+    // On-hand for every active store (0 where there's no row yet).
+    const qtyByStore = new Map(product.inventory.map((i) => [i.storeId, i.quantity]));
+    const storeStock = stores.map((s) => ({
+      storeId: s.id,
+      storeName: s.name,
+      quantity: qtyByStore.get(s.id) ?? 0,
+    }));
+
+    const { inventory: _inventory, ...rest } = product;
+    void _inventory;
+    return ok({ product: rest, storeStock });
   } catch (err) {
     return toErrorResponse(err);
   }

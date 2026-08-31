@@ -48,6 +48,12 @@ export function ProductManager({ canManage = true }: { canManage?: boolean }) {
   const [newCategory, setNewCategory] = useState("");
   const [vendorNames, setVendorNames] = useState<string[]>([]);
 
+  // Per-store on-hand for the product open in the edit modal.
+  const [editStock, setEditStock] = useState<
+    { storeId: string; storeName: string; quantity: number }[] | null
+  >(null);
+  const [editStockLoading, setEditStockLoading] = useState(false);
+
   // Bulk selection / actions.
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkCategoryId, setBulkCategoryId] = useState("");
@@ -235,11 +241,14 @@ export function ProductManager({ canManage = true }: { canManage?: boolean }) {
 
   function closeDraft() {
     setDraft(null);
+    setEditStock(null);
+    setEditStockLoading(false);
     resetVendorAdd();
   }
 
   function startCreate() {
     setError(null);
+    setEditStock(null);
     resetVendorAdd();
     setDraft({ ...emptyDraft });
   }
@@ -262,6 +271,15 @@ export function ProductManager({ canManage = true }: { canManage?: boolean }) {
       favorite: p.favorite,
       vendor: p.vendor ?? "",
     });
+    // Pull the per-store on-hand for this product in the background.
+    setEditStock(null);
+    setEditStockLoading(true);
+    api<{ storeStock: { storeId: string; storeName: string; quantity: number }[] }>(
+      `/api/products/${p.id}`,
+    )
+      .then((res) => setEditStock(res.storeStock))
+      .catch(() => setEditStock([]))
+      .finally(() => setEditStockLoading(false));
   }
 
   async function save() {
@@ -738,6 +756,48 @@ export function ProductManager({ canManage = true }: { canManage?: boolean }) {
                   onChange={(e) => setDraft({ ...draft, description: e.target.value })}
                 />
               </div>
+
+              {draft.id && (
+                <div className="col-span-2">
+                  <label className="label">Stock by store</label>
+                  {editStockLoading ? (
+                    <p className="text-xs text-zinc-400">Loading…</p>
+                  ) : !draft.trackStock ? (
+                    <p className="text-xs text-zinc-400">
+                      Stock isn&rsquo;t tracked for this product.
+                    </p>
+                  ) : editStock && editStock.length > 0 ? (
+                    <div className="overflow-hidden rounded-md border border-zinc-200">
+                      <table className="w-full text-sm">
+                        <tbody className="divide-y divide-zinc-100">
+                          {editStock.map((s) => (
+                            <tr key={s.storeId}>
+                              <td className="px-3 py-1.5 text-zinc-600">{s.storeName}</td>
+                              <td className="px-3 py-1.5 text-right tabular-nums">
+                                <span className={s.quantity <= 0 ? "text-red-500" : ""}>
+                                  {s.quantity}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                          <tr className="bg-zinc-50 font-medium">
+                            <td className="px-3 py-1.5">Total</td>
+                            <td className="px-3 py-1.5 text-right tabular-nums">
+                              {editStock.reduce((a, b) => a + b.quantity, 0)}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-zinc-400">No stores set up yet.</p>
+                  )}
+                  <p className="mt-1 text-[11px] text-zinc-400">
+                    Read-only — adjust counts on the Inventory page or by receiving a
+                    purchase order.
+                  </p>
+                </div>
+              )}
             </div>
 
             {error && <p className="mt-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
