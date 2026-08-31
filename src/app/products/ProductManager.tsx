@@ -408,7 +408,7 @@ export function ProductManager({ canManage = true }: { canManage?: boolean }) {
           </button>
           <span className="mx-1 h-4 w-px bg-zinc-300" />
           <select
-            className="input h-8 w-52"
+            className="input h-8 w-auto min-w-52"
             value={bulkCategoryId}
             onChange={(e) => setBulkCategoryId(e.target.value)}
             disabled={bulkBusy}

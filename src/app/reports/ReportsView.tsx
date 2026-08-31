@@ -64,7 +64,7 @@ export function ReportsView({
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {isAdmin && data && (
             <select
-              className="input h-8 w-56"
+              className="input h-8 w-auto min-w-56"
               value={storeId}
               onChange={(e) => setStoreId(e.target.value)}
             >

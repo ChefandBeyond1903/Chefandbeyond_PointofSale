@@ -225,7 +225,7 @@ export function UserManager({
                     <td className="px-4 py-2.5">
                       {editable && !self ? (
                         <select
-                          className="input h-8 w-28"
+                          className="input h-8 w-auto min-w-28"
                           value={u.role}
                           onChange={(e) => patch(u.id, { role: e.target.value })}
                         >
@@ -242,7 +242,7 @@ export function UserManager({
                     <td className="px-4 py-2.5">
                       {canChooseStore && editable ? (
                         <select
-                          className="input h-8 w-44"
+                          className="input h-8 w-auto min-w-44"
                           value={u.storeId ?? ""}
                           onChange={(e) => patch(u.id, { storeId: e.target.value })}
                         >
