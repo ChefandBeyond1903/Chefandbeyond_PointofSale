@@ -58,6 +58,12 @@ body {
     @apply max-w-full pr-9;
     text-overflow: ellipsis;
   }
+  /* Compact selects: text-sm's 20px line box doesn't fit inside h-8 (32px)
+     once the default py-2 is applied, so descenders get clipped. Trim the
+     vertical padding so the selected label sits centered. */
+  select.input.h-8 {
+    @apply py-1;
+  }
   .label {
     @apply mb-1 block text-xs font-medium text-zinc-600;
   }
