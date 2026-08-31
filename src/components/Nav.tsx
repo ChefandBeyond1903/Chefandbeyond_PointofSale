@@ -15,10 +15,10 @@ const LINKS: { href: string; label: string; roles: Role[] }[] = [
   { href: "/vendors", label: "Vendors", roles: ALL },
   { href: "/customers", label: "Customers", roles: ALL },
   { href: "/purchase-orders", label: "Purchase Orders", roles: ALL },
-  { href: "/bills", label: "Bills", roles: ALL },
+  { href: "/bills", label: "Bills", roles: STAFF_UP },
   { href: "/inventory", label: "Inventory", roles: ALL },
   { href: "/reports", label: "Reports", roles: ALL },
-  { href: "/users", label: "Staff", roles: ALL },
+  { href: "/users", label: "Staff", roles: STAFF_UP },
   { href: "/settings", label: "Settings", roles: STAFF_UP },
 ];
 

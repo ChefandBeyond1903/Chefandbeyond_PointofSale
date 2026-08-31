@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireUser, requireRole, HttpError } from "@/lib/auth";
+import { requireRole, HttpError } from "@/lib/auth";
+import { requireScopedUser } from "@/lib/scope";
 import { productUpdateSchema } from "@/lib/validation";
 import { ok, toErrorResponse } from "@/lib/api";
 
@@ -8,7 +9,7 @@ type Params = { params: Promise<{ id: string }> };
 
 export async function GET(_req: NextRequest, { params }: Params) {
   try {
-    await requireUser();
+    const actor = await requireScopedUser();
     const { id } = await params;
     const [product, stores] = await Promise.all([
       prisma.product.findUnique({
@@ -34,9 +35,18 @@ export async function GET(_req: NextRequest, { params }: Params) {
       quantity: qtyByStore.get(s.id) ?? 0,
     }));
 
+    // Stores whose on-hand this user may set from here: an admin any store,
+    // a manager only their own, a cashier none.
+    const editableStoreIds =
+      actor.role === "ADMIN"
+        ? stores.map((s) => s.id)
+        : actor.role === "MANAGER" && actor.storeId
+          ? [actor.storeId]
+          : [];
+
     const { inventory: _inventory, ...rest } = product;
     void _inventory;
-    return ok({ product: rest, storeStock });
+    return ok({ product: rest, storeStock, editableStoreIds });
   } catch (err) {
     return toErrorResponse(err);
   }

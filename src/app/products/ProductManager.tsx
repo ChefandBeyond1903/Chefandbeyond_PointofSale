@@ -53,6 +53,9 @@ export function ProductManager({ canManage = true }: { canManage?: boolean }) {
     { storeId: string; storeName: string; quantity: number }[] | null
   >(null);
   const [editStockLoading, setEditStockLoading] = useState(false);
+  const [editableStoreIds, setEditableStoreIds] = useState<string[]>([]);
+  const [stockDraft, setStockDraft] = useState<Record<string, string>>({});
+  const [savingStoreId, setSavingStoreId] = useState<string | null>(null);
 
   // Bulk selection / actions.
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -243,12 +246,16 @@ export function ProductManager({ canManage = true }: { canManage?: boolean }) {
     setDraft(null);
     setEditStock(null);
     setEditStockLoading(false);
+    setEditableStoreIds([]);
+    setStockDraft({});
     resetVendorAdd();
   }
 
   function startCreate() {
     setError(null);
     setEditStock(null);
+    setEditableStoreIds([]);
+    setStockDraft({});
     resetVendorAdd();
     setDraft({ ...emptyDraft });
   }
@@ -273,13 +280,48 @@ export function ProductManager({ canManage = true }: { canManage?: boolean }) {
     });
     // Pull the per-store on-hand for this product in the background.
     setEditStock(null);
+    setEditableStoreIds([]);
+    setStockDraft({});
     setEditStockLoading(true);
-    api<{ storeStock: { storeId: string; storeName: string; quantity: number }[] }>(
-      `/api/products/${p.id}`,
-    )
-      .then((res) => setEditStock(res.storeStock))
+    api<{
+      storeStock: { storeId: string; storeName: string; quantity: number }[];
+      editableStoreIds: string[];
+    }>(`/api/products/${p.id}`)
+      .then((res) => {
+        setEditStock(res.storeStock);
+        setEditableStoreIds(res.editableStoreIds ?? []);
+        setStockDraft(
+          Object.fromEntries(res.storeStock.map((s) => [s.storeId, String(s.quantity)])),
+        );
+      })
       .catch(() => setEditStock([]))
       .finally(() => setEditStockLoading(false));
+  }
+
+  async function saveStock(storeId: string) {
+    if (!draft?.id) return;
+    const raw = stockDraft[storeId] ?? "";
+    const qty = Number(raw);
+    if (raw.trim() === "" || !Number.isInteger(qty)) {
+      setError("Enter a whole number for the store quantity.");
+      return;
+    }
+    setSavingStoreId(storeId);
+    setError(null);
+    try {
+      await api("/api/inventory", {
+        method: "POST",
+        body: JSON.stringify({ productId: draft.id, storeId, quantity: qty }),
+      });
+      setEditStock((cur) =>
+        cur ? cur.map((s) => (s.storeId === storeId ? { ...s, quantity: qty } : s)) : cur,
+      );
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not update stock");
+    } finally {
+      setSavingStoreId(null);
+    }
   }
 
   async function save() {
@@ -792,16 +834,50 @@ export function ProductManager({ canManage = true }: { canManage?: boolean }) {
                     <div className="overflow-hidden rounded-md border border-zinc-200">
                       <table className="w-full text-sm">
                         <tbody className="divide-y divide-zinc-100">
-                          {editStock.map((s) => (
-                            <tr key={s.storeId}>
-                              <td className="px-3 py-1.5 text-zinc-600">{s.storeName}</td>
-                              <td className="px-3 py-1.5 text-right tabular-nums">
-                                <span className={s.quantity <= 0 ? "text-red-500" : ""}>
-                                  {s.quantity}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
+                          {editStock.map((s) => {
+                            const canEditStore = editableStoreIds.includes(s.storeId);
+                            const dirty =
+                              canEditStore &&
+                              (stockDraft[s.storeId] ?? String(s.quantity)) !==
+                                String(s.quantity);
+                            return (
+                              <tr key={s.storeId}>
+                                <td className="px-3 py-1.5 text-zinc-600">{s.storeName}</td>
+                                <td className="px-3 py-1 text-right">
+                                  {canEditStore ? (
+                                    <span className="inline-flex items-center gap-1.5">
+                                      <input
+                                        type="number"
+                                        step={1}
+                                        className="input h-8 w-20 py-1 text-right tabular-nums"
+                                        value={stockDraft[s.storeId] ?? String(s.quantity)}
+                                        onChange={(e) =>
+                                          setStockDraft((d) => ({
+                                            ...d,
+                                            [s.storeId]: e.target.value,
+                                          }))
+                                        }
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => saveStock(s.storeId)}
+                                        disabled={!dirty || savingStoreId === s.storeId}
+                                        className="btn-secondary h-8 px-2 text-xs"
+                                      >
+                                        {savingStoreId === s.storeId ? "…" : "Save"}
+                                      </button>
+                                    </span>
+                                  ) : (
+                                    <span
+                                      className={`tabular-nums ${s.quantity <= 0 ? "text-red-500" : ""}`}
+                                    >
+                                      {s.quantity}
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
                           <tr className="bg-zinc-50 font-medium">
                             <td className="px-3 py-1.5">Total</td>
                             <td className="px-3 py-1.5 text-right tabular-nums">
@@ -815,8 +891,9 @@ export function ProductManager({ canManage = true }: { canManage?: boolean }) {
                     <p className="text-xs text-zinc-400">No stores set up yet.</p>
                   )}
                   <p className="mt-1 text-[11px] text-zinc-400">
-                    Read-only — adjust counts on the Inventory page or by receiving a
-                    purchase order.
+                    {editableStoreIds.length > 0
+                      ? "Set the on-hand count for your store here. Other stores are read-only; receiving a PO also updates stock."
+                      : "Read-only — adjust counts on the Inventory page or by receiving a purchase order."}
                   </p>
                 </div>
               )}

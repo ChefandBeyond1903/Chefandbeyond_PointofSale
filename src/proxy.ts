@@ -6,8 +6,17 @@ import { SESSION_COOKIE } from "@/lib/auth";
 // expired/absent token, and /api/auth/me returns { user: null } on its own.
 const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/auth/logout", "/api/auth/me"];
 
+// Page sections a plain CASHIER may not open. Enforced here (not just in the
+// page component) so the redirect is a clean 307 even for routes that stream
+// behind a loading.tsx boundary.
+const MANAGER_ONLY_PREFIXES = ["/bills", "/users", "/settings"];
+
 function isPublic(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
+}
+
+function matchesPrefix(pathname: string, prefixes: string[]): boolean {
+  return prefixes.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }
 
 export async function proxy(req: NextRequest) {
@@ -16,16 +25,29 @@ export async function proxy(req: NextRequest) {
 
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   let valid = false;
+  let role: string | null = null;
   if (token) {
     try {
-      await jwtVerify(token, new TextEncoder().encode(process.env.AUTH_SECRET));
+      const { payload } = await jwtVerify(
+        token,
+        new TextEncoder().encode(process.env.AUTH_SECRET),
+      );
       valid = true;
+      role = typeof payload.role === "string" ? payload.role : null;
     } catch {
       valid = false;
     }
   }
 
-  if (valid) return NextResponse.next();
+  if (valid) {
+    if (role === "CASHIER" && matchesPrefix(pathname, MANAGER_ONLY_PREFIXES)) {
+      const url = req.nextUrl.clone();
+      url.pathname = "/";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
+    return NextResponse.next();
+  }
 
   if (pathname.startsWith("/api/")) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
