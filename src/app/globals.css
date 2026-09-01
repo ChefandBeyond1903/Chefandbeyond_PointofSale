@@ -25,6 +25,9 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, Arial, sans-serif;
+  /* Backstop: nothing may push the whole page sideways. Wide content
+     (tables, wide grids) scrolls inside its own overflow-x-auto container. */
+  overflow-x: hidden;
 }
 
 /* Reusable component classes */
@@ -50,6 +53,19 @@ body {
   }
   .input {
     @apply w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm outline-none placeholder:text-zinc-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100;
+  }
+  /* Native <select>: keep the full label readable. Reserve room for the
+     browser's arrow, fall back to an ellipsis instead of a hard mid-word
+     clip, and never let a fixed width spill past its container. */
+  select.input {
+    @apply max-w-full pr-9;
+    text-overflow: ellipsis;
+  }
+  /* Compact selects: text-sm's 20px line box doesn't fit inside h-8 (32px)
+     once the default py-2 is applied, so descenders get clipped. Trim the
+     vertical padding so the selected label sits centered. */
+  select.input.h-8 {
+    @apply py-1;
   }
   .label {
     @apply mb-1 block text-xs font-medium text-zinc-600;

@@ -87,6 +87,7 @@ export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
   const [role, setRole] = useState<Role | null>(null);
   const [meId, setMeId] = useState<string | null>(null);
+  const [meName, setMeName] = useState<string | null>(null);
   const [storeName, setStoreName] = useState<string | null>(null);
   const [storeTaxRateBps, setStoreTaxRateBps] = useState<number | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
@@ -153,6 +154,7 @@ export default function RegisterPage() {
     api<{
       user: {
         id: string;
+        name?: string | null;
         role: Role;
         storeName?: string | null;
         storeTaxRateBps?: number | null;
@@ -161,6 +163,7 @@ export default function RegisterPage() {
       .then((r) => {
         setRole(r.user?.role ?? null);
         setMeId(r.user?.id ?? null);
+        setMeName(r.user?.name ?? null);
         setStoreName(r.user?.storeName ?? null);
         setStoreTaxRateBps(r.user?.storeTaxRateBps ?? null);
       })
@@ -487,7 +490,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="grid w-full flex-1 gap-4 p-4 lg:grid-cols-[1fr_460px]">
+    <div className="grid w-full flex-1 gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_460px]">
       {/* Catalog */}
       <section className="flex min-h-0 flex-col">
         <div className="mb-3 flex gap-2">
@@ -580,16 +583,19 @@ export default function RegisterPage() {
             )}
           </div>
 
-          {/* Salesperson */}
-          {salespeople.length > 1 && (
-            <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-2 text-xs">
-              <span className="text-zinc-400">Salesperson</span>
+          {/* Salesperson — always available to a manager/admin; for a plain
+             cashier only when there's actually someone else to pick. */}
+          {(salespeople.length > 1 || role === "MANAGER" || role === "ADMIN") && (
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-zinc-100 px-4 py-2 text-xs">
+              <span className="shrink-0 whitespace-nowrap text-zinc-400">Salesperson</span>
               <select
-                className="input h-8 flex-1"
+                className="input h-8 min-w-40 flex-1"
                 value={salespersonId}
                 onChange={(e) => setSalespersonId(e.target.value)}
               >
-                <option value="">Me</option>
+                <option value="">
+                  {meName ?? salespeople.find((p) => p.id === meId)?.name ?? "Me"}
+                </option>
                 {salespeople
                   .filter((p) => p.id !== meId)
                   .map((p) => (
@@ -599,7 +605,7 @@ export default function RegisterPage() {
                   ))}
               </select>
               {salespersonId && salespersonId !== meId && (
-                <span className="whitespace-nowrap text-amber-600">credited to another</span>
+                <span className="shrink-0 whitespace-nowrap text-amber-600">credited to another</span>
               )}
             </div>
           )}

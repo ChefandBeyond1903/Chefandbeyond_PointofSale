@@ -85,6 +85,8 @@ export async function POST(req: NextRequest) {
       email,
       password: body.password,
       email_confirm: true,
+      // The proxy gates manager-only pages off this claim.
+      app_metadata: { pos_role: role },
     });
     if (authErr || !created.user) {
       throw new HttpError(409, authErr?.message ?? "Could not create the account");

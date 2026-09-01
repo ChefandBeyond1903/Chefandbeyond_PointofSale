@@ -8,4 +8,7 @@ export const prisma =
     log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
   });
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+// Reuse one client across invocations in every environment. On Vercel a warm
+// serverless container keeps this module in memory, so pinning it here avoids
+// opening a fresh DB connection on each request. (In dev this also survives HMR.)
+globalForPrisma.prisma = prisma;

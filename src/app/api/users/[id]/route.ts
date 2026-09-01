@@ -69,6 +69,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         throw new HttpError(403, "Managers cannot grant admin");
       }
       data.role = body.role;
+      // Keep the proxy's page gate in sync (takes effect on next token refresh).
+      if (target.authId) {
+        await supabaseAdmin().auth.admin.updateUserById(target.authId, {
+          app_metadata: { pos_role: body.role },
+        });
+      }
     }
 
     // Store reassignment: cashiers can't; managers only within their own store.

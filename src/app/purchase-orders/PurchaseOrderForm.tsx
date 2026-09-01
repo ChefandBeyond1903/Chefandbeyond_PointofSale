@@ -445,10 +445,10 @@ export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readO
               </div>
             )}
 
-            <div className="flex items-center gap-2">
-              <label className="label mb-0">Purchase Order status</label>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="label mb-0 shrink-0 whitespace-nowrap">Purchase Order status</label>
               <select
-                className="input h-8 w-40"
+                className="input h-8 w-auto min-w-40"
                 value={status}
                 onChange={(e) => setStatus(e.target.value as PurchaseOrderStatus)}
               >

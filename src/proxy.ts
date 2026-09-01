@@ -5,8 +5,17 @@ import { createServerClient } from "@supabase/ssr";
 // expired/absent session, and /api/auth/me returns { user: null } on its own.
 const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/auth/logout", "/api/auth/me"];
 
+// Page sections a plain CASHIER may not open. Enforced here (not just in the
+// page component) so the redirect is a clean 307 even for routes that stream
+// behind a loading.tsx boundary.
+const MANAGER_ONLY_PREFIXES = ["/bills", "/users", "/settings"];
+
 function isPublic(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
+}
+
+function matchesPrefix(pathname: string, prefixes: string[]): boolean {
+  return prefixes.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }
 
 export async function proxy(req: NextRequest) {
@@ -36,7 +45,20 @@ export async function proxy(req: NextRequest) {
   } = await supabase.auth.getUser();
 
   const { pathname } = req.nextUrl;
-  if (isPublic(pathname) || user) return res;
+  if (isPublic(pathname)) return res;
+
+  if (user) {
+    // pos_role is stamped into app_metadata when the account is created (and
+    // on role changes), so this gate needs no database round-trip.
+    const role = user.app_metadata?.pos_role;
+    if (role === "CASHIER" && matchesPrefix(pathname, MANAGER_ONLY_PREFIXES)) {
+      const url = req.nextUrl.clone();
+      url.pathname = "/";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
+    return res;
+  }
 
   if (pathname.startsWith("/api/")) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });

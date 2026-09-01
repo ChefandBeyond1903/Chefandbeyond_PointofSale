@@ -67,18 +67,33 @@ async function main() {
     create: { name: "Chef and Beyond - Clarksville", taxRateBps: 600 },
   });
 
-  // Staff — identity in Supabase Auth, role/store in our User table --------
-  const staff = [
-    { email: "admin@cbpos.local", name: "Avery Admin", role: "ADMIN", storeId: null as string | null },
+  // Staff — identity in Supabase Auth, role/store in our User table.
+  // First seed creates each account with the default password; change it in the
+  // app and a later reseed will NOT overwrite it (ensureAuthUser never touches
+  // an existing account's password). Add real staff here and they survive every
+  // reset/reseed.
+  const staff: {
+    email: string;
+    name: string;
+    role: "CASHIER" | "MANAGER" | "ADMIN";
+    storeId: string | null;
+  }[] = [
+    { email: "admin@cbpos.local", name: "Avery Admin", role: "ADMIN", storeId: null },
     { email: "manager@cbpos.local", name: "Morgan Manager", role: "MANAGER", storeId: nashville.id },
     { email: "cashier@cbpos.local", name: "Casey Cashier", role: "CASHIER", storeId: clarksville.id },
+    { email: "igoc@chefandbeyond.com", name: "Ilhan Goc", role: "CASHIER", storeId: clarksville.id },
+    { email: "bcameron@chefandbeyond.com", name: "Blake Cameron", role: "MANAGER", storeId: clarksville.id },
   ];
   for (const s of staff) {
-    const authId = await ensureAuthUser(s.email, password);
+    const email = s.email.toLowerCase();
+    const authId = await ensureAuthUser(email, password);
+    // The proxy reads the role from the session's app_metadata to gate
+    // manager-only pages without a database round-trip.
+    await admin.auth.admin.updateUserById(authId, { app_metadata: { pos_role: s.role } });
     await prisma.user.upsert({
-      where: { email: s.email },
-      update: { role: s.role, storeId: s.storeId, authId },
-      create: { email: s.email, name: s.name, role: s.role, storeId: s.storeId, authId },
+      where: { email },
+      update: { name: s.name, role: s.role, storeId: s.storeId, authId },
+      create: { email, name: s.name, role: s.role, storeId: s.storeId, authId },
     });
   }
 
@@ -144,6 +159,7 @@ async function main() {
   console.log(`  Admin login:   admin@cbpos.local / ${password}    (all stores)`);
   console.log(`  Manager login: manager@cbpos.local / ${password}  (Nashville · 9.75%)`);
   console.log(`  Cashier login: cashier@cbpos.local / ${password}  (Clarksville · 6%)`);
+  console.log(`  ${staff.length} staff accounts ensured (new ones default to ${password}).`);
   console.log(`  ${products.length} products across ${categories.length} categories.`);
 }
 

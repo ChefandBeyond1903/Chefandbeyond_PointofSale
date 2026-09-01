@@ -15,10 +15,10 @@ const LINKS: { href: string; label: string; roles: Role[] }[] = [
   { href: "/vendors", label: "Vendors", roles: ALL },
   { href: "/customers", label: "Customers", roles: ALL },
   { href: "/purchase-orders", label: "Purchase Orders", roles: ALL },
-  { href: "/bills", label: "Bills", roles: ALL },
+  { href: "/bills", label: "Bills", roles: STAFF_UP },
   { href: "/inventory", label: "Inventory", roles: ALL },
   { href: "/reports", label: "Reports", roles: ALL },
-  { href: "/users", label: "Staff", roles: ALL },
+  { href: "/users", label: "Staff", roles: STAFF_UP },
   { href: "/settings", label: "Settings", roles: STAFF_UP },
 ];
 
@@ -44,21 +44,21 @@ export function Nav({ user }: { user: SessionUser }) {
 
   return (
     <header className="border-b border-zinc-200 bg-white">
-      <div className="flex h-14 w-full items-center gap-1 px-4">
-        <span className="mr-4 flex items-center gap-2 font-semibold tracking-tight">
+      <div className="mx-auto flex h-14 w-full max-w-[1600px] items-center gap-1 px-4">
+        <span className="mr-4 flex shrink-0 items-center gap-2 font-semibold tracking-tight">
           <span className="grid h-7 w-7 place-items-center rounded-md bg-indigo-600 text-xs font-bold text-white">
             CB
           </span>
           POS
         </span>
-        <nav className="flex items-center gap-1">
+        <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
           {links.map((l) => {
             const active = l.href === "/" ? pathname === "/" : pathname.startsWith(l.href);
             return (
               <Link
                 key={l.href}
                 href={l.href}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                className={`shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                   active ? "bg-zinc-100 text-zinc-900" : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800"
                 }`}
               >
@@ -67,11 +67,15 @@ export function Nav({ user }: { user: SessionUser }) {
             );
           })}
         </nav>
-        <div className="ml-auto flex items-center gap-3 text-sm">
-          <span className="hidden text-zinc-500 sm:inline">
+        <div className="flex shrink-0 items-center gap-3 pl-2 text-sm">
+          <span className="hidden whitespace-nowrap text-zinc-500 sm:inline">
             {user.name} · <span className="capitalize">{user.role.toLowerCase()}</span>
           </span>
-          <button onClick={logout} disabled={loggingOut} className="btn-secondary">
+          <button
+            onClick={logout}
+            disabled={loggingOut}
+            className="btn-secondary shrink-0 whitespace-nowrap"
+          >
             {loggingOut ? "Signing out…" : "Sign out"}
           </button>
         </div>

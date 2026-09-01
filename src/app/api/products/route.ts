@@ -3,7 +3,11 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireRole, HttpError } from "@/lib/auth";
 import { requireScopedUser } from "@/lib/scope";
-import { productCreateSchema } from "@/lib/validation";
+import {
+  productBulkDeleteSchema,
+  productBulkUpdateSchema,
+  productCreateSchema,
+} from "@/lib/validation";
 import { ok, toErrorResponse } from "@/lib/api";
 
 export async function GET(req: NextRequest) {
@@ -28,28 +32,24 @@ export async function GET(req: NextRequest) {
       ];
     }
 
+    // One round trip: pull each product with its per-store inventory rows, then
+    // reduce to the on-hand figure for the caller's store (total for an admin).
     const rows = await prisma.product.findMany({
       where,
       orderBy: { name: "asc" },
       take,
-      include: { category: { select: { id: true, name: true } } },
+      include: {
+        category: { select: { id: true, name: true } },
+        inventory: { select: { storeId: true, quantity: true } },
+      },
     });
 
-    // Attach on-hand for the caller's store (total across stores for an admin).
-    const inv = await prisma.storeInventory.findMany({
-      where: { productId: { in: rows.map((p) => p.id) } },
-      select: { productId: true, storeId: true, quantity: true },
-    });
-    const byProduct = new Map<string, { total: number; forStore: number }>();
-    for (const i of inv) {
-      const e = byProduct.get(i.productId) ?? { total: 0, forStore: 0 };
-      e.total += i.quantity;
-      if (actor.storeId && i.storeId === actor.storeId) e.forStore += i.quantity;
-      byProduct.set(i.productId, e);
-    }
-    const products = rows.map((p) => {
-      const e = byProduct.get(p.id);
-      return { ...p, stock: actor.storeId ? (e?.forStore ?? 0) : (e?.total ?? 0) };
+    const products = rows.map(({ inventory, ...p }) => {
+      const stock = inventory.reduce(
+        (sum, i) => (actor.storeId ? (i.storeId === actor.storeId ? sum + i.quantity : sum) : sum + i.quantity),
+        0,
+      );
+      return { ...p, stock };
     });
     return ok({ products });
   } catch (err) {
@@ -82,6 +82,92 @@ export async function POST(req: NextRequest) {
       include: { category: { select: { id: true, name: true } } },
     });
     return ok({ product }, 201);
+  } catch (err) {
+    return toErrorResponse(err);
+  }
+}
+
+// Bulk edit from the Products page: move/clear category (and/or set active) on
+// many products at once. Per-product PATCH lives at /api/products/[id].
+export async function PATCH(req: NextRequest) {
+  try {
+    await requireRole("MANAGER", "ADMIN");
+    const { ids, categoryId, active } = productBulkUpdateSchema.parse(await req.json());
+
+    const data: Prisma.ProductUncheckedUpdateManyInput = {};
+    if (categoryId !== undefined) {
+      if (categoryId !== null) {
+        const cat = await prisma.category.findUnique({
+          where: { id: categoryId },
+          select: { id: true },
+        });
+        if (!cat) throw new HttpError(400, "Category not found");
+      }
+      data.categoryId = categoryId;
+    }
+    if (active !== undefined) data.active = active;
+
+    const { count } = await prisma.product.updateMany({
+      where: { id: { in: ids } },
+      data,
+    });
+    return ok({ count });
+  } catch (err) {
+    return toErrorResponse(err);
+  }
+}
+
+// Bulk delete. Default (hard:false) archives — active:false, keeping sale
+// history, same as the single-product DELETE. hard:true permanently removes
+// every selected product that no sale line references; any that ARE referenced
+// are archived instead so invoices stay intact. Returns how many of each.
+export async function DELETE(req: NextRequest) {
+  try {
+    await requireRole("MANAGER", "ADMIN");
+    const { ids, hard } = productBulkDeleteSchema.parse(await req.json());
+
+    if (!hard) {
+      const { count } = await prisma.product.updateMany({
+        where: { id: { in: ids } },
+        data: { active: false },
+      });
+      return ok({ archived: count, deleted: 0 });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const referenced = new Set(
+        (
+          await tx.saleItem.findMany({
+            where: { productId: { in: ids } },
+            select: { productId: true },
+            distinct: ["productId"],
+          })
+        ).map((r) => r.productId),
+      );
+      const removable = ids.filter((id) => !referenced.has(id));
+
+      if (removable.length) {
+        // Detach optional references, then let StoreInventory cascade on delete.
+        await tx.purchaseOrderItem.updateMany({
+          where: { productId: { in: removable } },
+          data: { productId: null },
+        });
+        await tx.billItem.updateMany({
+          where: { productId: { in: removable } },
+          data: { productId: null },
+        });
+        await tx.product.deleteMany({ where: { id: { in: removable } } });
+      }
+      if (referenced.size) {
+        await tx.product.updateMany({
+          where: { id: { in: [...referenced] } },
+          data: { active: false },
+        });
+      }
+      return { deleted: removable.length, archived: referenced.size };
+    });
+
+    return ok(result);
   } catch (err) {
     return toErrorResponse(err);
   }

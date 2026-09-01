@@ -48,10 +48,10 @@ export async function GET(req: NextRequest) {
       byProduct.set(i.productId, e);
     }
 
-    const rows = products.map((p) => {
-      const byStore = byProduct.get(p.id) ?? {};
+    const rows = products.map(({ id, ...rest }) => {
+      const byStore = byProduct.get(id) ?? {};
       const total = Object.values(byStore).reduce((a, b) => a + b, 0);
-      return { ...p, byStore, total };
+      return { productId: id, ...rest, byStore, total };
     });
 
     return ok({
