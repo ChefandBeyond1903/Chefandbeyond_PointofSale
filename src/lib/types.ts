@@ -108,6 +108,45 @@ export interface InventorySnapshot {
   canAdjust: boolean;
 }
 
+export interface HeldSaleLine {
+  productId: string;
+  quantity: number;
+  unitPriceCents: number;
+  discountCents: number;
+}
+
+export interface HeldSaleSummary {
+  id: string;
+  label: string;
+  note: string;
+  customerName: string;
+  itemCount: number;
+  approxTotalCents: number;
+  salespersonName: string | null;
+  createdByName: string;
+  createdAt: string;
+}
+
+export interface HeldSaleDetail {
+  heldSale: {
+    id: string;
+    label: string;
+    note: string;
+    orderDiscountCents: number;
+    shippingCents: number;
+    salespersonId: string | null;
+    customerId: string | null;
+    customerName: string;
+    customerEmail: string;
+    customerPhone: string;
+    customerAddress: string;
+    customerCompany: string;
+    items: HeldSaleLine[];
+  };
+  /** The still-existing products referenced by the held lines, for rebuilding the cart. */
+  products: Product[];
+}
+
 export interface SaleItem {
   id: string;
   productId: string;

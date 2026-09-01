@@ -155,6 +155,19 @@ export const saleCreateSchema = z.object({
   customer: saleCustomerSchema.optional(),
 });
 
+// A parked cart. Same shape as a sale minus payment; recalled later on another
+// device to finish the sale.
+export const heldSaleCreateSchema = z.object({
+  items: z.array(saleItemSchema).min(1),
+  label: z.string().trim().max(200).default(""),
+  note: z.string().trim().max(500).default(""),
+  orderDiscountCents: z.number().int().min(0).default(0),
+  shippingCents: z.number().int().min(0).default(0),
+  salespersonId: z.string().min(1).optional(),
+  customerId: z.string().min(1).optional(),
+  customer: saleCustomerSchema.partial().optional(),
+});
+
 export const customerCreateSchema = z.object({
   name: z.string().trim().min(1).max(160),
   email: z.string().trim().max(200).default(""),

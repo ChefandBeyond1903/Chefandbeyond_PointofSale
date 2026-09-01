@@ -73,6 +73,38 @@ model User {
   shifts         Shift[]
   purchaseOrders PurchaseOrder[]
   bills          Bill[]
+  heldSales      HeldSale[]
+
+  @@index([storeId])
+  @@index([createdById])
+}
+
+/// A parked / suspended sale. A salesperson builds a cart (often on a phone out
+/// in the warehouse) and holds it instead of charging; it can then be recalled
+/// on another device — e.g. a desktop in the office — and the sale finished.
+model HeldSale {
+  id                String  @id @default(cuid())
+  label             String  @default("")
+  note              String  @default("")
+  orderDiscountCents Int    @default(0)
+  shippingCents     Int     @default(0)
+
+  storeId       String?
+  salespersonId String?
+  customerId    String?
+  customerName    String @default("")
+  customerEmail   String @default("")
+  customerPhone   String @default("")
+  customerAddress String @default("")
+  customerCompany String @default("")
+
+  /// [{ productId, quantity, unitPriceCents, discountCents }]
+  items Json
+
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@index([storeId])
   @@index([createdById])

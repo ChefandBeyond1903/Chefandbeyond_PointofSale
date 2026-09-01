@@ -10,6 +10,8 @@ import type {
   Category,
   Company,
   Customer,
+  HeldSaleDetail,
+  HeldSaleSummary,
   Product,
   Role,
   Sale,
@@ -89,6 +91,9 @@ export default function RegisterPage() {
   const [shiftStats, setShiftStats] = useState<ShiftStats | null>(null);
 
   const [payOpen, setPayOpen] = useState(false);
+  const [held, setHeld] = useState<HeldSaleSummary[]>([]);
+  const [heldOpen, setHeldOpen] = useState(false);
+  const [holding, setHolding] = useState(false);
   const [receipt, setReceipt] = useState<Sale | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [role, setRole] = useState<Role | null>(null);
@@ -153,10 +158,20 @@ export default function RegisterPage() {
     }
   }, []);
 
+  const loadHeld = useCallback(async () => {
+    try {
+      const res = await api<{ heldSales: HeldSaleSummary[] }>("/api/held-sales");
+      setHeld(res.heldSales);
+    } catch {
+      /* non-fatal */
+    }
+  }, []);
+
   useEffect(() => {
     loadCatalog();
     loadShift();
     loadCustomers();
+    loadHeld();
     api<{
       user: {
         id: string;
@@ -180,7 +195,7 @@ export default function RegisterPage() {
     api<{ people: { id: string; name: string }[] }>("/api/salespeople")
       .then((r) => setSalespeople(r.people))
       .catch(() => {});
-  }, [loadCatalog, loadShift, loadCustomers]);
+  }, [loadCatalog, loadShift, loadCustomers, loadHeld]);
 
   function pickCustomer(name: string) {
     setCustName(name);
@@ -439,6 +454,114 @@ export default function RegisterPage() {
     clearCustomer();
   }
 
+  function customerPayload() {
+    if (custId) return { customerId: custId };
+    if (custName.trim())
+      return {
+        customer: {
+          name: custName.trim(),
+          email: custEmail.trim(),
+          phone: custPhone.trim(),
+          address: custAddress.trim(),
+          company: custCompany.trim(),
+        },
+      };
+    return {};
+  }
+
+  // Park the current cart so it can be recalled later on another device.
+  async function holdSale() {
+    if (cart.length === 0 || holding) return;
+    setHolding(true);
+    setError(null);
+    try {
+      await api("/api/held-sales", {
+        method: "POST",
+        body: JSON.stringify({
+          items: cart.map((l) => ({
+            productId: l.product.id,
+            quantity: l.quantity,
+            discountCents: resolveLineDiscount(l),
+            unitPriceCents: l.unitPriceCents,
+          })),
+          label: custName.trim() || cart[0]?.product.name || "",
+          orderDiscountCents: totals.orderDiscountResolved,
+          shippingCents: totals.shipping,
+          ...(salespersonId && salespersonId !== meId ? { salespersonId } : {}),
+          ...customerPayload(),
+        }),
+      });
+      clearCart();
+      loadHeld();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not hold the sale");
+    } finally {
+      setHolding(false);
+    }
+  }
+
+  // Pull a held sale back into the register (and off the queue).
+  async function recallHeld(id: string) {
+    if (cart.length > 0 && !confirm("Replace the current sale with the held one?")) return;
+    setError(null);
+    try {
+      const res = await api<HeldSaleDetail>(`/api/held-sales/${id}`);
+      const byId = new Map(res.products.map((p) => [p.id, p]));
+      const lines: CartLine[] = [];
+      for (const l of res.heldSale.items) {
+        const product = byId.get(l.productId);
+        if (!product) continue; // product was removed after it was held
+        lines.push({
+          product,
+          quantity: l.quantity,
+          unitPriceCents: l.unitPriceCents,
+          discountCents: l.discountCents,
+          discPercent: 0,
+          discMode: "AMOUNT",
+        });
+      }
+      if (lines.length === 0) {
+        setError("None of the held items are still available.");
+        await api(`/api/held-sales/${id}`, { method: "DELETE" }).catch(() => {});
+        setHeldOpen(false);
+        loadHeld();
+        return;
+      }
+      setCart(lines);
+      setOrderDiscountCents(res.heldSale.orderDiscountCents);
+      setOrderDiscPercent(0);
+      setOrderDiscMode("AMOUNT");
+      setShippingCents(res.heldSale.shippingCents);
+      setCustId(res.heldSale.customerId);
+      setCustName(res.heldSale.customerName);
+      setCustEmail(res.heldSale.customerEmail);
+      setCustPhone(res.heldSale.customerPhone);
+      setCustAddress(res.heldSale.customerAddress);
+      setCustCompany(res.heldSale.customerCompany);
+      setCustOpen(false);
+      setSalespersonId(
+        res.heldSale.salespersonId && res.heldSale.salespersonId !== meId
+          ? res.heldSale.salespersonId
+          : "",
+      );
+      await api(`/api/held-sales/${id}`, { method: "DELETE" }).catch(() => {});
+      setHeldOpen(false);
+      loadHeld();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not recall the held sale");
+    }
+  }
+
+  async function discardHeld(id: string) {
+    if (!confirm("Discard this held sale?")) return;
+    try {
+      await api(`/api/held-sales/${id}`, { method: "DELETE" });
+      loadHeld();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not discard the held sale");
+    }
+  }
+
   function onSearchKeyDown(e: React.KeyboardEvent) {
     if (e.key !== "Enter") return;
     if (filtered.length === 1) {
@@ -609,11 +732,18 @@ export default function RegisterPage() {
                 )}
               </p>
             </div>
-            {cart.length > 0 && (
-              <button onClick={clearCart} className="btn-ghost text-xs">
-                Clear
-              </button>
-            )}
+            <div className="flex shrink-0 items-center gap-1">
+              {held.length > 0 && (
+                <button onClick={() => setHeldOpen(true)} className="btn-ghost text-xs">
+                  Held ({held.length})
+                </button>
+              )}
+              {cart.length > 0 && (
+                <button onClick={clearCart} className="btn-ghost text-xs">
+                  Clear
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Salesperson — always available to a manager/admin; for a plain
@@ -937,15 +1067,31 @@ export default function RegisterPage() {
             )}
 
             <button
+              onClick={holdSale}
+              disabled={cart.length === 0 || holding}
+              className="btn-secondary mt-1 w-full"
+            >
+              {holding ? "Holding…" : "Hold sale for later"}
+            </button>
+            <button
               onClick={() => setPayOpen(true)}
               disabled={cart.length === 0 || totals.umrpViolations.length > 0}
-              className="btn-primary mt-1 w-full py-3 text-base"
+              className="btn-primary w-full py-3 text-base"
             >
               Charge {formatMoney(totals.total)}
             </button>
           </div>
         </div>
       </section>
+
+      {heldOpen && (
+        <HeldSalesModal
+          held={held}
+          onRecall={recallHeld}
+          onDiscard={discardHeld}
+          onClose={() => setHeldOpen(false)}
+        />
+      )}
 
       {payOpen && (
         <PaymentModal
@@ -1175,6 +1321,72 @@ function PaymentModal({
             {busy ? "Processing…" : "Complete sale"}
           </button>
         </div>
+      </div>
+    </Overlay>
+  );
+}
+
+function HeldSalesModal({
+  held,
+  onRecall,
+  onDiscard,
+  onClose,
+}: {
+  held: HeldSaleSummary[];
+  onRecall: (id: string) => void;
+  onDiscard: (id: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <Overlay onClose={onClose}>
+      <div className="w-full max-w-md">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-lg font-semibold">Held sales</h3>
+          <button onClick={onClose} className="btn-ghost px-2 py-1 text-sm">
+            ✕
+          </button>
+        </div>
+        {held.length === 0 ? (
+          <p className="py-6 text-center text-sm text-zinc-500">No held sales.</p>
+        ) : (
+          <ul className="space-y-2">
+            {held.map((h) => (
+              <li key={h.id} className="rounded-md border border-zinc-200 p-3 text-sm">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">
+                      {h.label || h.customerName || "Untitled sale"}
+                    </p>
+                    <p className="text-xs text-zinc-500">
+                      {h.itemCount} item{h.itemCount === 1 ? "" : "s"} ·{" "}
+                      {formatMoney(h.approxTotalCents)}
+                    </p>
+                    <p className="text-xs text-zinc-400">
+                      {h.salespersonName ?? h.createdByName} ·{" "}
+                      {new Date(h.createdAt).toLocaleString([], {
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 flex-col gap-1">
+                    <button onClick={() => onRecall(h.id)} className="btn-primary h-8 text-xs">
+                      Recall
+                    </button>
+                    <button
+                      onClick={() => onDiscard(h.id)}
+                      className="btn-ghost h-8 text-xs text-red-500"
+                    >
+                      Discard
+                    </button>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </Overlay>
   );
