@@ -72,7 +72,8 @@ export interface Product {
   name: string;
   sku: string;
   barcode: string | null;
-  description: string | null;
+  /** Omitted by the product list endpoint unless it's called with detail=1. */
+  description?: string | null;
   priceCents: number;
   costCents: number;
   umrpCents: number;

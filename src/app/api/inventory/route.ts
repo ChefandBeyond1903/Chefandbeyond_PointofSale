@@ -42,14 +42,17 @@ export async function GET(req: NextRequest) {
       prisma.product.findMany({
         where,
         orderBy: { name: "asc" },
+        take: 5000,
         select: { id: true, name: true, sku: true, vendor: true, trackStock: true, active: true },
       }),
     ]);
 
-    const inv = await prisma.storeInventory.findMany({
-      where: { productId: { in: products.map((p) => p.id) } },
-      select: { productId: true, storeId: true, quantity: true },
-    });
+    const inv = products.length
+      ? await prisma.storeInventory.findMany({
+          where: { productId: { in: products.map((p) => p.id) } },
+          select: { productId: true, storeId: true, quantity: true },
+        })
+      : [];
     const byProduct = new Map<string, Record<string, number>>();
     for (const i of inv) {
       const e = byProduct.get(i.productId) ?? {};

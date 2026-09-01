@@ -150,6 +150,10 @@ model Product {
   @@index([active])
   @@index([favorite])
   @@index([vendor])
+  // Catalog and inventory both list products ordered by name; the composite
+  // lets Postgres serve "active products, name order" straight from an index.
+  @@index([name])
+  @@index([active, name])
 }
 
 /// On-hand quantity of one product at one store. Rows are created on demand

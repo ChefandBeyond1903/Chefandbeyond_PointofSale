@@ -72,7 +72,7 @@ export function ProductManager({ canManage = true }: { canManage?: boolean }) {
     setLoading(true);
     try {
       const [p, c, v] = await Promise.all([
-        api<{ products: Product[] }>("/api/products?all=1&take=5000"),
+        api<{ products: Product[] }>("/api/products?all=1&detail=1&take=5000"),
         api<{ categories: Category[] }>("/api/categories"),
         api<{ vendors: { name: string }[] }>("/api/vendors"),
       ]);

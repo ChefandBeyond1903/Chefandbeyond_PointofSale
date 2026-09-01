@@ -19,6 +19,9 @@ export async function GET(req: NextRequest) {
     const categoryId = searchParams.get("categoryId")?.trim();
     const includeInactive = searchParams.get("all") === "1";
     const favoritesOnly = searchParams.get("favorite") === "1";
+    // The register grid never shows description/timestamps; skipping them keeps
+    // a full-catalog load small. The Products admin page asks for detail=1.
+    const withDetail = searchParams.get("detail") === "1";
     const take = Math.min(Number(searchParams.get("take") ?? 200), 5000);
 
     const where: Prisma.ProductWhereInput = {};
@@ -41,25 +44,48 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // One round trip: pull each product with its per-store inventory rows, then
-    // reduce to the on-hand figure for the caller's store (total for an admin).
+    // Skip description + timestamps unless detail=1: a description can be ~1KB
+    // and there can be thousands of products, so the register load stays lean.
     const rows = await prisma.product.findMany({
       where,
       orderBy: { name: "asc" },
       take,
-      include: {
+      select: {
+        id: true,
+        name: true,
+        sku: true,
+        barcode: true,
+        priceCents: true,
+        costCents: true,
+        umrpCents: true,
+        trackStock: true,
+        active: true,
+        favorite: true,
+        vendor: true,
+        categoryId: true,
         category: { select: { id: true, name: true } },
-        inventory: { select: { storeId: true, quantity: true } },
+        description: withDetail,
+        createdAt: withDetail,
+        updatedAt: withDetail,
       },
     });
 
-    const products = rows.map(({ inventory, ...p }) => {
-      const stock = inventory.reduce(
-        (sum, i) => (actor.storeId ? (i.storeId === actor.storeId ? sum + i.quantity : sum) : sum + i.quantity),
-        0,
-      );
-      return { ...p, stock };
-    });
+    // On-hand in one grouped query — the caller's store, or every store for an
+    // admin — instead of dragging back every StoreInventory row per product.
+    const stockByProduct = new Map<string, number>();
+    if (rows.length) {
+      const grouped = await prisma.storeInventory.groupBy({
+        by: ["productId"],
+        _sum: { quantity: true },
+        where: {
+          productId: { in: rows.map((r) => r.id) },
+          ...(actor.storeId ? { storeId: actor.storeId } : {}),
+        },
+      });
+      for (const g of grouped) stockByProduct.set(g.productId, g._sum.quantity ?? 0);
+    }
+
+    const products = rows.map((p) => ({ ...p, stock: stockByProduct.get(p.id) ?? 0 }));
     return ok({ products });
   } catch (err) {
     return toErrorResponse(err);
