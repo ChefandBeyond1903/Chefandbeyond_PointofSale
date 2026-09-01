@@ -1147,6 +1147,15 @@ function PaymentModal({
   );
 }
 
+// Printed on every invoice/receipt.
+const INVOICE_FINE_PRINT =
+  "ALL SALES ARE FINAL. Changes after 48 hours may incur a fee (refund subject to a " +
+  "restocking fee of 30% of the total purchase price or more depends on the vendor). " +
+  "Installation, electrical, roofing, ducting, construction, permits, stainless steel panels, " +
+  "shrouds, duct enclosures, fire wrap, fire system connection, and testing are NOT INCLUDED " +
+  "unless stated in writing. Buyer must comply with local regulations. Seller is not liable for " +
+  "indirect damages. Tennessee laws apply.";
+
 function ReceiptModal({
   sale,
   company,
@@ -1161,6 +1170,15 @@ function ReceiptModal({
     <Overlay onClose={onClose}>
       <div className="w-full max-w-sm">
         <div id="receipt" className="rounded-md border border-zinc-200 p-4 font-mono text-xs">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/logo.svg"
+            alt="Chef and Beyond"
+            className="mx-auto mb-2 h-10 w-auto"
+            onError={(e) => {
+              e.currentTarget.style.display = "none";
+            }}
+          />
           <p className="text-center text-sm font-bold">{header}</p>
           {sale.storeNameSnapshot ? (
             <p className="text-center text-zinc-500">{sale.storeNameSnapshot}</p>
@@ -1240,6 +1258,8 @@ function ReceiptModal({
             </div>
           )}
           <p className="mt-3 text-center text-zinc-500">Thank you!</p>
+          <hr className="my-2 border-dashed" />
+          <p className="text-[10px] leading-snug text-zinc-500">{INVOICE_FINE_PRINT}</p>
         </div>
 
         <div className="mt-4 flex gap-2">
