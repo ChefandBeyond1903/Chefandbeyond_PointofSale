@@ -41,7 +41,7 @@ function LoginForm() {
           <img
             src="/logo-header.webp"
             alt="Chef and Beyond"
-            className="mx-auto h-12 w-auto"
+            className="mx-auto h-20 w-auto"
             onError={(e) => {
               e.currentTarget.style.display = "none";
             }}
