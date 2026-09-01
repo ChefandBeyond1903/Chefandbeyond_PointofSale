@@ -36,14 +36,18 @@ function LoginForm() {
   return (
     <div className="grid min-h-screen place-items-center bg-zinc-50 px-4">
       <div className="w-full max-w-sm">
-        <div className="mb-6 flex items-center gap-2">
-          <span className="grid h-9 w-9 place-items-center rounded-lg bg-indigo-600 text-sm font-bold text-white">
-            CB
-          </span>
-          <div>
-            <h1 className="text-lg font-semibold leading-tight">CB POS</h1>
-            <p className="text-xs text-zinc-500">Sign in to your register</p>
-          </div>
+        <div className="mb-6 text-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/logo-header.webp"
+            alt="Chef and Beyond"
+            className="mx-auto h-12 w-auto"
+            onError={(e) => {
+              e.currentTarget.style.display = "none";
+            }}
+          />
+          <h1 className="sr-only">Chef and Beyond POS</h1>
+          <p className="mt-2 text-sm text-zinc-500">Sign in to your register</p>
         </div>
 
         <form onSubmit={onSubmit} className="card space-y-4 p-6">
