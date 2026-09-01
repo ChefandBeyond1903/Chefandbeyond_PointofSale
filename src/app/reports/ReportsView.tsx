@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
 import { InvoiceModal } from "@/components/InvoiceModal";
+import { ReceiptModal } from "@/components/ReceiptModal";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { resolvePreset, type DateRange } from "@/lib/dateRange";
 import type { ProfitRow, ReportSummary } from "@/lib/types";
@@ -21,6 +22,7 @@ export function ReportsView({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
+  const [printSaleId, setPrintSaleId] = useState<string | null>(null);
 
   const load = useCallback(
     async (from: Date, to: Date, store: string) => {
@@ -164,6 +166,18 @@ export function ReportsView({
                             </td>
                           )}
                           <td className="py-2 text-right font-medium">{formatMoney(s.totalCents)}</td>
+                          <td className="py-2 pl-2 text-right">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPrintSaleId(s.id);
+                              }}
+                              className="btn-ghost px-2 py-0.5 text-xs text-indigo-600"
+                              title="Re-print this invoice"
+                            >
+                              Print
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -181,6 +195,10 @@ export function ReportsView({
           onClose={() => setOpenInvoiceId(null)}
           canManage={!limited}
         />
+      )}
+
+      {printSaleId && (
+        <ReceiptModal saleId={printSaleId} onClose={() => setPrintSaleId(null)} />
       )}
     </div>
   );

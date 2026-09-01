@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney, formatBps } from "@/lib/money";
+import { ReceiptModal } from "@/components/ReceiptModal";
 import type { InvoiceDetail, PurchaseOrder, Vendor } from "@/lib/types";
 
 const PO_STATUSES: PurchaseOrder["status"][] = ["OPEN", "SENT", "RECEIVED", "CANCELLED"];
@@ -38,6 +39,7 @@ export function InvoiceModal({
   const [err, setErr] = useState<string | null>(null);
   const [pickerVendor, setPickerVendor] = useState<string | null>(null);
   const [picks, setPicks] = useState<Record<string, Pick>>({});
+  const [printing, setPrinting] = useState(false);
   // vendor name -> free-freight minimum (cents); 0 / missing means none.
   const [freightMins, setFreightMins] = useState<Record<string, number>>({});
 
@@ -203,9 +205,17 @@ export function InvoiceModal({
                   </p>
                 ) : null}
               </div>
-              <button onClick={onClose} className="btn-ghost px-2 py-1 text-sm">
-                ✕
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPrinting(true)}
+                  className="btn-secondary px-3 py-1 text-sm"
+                >
+                  Print receipt
+                </button>
+                <button onClick={onClose} className="btn-ghost px-2 py-1 text-sm">
+                  ✕
+                </button>
+              </div>
             </div>
 
             {err && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{err}</p>}
@@ -414,6 +424,10 @@ export function InvoiceModal({
           </>
         )}
       </div>
+
+      {printing && sale && (
+        <ReceiptModal sale={sale} onClose={() => setPrinting(false)} />
+      )}
     </div>
   );
 }

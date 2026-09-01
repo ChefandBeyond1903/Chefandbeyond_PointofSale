@@ -5,6 +5,7 @@ import { api, ApiError } from "@/lib/client";
 import { formatMoney, formatBps, taxOn } from "@/lib/money";
 import { MoneyInput } from "@/components/MoneyInput";
 import { PercentInput } from "@/components/PercentInput";
+import { ReceiptModal } from "@/components/ReceiptModal";
 import type {
   Category,
   Company,
@@ -929,7 +930,12 @@ export default function RegisterPage() {
       )}
 
       {receipt && (
-        <ReceiptModal sale={receipt} company={company} onClose={() => setReceipt(null)} />
+        <ReceiptModal
+          sale={receipt}
+          company={company}
+          onClose={() => setReceipt(null)}
+          closeLabel="New sale"
+        />
       )}
     </div>
   );
@@ -1140,134 +1146,6 @@ function PaymentModal({
             className="btn-primary flex-1"
           >
             {busy ? "Processing…" : "Complete sale"}
-          </button>
-        </div>
-      </div>
-    </Overlay>
-  );
-}
-
-// Printed on every invoice/receipt.
-const INVOICE_FINE_PRINT =
-  "ALL SALES ARE FINAL. Changes after 48 hours may incur a fee (refund subject to a " +
-  "restocking fee of 30% of the total purchase price or more depends on the vendor). " +
-  "Installation, electrical, roofing, ducting, construction, permits, stainless steel panels, " +
-  "shrouds, duct enclosures, fire wrap, fire system connection, and testing are NOT INCLUDED " +
-  "unless stated in writing. Buyer must comply with local regulations. Seller is not liable for " +
-  "indirect damages. Tennessee laws apply.";
-
-function ReceiptModal({
-  sale,
-  company,
-  onClose,
-}: {
-  sale: Sale;
-  company: Company | null;
-  onClose: () => void;
-}) {
-  const header = company?.name?.trim() || "CB POS";
-  return (
-    <Overlay onClose={onClose}>
-      <div className="w-full max-w-sm">
-        <div id="receipt" className="rounded-md border border-zinc-200 p-4 font-mono text-xs">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/logo-header.webp"
-            alt="Chef and Beyond"
-            className="mx-auto mb-2 h-10 w-auto"
-            onError={(e) => {
-              e.currentTarget.style.display = "none";
-            }}
-          />
-          <p className="text-center text-sm font-bold">{header}</p>
-          {sale.storeNameSnapshot ? (
-            <p className="text-center text-zinc-500">{sale.storeNameSnapshot}</p>
-          ) : null}
-          {(sale.storeAddressSnapshot || company?.address) && (
-            <p className="text-center text-zinc-500">
-              {sale.storeAddressSnapshot || company?.address}
-            </p>
-          )}
-          {(sale.storePhoneSnapshot || company?.phone) && (
-            <p className="text-center text-zinc-500">
-              {sale.storePhoneSnapshot || company?.phone}
-            </p>
-          )}
-          <p className="text-center text-zinc-500">Sale #{sale.number}</p>
-          <p className="text-center text-zinc-500">{new Date(sale.createdAt).toLocaleString()}</p>
-          {sale.salesperson?.name ? (
-            <p className="text-center text-zinc-500">Served by: {sale.salesperson.name}</p>
-          ) : null}
-          {sale.customerNameSnapshot ? (
-            <p className="text-center text-zinc-500">Customer: {sale.customerNameSnapshot}</p>
-          ) : null}
-          <hr className="my-2 border-dashed" />
-          {sale.items.map((it) => (
-            <div key={it.id} className="flex justify-between">
-              <span>
-                {it.quantity}× {it.nameSnapshot}
-              </span>
-              <span>{formatMoney(it.lineTotalCents)}</span>
-            </div>
-          ))}
-          <hr className="my-2 border-dashed" />
-          <div className="flex justify-between">
-            <span>Subtotal</span>
-            <span>{formatMoney(sale.subtotalCents)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Discount</span>
-            <span>− {formatMoney(sale.discountCents)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Tax{sale.taxRateBps ? ` (${formatBps(sale.taxRateBps)})` : ""}</span>
-            <span>{formatMoney(sale.taxCents)}</span>
-          </div>
-          {sale.shippingCents > 0 && (
-            <div className="flex justify-between">
-              <span>Shipping</span>
-              <span>{formatMoney(sale.shippingCents)}</span>
-            </div>
-          )}
-          <div className="flex justify-between font-bold">
-            <span>Total</span>
-            <span>{formatMoney(sale.totalCents)}</span>
-          </div>
-          {(() => {
-            const listSub = sale.listSubtotalCents || sale.subtotalCents;
-            const saved = listSub - (sale.subtotalCents - sale.discountCents);
-            if (saved <= 0) return null;
-            return (
-              <div className="flex justify-between font-bold">
-                <span>You saved</span>
-                <span>
-                  {formatMoney(saved)}
-                  {listSub > 0 ? ` (${Math.round((saved / listSub) * 100)}% off)` : ""}
-                </span>
-              </div>
-            );
-          })()}
-          <div className="flex justify-between">
-            <span>{sale.paymentMethod}</span>
-            <span>{formatMoney(sale.tenderedCents)}</span>
-          </div>
-          {sale.changeCents > 0 && (
-            <div className="flex justify-between">
-              <span>Change</span>
-              <span>{formatMoney(sale.changeCents)}</span>
-            </div>
-          )}
-          <p className="mt-3 text-center text-zinc-500">Thank you!</p>
-          <hr className="my-2 border-dashed" />
-          <p className="text-[10px] leading-snug text-zinc-500">{INVOICE_FINE_PRINT}</p>
-        </div>
-
-        <div className="mt-4 flex gap-2">
-          <button onClick={() => window.print()} className="btn-secondary flex-1">
-            Print
-          </button>
-          <button onClick={onClose} className="btn-primary flex-1">
-            New sale
           </button>
         </div>
       </div>
