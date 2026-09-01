@@ -4,6 +4,7 @@ import { requireRole, HttpError } from "@/lib/auth";
 import { requireScopedUser } from "@/lib/scope";
 import { productUpdateSchema } from "@/lib/validation";
 import { ok, toErrorResponse } from "@/lib/api";
+import { ensureVendor } from "@/lib/vendors";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -78,6 +79,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       data,
       include: { category: { select: { id: true, name: true } } },
     });
+    if (data.vendor !== undefined) await ensureVendor(product.vendor);
     return ok({ product });
   } catch (err) {
     return toErrorResponse(err);

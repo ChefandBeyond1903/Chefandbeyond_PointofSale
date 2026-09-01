@@ -10,6 +10,7 @@ import {
 } from "@/lib/validation";
 import { ok, toErrorResponse } from "@/lib/api";
 import { searchTerms } from "@/lib/search";
+import { ensureVendor } from "@/lib/vendors";
 
 export async function GET(req: NextRequest) {
   try {
@@ -116,6 +117,7 @@ export async function POST(req: NextRequest) {
       },
       include: { category: { select: { id: true, name: true } } },
     });
+    await ensureVendor(product.vendor);
     return ok({ product }, 201);
   } catch (err) {
     return toErrorResponse(err);

@@ -71,6 +71,10 @@ async function main() {
 
   console.log(`Loaded ${items.length} "${VENDOR}" products from ${jsonPath}`);
 
+  // ---- ensure a Vendor row so this brand appears on the Vendors page ----
+  await prisma.vendor.upsert({ where: { name: VENDOR }, update: {}, create: { name: VENDOR } });
+  console.log(`Vendor "${VENDOR}" ready.`);
+
   // ---- categories ----
   const catNames = [...new Set(items.map((i) => i.category))].sort();
   const catId = {};
