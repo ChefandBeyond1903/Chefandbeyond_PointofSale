@@ -25,11 +25,17 @@ export async function GET(req: NextRequest) {
     if (favoritesOnly) where.favorite = true;
     if (categoryId) where.categoryId = categoryId;
     if (q) {
-      where.OR = [
-        { name: { contains: q } },
-        { sku: { contains: q } },
-        { barcode: { contains: q } },
-      ];
+      // Order-independent: every whitespace-separated term must appear somewhere
+      // in the name, description, SKU, or barcode (case-insensitive). So
+      // "deep 40 fryer" and "fryer 40 deep" both match "40 lbs Deep Fryer".
+      where.AND = q.split(/\s+/).filter(Boolean).map((term) => ({
+        OR: [
+          { name: { contains: term, mode: "insensitive" } },
+          { description: { contains: term, mode: "insensitive" } },
+          { sku: { contains: term, mode: "insensitive" } },
+          { barcode: { contains: term, mode: "insensitive" } },
+        ],
+      }));
     }
 
     // One round trip: pull each product with its per-store inventory rows, then
