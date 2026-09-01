@@ -71,6 +71,37 @@ async function main() {
     },
   });
 
+  // Real staff — add your people here and they survive every reset/reseed.
+  // First seed sets the password to "password123"; change it in the app and a
+  // later reseed will NOT overwrite it (update{} below doesn't touch the hash).
+  const storeByKey = {
+    nashville: nashville.id,
+    clarksville: clarksville.id,
+    none: null,
+  } as const;
+  const staff: {
+    email: string;
+    name: string;
+    role: "CASHIER" | "MANAGER" | "ADMIN";
+    store: keyof typeof storeByKey;
+  }[] = [
+    { email: "igoc@chefandbeyond.com", name: "Ilhan Goc", role: "CASHIER", store: "clarksville" },
+    { email: "bcameron@chefandbeyond.com", name: "Blake Cameron", role: "MANAGER", store: "clarksville" },
+  ];
+  for (const s of staff) {
+    await prisma.user.upsert({
+      where: { email: s.email.toLowerCase() },
+      update: { name: s.name, role: s.role, storeId: storeByKey[s.store] },
+      create: {
+        email: s.email.toLowerCase(),
+        name: s.name,
+        passwordHash,
+        role: s.role,
+        storeId: storeByKey[s.store],
+      },
+    });
+  }
+
   const categories = ["Beverages", "Snacks", "Apparel", "Accessories", "Home"];
   const catByName: Record<string, string> = {};
   for (const name of categories) {
@@ -133,6 +164,7 @@ async function main() {
   console.log("  Admin login:   admin@cbpos.local / password123    (all stores)");
   console.log("  Manager login: manager@cbpos.local / password123  (Nashville · 9.75%)");
   console.log("  Cashier login: cashier@cbpos.local / password123  (Clarksville · 6%)");
+  console.log(`  + ${staff.length} named staff (new ones default to password123).`);
   console.log(`  ${products.length} products across ${categories.length} categories.`);
   void manager;
 }
