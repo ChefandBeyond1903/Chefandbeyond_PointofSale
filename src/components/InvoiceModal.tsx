@@ -220,7 +220,8 @@ export function InvoiceModal({
 
             {err && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{err}</p>}
 
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[480px] text-sm">
               <thead className="text-left text-xs uppercase tracking-wide text-zinc-400">
                 <tr>
                   <th className="py-1.5">Qty</th>
@@ -271,6 +272,7 @@ export function InvoiceModal({
                 </tr>
               </tfoot>
             </table>
+            </div>
 
             <div className="mt-6">
               <h3 className="mb-2 font-semibold">Purchase orders</h3>

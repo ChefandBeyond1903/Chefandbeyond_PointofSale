@@ -62,14 +62,17 @@ export function ReceiptModal({
 
   return (
     <div
-      className="fixed inset-0 z-[60] grid place-items-center bg-black/40 p-4"
+      className="fixed inset-0 z-[60] grid place-items-center overflow-y-auto bg-black/40 p-4"
       onClick={(e) => {
         e.stopPropagation();
         onClose();
       }}
     >
-      <div className="card w-auto p-6" onClick={(e) => e.stopPropagation()}>
-        <div className="w-full max-w-sm">
+      <div
+        className="card max-h-[92vh] w-full max-w-sm overflow-y-auto p-4 sm:p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="w-full">
           {!sale ? (
             <p className="py-8 text-center text-sm text-zinc-500">
               {error ?? "Loading invoice…"}

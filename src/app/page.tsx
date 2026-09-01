@@ -502,11 +502,11 @@ export default function RegisterPage() {
   return (
     <div className="grid w-full flex-1 gap-3 p-3 sm:p-4 lg:grid-cols-[minmax(0,1fr)_460px] lg:gap-4">
       {/* Catalog */}
-      <section className="flex min-h-0 flex-col">
+      <section className="flex min-h-0 min-w-0 flex-col">
         <div className="mb-3 flex gap-2">
           <input
             ref={searchRef}
-            className="input"
+            className="input min-w-0"
             placeholder="Search name, SKU, or scan barcode…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -519,86 +519,77 @@ export default function RegisterPage() {
             aria-expanded={catalogOpen}
             className="btn-secondary shrink-0"
           >
-            {catalogOpen ? "Hide catalog" : "Catalog"}
+            {catalogOpen ? "Hide catalog" : "Open catalog"}
           </button>
         </div>
 
-        {isSearching || catalogOpen ? (
-          <>
-            <div className="mb-3 flex flex-wrap gap-1.5">
+        {/* Category filters only when the catalog is explicitly open — a search
+           should show its results, not a wall of category chips. */}
+        {catalogOpen && (
+          <div className="mb-3 flex flex-wrap gap-1.5">
+            <button
+              onClick={() => setActiveCategory(null)}
+              className={activeCategory === null ? "btn-primary" : "btn-secondary"}
+            >
+              All
+            </button>
+            {categories.map((c) => (
               <button
-                onClick={() => setActiveCategory(null)}
-                className={activeCategory === null ? "btn-primary" : "btn-secondary"}
+                key={c.id}
+                onClick={() => setActiveCategory(c.id)}
+                className={activeCategory === c.id ? "btn-primary" : "btn-secondary"}
               >
-                All
+                {c.name}
               </button>
-              {categories.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => setActiveCategory(c.id)}
-                  className={activeCategory === c.id ? "btn-primary" : "btn-secondary"}
-                >
-                  {c.name}
-                </button>
-              ))}
-              {catalogOpen && !isSearching && (
-                <button
-                  onClick={toggleBrowseAll}
-                  className={browseAll ? "btn-primary" : "btn-secondary"}
-                >
-                  {browseAll ? "Favorites only" : "Browse all"}
-                </button>
+            ))}
+            {!isSearching && (
+              <button
+                onClick={toggleBrowseAll}
+                className={browseAll ? "btn-primary" : "btn-secondary"}
+              >
+                {browseAll ? "Favorites only" : "Browse all"}
+              </button>
+            )}
+          </div>
+        )}
+
+        {(isSearching || catalogOpen) &&
+          (loading ? (
+            <p className="text-sm text-zinc-500">Loading catalog…</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-2 overflow-y-auto pb-4 sm:grid-cols-3 xl:grid-cols-4">
+              {filtered.map((p) => {
+                const low = p.trackStock && p.stock <= 0;
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => addToCart(p)}
+                    className="card flex min-w-0 flex-col items-start gap-1 p-3 text-left transition-transform hover:-translate-y-0.5 hover:shadow-md"
+                  >
+                    <span className="line-clamp-2 w-full break-words text-sm font-medium">
+                      {p.name}
+                    </span>
+                    <span className="w-full break-all text-xs text-zinc-400">{p.sku}</span>
+                    <span className="mt-auto text-sm font-semibold text-indigo-600">
+                      {formatMoney(p.priceCents)}
+                    </span>
+                    {p.trackStock && (
+                      <span className={`text-[11px] ${low ? "text-red-500" : "text-zinc-400"}`}>
+                        {p.stock} in stock
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+              {filtered.length === 0 && (
+                <p className="col-span-full text-sm text-zinc-500">No matching products.</p>
               )}
             </div>
-
-            {loading ? (
-              <p className="text-sm text-zinc-500">Loading catalog…</p>
-            ) : (
-              <div className="grid grid-cols-2 gap-2 overflow-y-auto pb-4 sm:grid-cols-3 xl:grid-cols-4">
-                {filtered.map((p) => {
-                  const low = p.trackStock && p.stock <= 0;
-                  return (
-                    <button
-                      key={p.id}
-                      onClick={() => addToCart(p)}
-                      className="card flex flex-col items-start gap-1 p-3 text-left transition-transform hover:-translate-y-0.5 hover:shadow-md"
-                    >
-                      <span className="line-clamp-2 text-sm font-medium">{p.name}</span>
-                      <span className="text-xs text-zinc-400">{p.sku}</span>
-                      <span className="mt-auto text-sm font-semibold text-indigo-600">
-                        {formatMoney(p.priceCents)}
-                      </span>
-                      {p.trackStock && (
-                        <span className={`text-[11px] ${low ? "text-red-500" : "text-zinc-400"}`}>
-                          {p.stock} in stock
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-                {filtered.length === 0 && (
-                  <p className="col-span-full text-sm text-zinc-500">No matching products.</p>
-                )}
-              </div>
-            )}
-          </>
-        ) : (
-          <p className="text-sm text-zinc-400">
-            Search or scan to add an item, or{" "}
-            <button
-              type="button"
-              onClick={() => setCatalogOpen(true)}
-              className="font-medium text-indigo-600 hover:underline"
-            >
-              open the catalog
-            </button>
-            .
-          </p>
-        )}
+          ))}
       </section>
 
       {/* Ticket */}
-      <section className="flex min-h-0 flex-col gap-3">
+      <section className="flex min-h-0 min-w-0 flex-col gap-3">
         <ShiftWidget shift={shift} stats={shiftStats} onChanged={loadShift} />
 
         <div className="card flex min-h-0 flex-1 flex-col">
@@ -1192,10 +1183,13 @@ function PaymentModal({
 function Overlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"
+      className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/40 p-4"
       onClick={onClose}
     >
-      <div className="card w-auto p-6" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="card max-h-[90vh] w-full max-w-md overflow-y-auto p-4 sm:p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
         {children}
       </div>
     </div>

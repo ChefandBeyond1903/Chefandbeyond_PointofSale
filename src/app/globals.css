@@ -21,13 +21,19 @@
   --font-mono: var(--font-geist-mono);
 }
 
+html {
+  /* Nothing may push the viewport sideways on any screen. Wide content
+     (tables, wide grids) scrolls inside its own overflow-x-auto container. */
+  overflow-x: hidden;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, Arial, sans-serif;
-  /* Backstop: nothing may push the whole page sideways. Wide content
-     (tables, wide grids) scrolls inside its own overflow-x-auto container. */
   overflow-x: hidden;
+  /* Long unbroken tokens (SKUs, URLs, emails) wrap instead of forcing width. */
+  overflow-wrap: break-word;
 }
 
 /* Reusable component classes */
