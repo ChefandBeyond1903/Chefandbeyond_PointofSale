@@ -143,6 +143,7 @@ export const saleCustomerSchema = z.object({
 export const saleCreateSchema = z.object({
   items: z.array(saleItemSchema).min(1),
   orderDiscountCents: z.number().int().min(0).default(0),
+  shippingCents: z.number().int().min(0).default(0),
   paymentMethod: z.enum(["CASH", "CARD"]),
   tenderedCents: z.number().int().min(0).default(0),
   // Staff credited with the sale. Omit to credit the signed-in operator.

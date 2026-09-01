@@ -185,6 +185,8 @@ model Sale {
   discountCents Int    @default(0)
   taxCents      Int    @default(0)
   taxRateBps    Int    @default(0)
+  // Flat shipping/delivery charge added to the invoice. Not taxed.
+  shippingCents Int    @default(0)
   totalCents    Int
   paymentMethod String
   tenderedCents Int    @default(0)

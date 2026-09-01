@@ -24,7 +24,8 @@ export interface ComputedSale {
   discountCents: number; // total discounts (line + order)
   taxRateBps: number; // the store rate applied to every line
   taxCents: number;
-  totalCents: number; // subtotal - discount + tax
+  shippingCents: number; // flat shipping charge, not taxed
+  totalCents: number; // subtotal - discount + tax + shipping
 }
 
 /**
@@ -37,6 +38,7 @@ export function computeSale(
   inputs: PricedInput[],
   orderDiscountCents: number,
   taxRateBps: number,
+  shippingCents = 0,
 ): ComputedSale {
   const base = inputs.map((i) => i.unitPriceCents * i.quantity);
   const subtotalCents = base.reduce((a, b) => a + b, 0);
@@ -81,9 +83,18 @@ export function computeSale(
     const net = afterLine[idx] - orderShare[idx];
     return sum + taxOn(net, taxRateBps);
   }, 0);
-  const totalCents = subtotalCents - discountCents + taxCents;
+  const shipping = Math.max(0, Math.round(shippingCents));
+  const totalCents = subtotalCents - discountCents + taxCents + shipping;
 
-  return { lines, subtotalCents, discountCents, taxRateBps, taxCents, totalCents };
+  return {
+    lines,
+    subtotalCents,
+    discountCents,
+    taxRateBps,
+    taxCents,
+    shippingCents: shipping,
+    totalCents,
+  };
 }
 
 function clamp(n: number, min: number, max: number): number {

@@ -69,6 +69,7 @@ export default function RegisterPage() {
   const [orderDiscountCents, setOrderDiscountCents] = useState(0);
   const [orderDiscPercent, setOrderDiscPercent] = useState(0);
   const [orderDiscMode, setOrderDiscMode] = useState<DiscMode>("AMOUNT");
+  const [shippingCents, setShippingCents] = useState(0);
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [custId, setCustId] = useState<string | null>(null);
@@ -305,7 +306,8 @@ export default function RegisterPage() {
     });
 
     const discount = lineAdjust + orderDisc;
-    const total = subtotal - discount + tax;
+    const shipping = Math.max(0, shippingCents);
+    const total = subtotal - discount + tax + shipping;
     // "Customer total saving" vs. catalog list — only when it's actually a saving.
     const savedCents = Math.max(0, discount);
     const overListCents = Math.max(0, -discount);
@@ -314,6 +316,7 @@ export default function RegisterPage() {
       subtotal,
       discount,
       tax,
+      shipping,
       total,
       umrpViolations,
       sumAfterLine,
@@ -322,7 +325,7 @@ export default function RegisterPage() {
       overListCents,
       savedPct,
     };
-  }, [cart, orderDiscountCents, orderDiscPercent, orderDiscMode, storeTaxRateBps]);
+  }, [cart, orderDiscountCents, orderDiscPercent, orderDiscMode, storeTaxRateBps, shippingCents]);
 
   function addToCart(product: Product) {
     setError(null);
@@ -427,6 +430,7 @@ export default function RegisterPage() {
     setOrderDiscountCents(0);
     setOrderDiscPercent(0);
     setOrderDiscMode("AMOUNT");
+    setShippingCents(0);
     clearCustomer();
   }
 
@@ -459,6 +463,7 @@ export default function RegisterPage() {
             unitPriceCents: l.unitPriceCents,
           })),
           orderDiscountCents: totals.orderDiscountResolved,
+          shippingCents: totals.shipping,
           paymentMethod,
           tenderedCents,
           ...(salespersonId && salespersonId !== meId ? { salespersonId } : {}),
@@ -868,6 +873,14 @@ export default function RegisterPage() {
               label={`Tax${storeTaxRateBps != null ? ` (${formatBps(storeTaxRateBps)})` : ""}`}
               value={formatMoney(totals.tax)}
             />
+            <div className="flex items-center justify-between">
+              <span className="text-zinc-500">Shipping</span>
+              <MoneyInput
+                cents={shippingCents}
+                onCentsChange={setShippingCents}
+                className="input h-8 w-24 px-2 text-right"
+              />
+            </div>
             <div className="flex items-center justify-between border-t border-zinc-100 pt-2 text-base font-bold">
               <span>Total</span>
               <span>{formatMoney(totals.total)}</span>
@@ -1192,6 +1205,12 @@ function ReceiptModal({
             <span>Tax{sale.taxRateBps ? ` (${formatBps(sale.taxRateBps)})` : ""}</span>
             <span>{formatMoney(sale.taxCents)}</span>
           </div>
+          {sale.shippingCents > 0 && (
+            <div className="flex justify-between">
+              <span>Shipping</span>
+              <span>{formatMoney(sale.shippingCents)}</span>
+            </div>
+          )}
           <div className="flex justify-between font-bold">
             <span>Total</span>
             <span>{formatMoney(sale.totalCents)}</span>

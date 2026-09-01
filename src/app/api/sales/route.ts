@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const computed = computeSale(priced, body.orderDiscountCents, taxRateBps);
+    const computed = computeSale(priced, body.orderDiscountCents, taxRateBps, body.shippingCents);
 
     // UMRP floor: after every discount, no line may fall below the product's
     // minimum resale price. Hard stop — this is never bypassable.
@@ -216,6 +216,7 @@ export async function POST(req: NextRequest) {
           discountCents: computed.discountCents,
           taxCents: computed.taxCents,
           taxRateBps: computed.taxRateBps,
+          shippingCents: computed.shippingCents,
           totalCents: computed.totalCents,
           paymentMethod: body.paymentMethod,
           tenderedCents,
