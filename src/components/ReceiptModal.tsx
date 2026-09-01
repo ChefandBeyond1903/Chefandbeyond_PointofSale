@@ -58,8 +58,6 @@ export function ReceiptModal({
     };
   }, [companyProp]);
 
-  const header = company?.name?.trim() || "CB POS";
-
   return (
     <div
       className="fixed inset-0 z-[60] grid place-items-center overflow-y-auto bg-black/40 p-4"
@@ -91,7 +89,6 @@ export function ReceiptModal({
                   e.currentTarget.style.display = "none";
                 }}
               />
-              <p className="text-center text-sm font-bold">{header}</p>
               {sale.storeNameSnapshot ? (
                 <p className="text-center text-zinc-500">{sale.storeNameSnapshot}</p>
               ) : null}
@@ -129,10 +126,12 @@ export function ReceiptModal({
                 <span>Subtotal</span>
                 <span>{formatMoney(sale.subtotalCents)}</span>
               </div>
-              <div className="flex justify-between">
-                <span>Discount</span>
-                <span>− {formatMoney(sale.discountCents)}</span>
-              </div>
+              {sale.discountCents !== 0 && (
+                <div className="flex justify-between">
+                  <span>Discount</span>
+                  <span>− {formatMoney(sale.discountCents)}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span>Tax{sale.taxRateBps ? ` (${formatBps(sale.taxRateBps)})` : ""}</span>
                 <span>{formatMoney(sale.taxCents)}</span>
@@ -147,20 +146,6 @@ export function ReceiptModal({
                 <span>Total</span>
                 <span>{formatMoney(sale.totalCents)}</span>
               </div>
-              {(() => {
-                const listSub = sale.listSubtotalCents || sale.subtotalCents;
-                const saved = listSub - (sale.subtotalCents - sale.discountCents);
-                if (saved <= 0) return null;
-                return (
-                  <div className="flex justify-between font-bold">
-                    <span>You saved</span>
-                    <span>
-                      {formatMoney(saved)}
-                      {listSub > 0 ? ` (${Math.round((saved / listSub) * 100)}% off)` : ""}
-                    </span>
-                  </div>
-                );
-              })()}
               <div className="flex justify-between">
                 <span>{sale.paymentMethod}</span>
                 <span>{formatMoney(sale.tenderedCents)}</span>
@@ -172,6 +157,17 @@ export function ReceiptModal({
                 </div>
               )}
               <p className="mt-3 text-center text-zinc-500">Thank you!</p>
+              {(() => {
+                const listSub = sale.listSubtotalCents || sale.subtotalCents;
+                const saved = listSub - (sale.subtotalCents - sale.discountCents);
+                if (saved <= 0) return null;
+                return (
+                  <p className="mt-1 text-center font-bold">
+                    You saved {formatMoney(saved)}
+                    {listSub > 0 ? ` (${Math.round((saved / listSub) * 100)}% off)` : ""}
+                  </p>
+                );
+              })()}
               <hr className="my-2 border-dashed" />
               <p className="text-[10px] leading-snug text-zinc-500">{INVOICE_FINE_PRINT}</p>
             </div>

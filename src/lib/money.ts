@@ -3,7 +3,9 @@
 export function formatMoney(cents: number): string {
   const sign = cents < 0 ? "-" : "";
   const abs = Math.abs(Math.round(cents));
-  return `${sign}$${(abs / 100).toFixed(2)}`;
+  const dollars = Math.floor(abs / 100).toLocaleString("en-US");
+  const rem = String(abs % 100).padStart(2, "0");
+  return `${sign}$${dollars}.${rem}`;
 }
 
 /** Parse a user-entered dollar string ("12.5", "$12.50", "") into integer cents. */
