@@ -65,6 +65,10 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  // The catalog (category filters + product grid) is hidden by default so the
+  // register opens straight to the search box and the current sale. A search
+  // always reveals its results regardless.
+  const [catalogOpen, setCatalogOpen] = useState(false);
 
   const [cart, setCart] = useState<CartLine[]>([]);
   const [orderDiscountCents, setOrderDiscountCents] = useState(0);
@@ -496,7 +500,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="grid w-full flex-1 gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_460px]">
+    <div className="grid w-full flex-1 gap-3 p-3 sm:p-4 lg:grid-cols-[minmax(0,1fr)_460px] lg:gap-4">
       {/* Catalog */}
       <section className="flex min-h-0 flex-col">
         <div className="mb-3 flex gap-2">
@@ -509,55 +513,87 @@ export default function RegisterPage() {
             onKeyDown={onSearchKeyDown}
             autoFocus
           />
-        </div>
-
-        <div className="mb-3 flex flex-wrap gap-1.5">
           <button
-            onClick={() => setActiveCategory(null)}
-            className={activeCategory === null ? "btn-primary" : "btn-secondary"}
+            type="button"
+            onClick={() => setCatalogOpen((o) => !o)}
+            aria-expanded={catalogOpen}
+            className="btn-secondary shrink-0"
           >
-            All
+            {catalogOpen ? "Hide catalog" : "Catalog"}
           </button>
-          {categories.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => setActiveCategory(c.id)}
-              className={activeCategory === c.id ? "btn-primary" : "btn-secondary"}
-            >
-              {c.name}
-            </button>
-          ))}
         </div>
 
-        {loading ? (
-          <p className="text-sm text-zinc-500">Loading catalog…</p>
-        ) : (
-          <div className="grid grid-cols-2 gap-2 overflow-y-auto pb-4 sm:grid-cols-3 xl:grid-cols-4">
-            {filtered.map((p) => {
-              const low = p.trackStock && p.stock <= 0;
-              return (
+        {isSearching || catalogOpen ? (
+          <>
+            <div className="mb-3 flex flex-wrap gap-1.5">
+              <button
+                onClick={() => setActiveCategory(null)}
+                className={activeCategory === null ? "btn-primary" : "btn-secondary"}
+              >
+                All
+              </button>
+              {categories.map((c) => (
                 <button
-                  key={p.id}
-                  onClick={() => addToCart(p)}
-                  className="card flex flex-col items-start gap-1 p-3 text-left transition-transform hover:-translate-y-0.5 hover:shadow-md"
+                  key={c.id}
+                  onClick={() => setActiveCategory(c.id)}
+                  className={activeCategory === c.id ? "btn-primary" : "btn-secondary"}
                 >
-                  <span className="line-clamp-2 text-sm font-medium">{p.name}</span>
-                  <span className="text-xs text-zinc-400">{p.sku}</span>
-                  <span className="mt-auto text-sm font-semibold text-indigo-600">
-                    {formatMoney(p.priceCents)}
-                  </span>
-                  {p.trackStock && (
-                    <span className={`text-[11px] ${low ? "text-red-500" : "text-zinc-400"}`}>
-                      {p.stock} in stock
-                    </span>
-                  )}
+                  {c.name}
                 </button>
-              );
-            })}
-            {filtered.length === 0 && (
-              <p className="col-span-full text-sm text-zinc-500">No matching products.</p>
+              ))}
+              {catalogOpen && !isSearching && (
+                <button
+                  onClick={toggleBrowseAll}
+                  className={browseAll ? "btn-primary" : "btn-secondary"}
+                >
+                  {browseAll ? "Favorites only" : "Browse all"}
+                </button>
+              )}
+            </div>
+
+            {loading ? (
+              <p className="text-sm text-zinc-500">Loading catalog…</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-2 overflow-y-auto pb-4 sm:grid-cols-3 xl:grid-cols-4">
+                {filtered.map((p) => {
+                  const low = p.trackStock && p.stock <= 0;
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => addToCart(p)}
+                      className="card flex flex-col items-start gap-1 p-3 text-left transition-transform hover:-translate-y-0.5 hover:shadow-md"
+                    >
+                      <span className="line-clamp-2 text-sm font-medium">{p.name}</span>
+                      <span className="text-xs text-zinc-400">{p.sku}</span>
+                      <span className="mt-auto text-sm font-semibold text-indigo-600">
+                        {formatMoney(p.priceCents)}
+                      </span>
+                      {p.trackStock && (
+                        <span className={`text-[11px] ${low ? "text-red-500" : "text-zinc-400"}`}>
+                          {p.stock} in stock
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+                {filtered.length === 0 && (
+                  <p className="col-span-full text-sm text-zinc-500">No matching products.</p>
+                )}
+              </div>
             )}
-          </div>
+          </>
+        ) : (
+          <p className="text-sm text-zinc-400">
+            Search or scan to add an item, or{" "}
+            <button
+              type="button"
+              onClick={() => setCatalogOpen(true)}
+              className="font-medium text-indigo-600 hover:underline"
+            >
+              open the catalog
+            </button>
+            .
+          </p>
         )}
       </section>
 
