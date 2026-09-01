@@ -9,6 +9,10 @@ import type { Customer, PurchaseOrder, PurchaseOrderStatus, Store, Vendor } from
 
 const STATUSES: PurchaseOrderStatus[] = ["OPEN", "CLOSED", "SENT", "RECEIVED", "CANCELLED"];
 
+// Every PO is mailed from Chef and Beyond, so the mailing address is fixed.
+const COMPANY_MAILING_ADDRESS =
+  "Chef and Beyond\n1010 Foster Ave.\nNashville, TN 37210\nPhone: 615-891-7110";
+
 type ItemRow = {
   key: string;
   productId: string | null;
@@ -88,7 +92,7 @@ export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readO
   const [email, setEmail] = useState("");
   const [ccBcc, setCcBcc] = useState("");
   const [showCcBcc, setShowCcBcc] = useState(false);
-  const [mailingAddress, setMailingAddress] = useState("");
+  const [mailingAddress, setMailingAddress] = useState(COMPANY_MAILING_ADDRESS);
   const [shipTo, setShipTo] = useState("");
   const [shippingAddress, setShippingAddress] = useState("");
   const [poDate, setPoDate] = useState(todayISO());
@@ -112,7 +116,7 @@ export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readO
     setEmail(po.email);
     setCcBcc(po.ccBcc);
     setShowCcBcc(!!po.ccBcc);
-    setMailingAddress(po.mailingAddress);
+    setMailingAddress(po.mailingAddress || COMPANY_MAILING_ADDRESS);
     setShipTo(po.shipTo);
     setShippingAddress(po.shippingAddress);
     setPoDate(toDateInput(po.poDate) || todayISO());
@@ -163,20 +167,18 @@ export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readO
     })();
   }, [id, isEdit, applyPo]);
 
-  // Vendor selection auto-fills mailing address / email.
+  // Vendor selection auto-fills the email. The mailing address is always
+  // Chef and Beyond's, so it is left untouched here.
   function onVendorChange(name: string) {
     setVendor(name);
-    const match = vendors.find((v) => v.name.toLowerCase() === name.trim().toLowerCase());
+    const match = vendors.find((v) => v.name === name);
     const prev = prevVendorRef.current;
-    if (match) {
-      if (!mailingAddress || (prev && mailingAddress === prev.address)) {
-        setMailingAddress(match.address);
-      }
-      if (!email || (prev && email === prev.email)) setEmail(match.email);
-    }
+    if (match && (!email || (prev && email === prev.email))) setEmail(match.email);
     prevVendorRef.current = match ?? null;
   }
 
+  // Free-typed text in the Product/Service box: match an exact product name if
+  // there is one, otherwise keep the typed text as a plain line.
   function onProductPick(rowKey: string, name: string) {
     const match = products.find((p) => p.name.toLowerCase() === name.trim().toLowerCase());
     setItemLines((rows) =>
@@ -191,6 +193,25 @@ export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readO
               description: match?.description ?? r.description,
               rateCents: match ? match.costCents : r.rateCents,
               quantity: r.quantity || (match ? 1 : 0),
+            },
+      ),
+    );
+  }
+
+  // A product chosen from the search dropdown (by name or model number / SKU).
+  function onProductSelect(rowKey: string, p: ProductLite) {
+    setItemLines((rows) =>
+      rows.map((r) =>
+        r.key !== rowKey
+          ? r
+          : {
+              ...r,
+              productService: p.name,
+              productId: p.id,
+              sku: p.sku,
+              description: p.description ?? r.description,
+              rateCents: p.costCents,
+              quantity: r.quantity || 1,
             },
       ),
     );
@@ -310,7 +331,7 @@ export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readO
     setPoNumber(defaultPoNumber());
     setEmail("");
     setCcBcc("");
-    setMailingAddress("");
+    setMailingAddress(COMPANY_MAILING_ADDRESS);
     setShipTo("");
     setShippingAddress("");
     setPoDate(todayISO());
@@ -355,18 +376,21 @@ export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readO
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label className="label">Vendor *</label>
-                <input
+                <select
                   className="input"
-                  list="po-vendors"
-                  placeholder="Choose a vendor"
                   value={vendor}
                   onChange={(e) => onVendorChange(e.target.value)}
-                />
-                <datalist id="po-vendors">
+                >
+                  <option value="">Choose a vendor…</option>
+                  {vendor && !vendors.some((v) => v.name === vendor) && (
+                    <option value={vendor}>{vendor}</option>
+                  )}
                   {vendors.map((v) => (
-                    <option key={v.id} value={v.name} />
+                    <option key={v.id} value={v.name}>
+                      {v.name}
+                    </option>
                   ))}
-                </datalist>
+                </select>
               </div>
               <div>
                 <label className="label">Email</label>
@@ -438,6 +462,9 @@ export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readO
               value={mailingAddress}
               onChange={(e) => setMailingAddress(e.target.value)}
             />
+            <p className="mt-0.5 text-[11px] text-zinc-400">
+              Defaults to Chef and Beyond&apos;s address on every PO.
+            </p>
           </div>
           <div>
             <label className="label">Ship to</label>
@@ -597,11 +624,11 @@ export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readO
                   </td>
                   <td className="py-1 text-zinc-400">{i + 1}</td>
                   <td className="py-1 pr-2">
-                    <input
-                      className="input h-8"
-                      list="po-products"
+                    <ProductPicker
                       value={row.productService}
-                      onChange={(e) => onProductPick(row.key, e.target.value)}
+                      products={products}
+                      onText={(t) => onProductPick(row.key, t)}
+                      onSelect={(p) => onProductSelect(row.key, p)}
                     />
                   </td>
                   <td className="py-1 pr-2">
@@ -695,11 +722,6 @@ export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readO
             })}
           </tbody>
         </table>
-        <datalist id="po-products">
-          {products.map((p) => (
-            <option key={p.id} value={p.name} />
-          ))}
-        </datalist>
       </LineSection>
 
       {/* ============ FOOTER ============ */}
@@ -807,5 +829,105 @@ function LineSection({
         </>
       )}
     </section>
+  );
+}
+
+/**
+ * Product/Service cell: type a product name OR a model number (matched against
+ * the SKU) and pick from the results. The dropdown is fixed-positioned so it is
+ * not clipped by the line table's horizontal scroll container.
+ */
+function ProductPicker({
+  value,
+  products,
+  onText,
+  onSelect,
+}: {
+  value: string;
+  products: ProductLite[];
+  onText: (text: string) => void;
+  onSelect: (p: ProductLite) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [rect, setRect] = useState<{ left: number; top: number; width: number } | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
+
+  const matches = useMemo(() => {
+    const terms = value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (!terms.length) return [];
+    return products
+      .filter((p) => {
+        const hay = `${p.name} ${p.sku}`.toLowerCase();
+        return terms.every((t) => hay.includes(t));
+      })
+      .slice(0, 30);
+  }, [products, value]);
+
+  useEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const r = inputRef.current?.getBoundingClientRect();
+      if (r) setRect({ left: r.left, top: r.bottom + 2, width: r.width });
+    };
+    place();
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    return () => {
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (
+        !inputRef.current?.contains(e.target as Node) &&
+        !boxRef.current?.contains(e.target as Node)
+      ) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  return (
+    <>
+      <input
+        ref={inputRef}
+        className="input h-8"
+        placeholder="Name or model no."
+        value={value}
+        onChange={(e) => {
+          onText(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+      />
+      {open && rect && matches.length > 0 && (
+        <div
+          ref={boxRef}
+          className="fixed z-50 max-h-64 overflow-auto rounded-md border border-zinc-200 bg-white text-sm shadow-lg"
+          style={{ left: rect.left, top: rect.top, width: Math.max(rect.width, 340) }}
+        >
+          {matches.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              className="block w-full px-3 py-1.5 text-left hover:bg-indigo-50"
+              onClick={() => {
+                onSelect(p);
+                setOpen(false);
+              }}
+            >
+              <span className="font-medium">{p.name}</span>
+              <span className="ml-2 text-xs text-zinc-400">{p.sku}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
