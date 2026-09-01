@@ -1172,7 +1172,7 @@ function ReceiptModal({
         <div id="receipt" className="rounded-md border border-zinc-200 p-4 font-mono text-xs">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/logo.svg"
+            src="/logo-header.webp"
             alt="Chef and Beyond"
             className="mx-auto mb-2 h-10 w-auto"
             onError={(e) => {
