@@ -4,18 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
 import { InvoiceModal } from "@/components/InvoiceModal";
+import { DateRangePicker } from "@/components/DateRangePicker";
+import { resolvePreset, type DateRange } from "@/lib/dateRange";
 import type { ProfitRow, ReportSummary } from "@/lib/types";
-
-type RangeKey = "today" | "7d" | "30d";
-
-function rangeFor(key: RangeKey): { from: string; to: string } {
-  const to = new Date();
-  const from = new Date();
-  if (key === "today") from.setHours(0, 0, 0, 0);
-  else if (key === "7d") from.setDate(from.getDate() - 7);
-  else from.setDate(from.getDate() - 30);
-  return { from: from.toISOString(), to: to.toISOString() };
-}
 
 export function ReportsView({
   isAdmin = false,
@@ -24,7 +15,7 @@ export function ReportsView({
   isAdmin?: boolean;
   limited?: boolean;
 }) {
-  const [rangeKey, setRangeKey] = useState<RangeKey>("today");
+  const [range, setRange] = useState<DateRange>(() => resolvePreset("today"));
   const [storeId, setStoreId] = useState<string>(""); // "" = all stores (admin only)
   const [data, setData] = useState<ReportSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -32,12 +23,11 @@ export function ReportsView({
   const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
 
   const load = useCallback(
-    async (key: RangeKey, store: string) => {
+    async (from: Date, to: Date, store: string) => {
       setLoading(true);
       setError(null);
       try {
-        const { from, to } = rangeFor(key);
-        const qs = new URLSearchParams({ from, to });
+        const qs = new URLSearchParams({ from: from.toISOString(), to: to.toISOString() });
         if (store) qs.set("storeId", store);
         const res = await api<ReportSummary>(`/api/reports/summary?${qs.toString()}`);
         setData(res);
@@ -51,8 +41,8 @@ export function ReportsView({
   );
 
   useEffect(() => {
-    load(rangeKey, storeId);
-  }, [load, rangeKey, storeId]);
+    load(range.from, range.to, storeId);
+  }, [load, range, storeId]);
 
   return (
     <div className="w-full flex-1 p-4">
@@ -76,19 +66,7 @@ export function ReportsView({
               ))}
             </select>
           )}
-          <div className="flex gap-1 rounded-md bg-zinc-100 p-1 text-sm">
-            {(["today", "7d", "30d"] as const).map((k) => (
-              <button
-                key={k}
-                onClick={() => setRangeKey(k)}
-                className={`rounded px-3 py-1 font-medium ${
-                  rangeKey === k ? "bg-white shadow-sm" : "text-zinc-500"
-                }`}
-              >
-                {k === "today" ? "Today" : k === "7d" ? "Last 7 days" : "Last 30 days"}
-              </button>
-            ))}
-          </div>
+          <DateRangePicker defaultPreset="today" onChange={setRange} />
         </div>
       </div>
 
