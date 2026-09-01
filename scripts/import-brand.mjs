@@ -24,7 +24,7 @@ const prisma = new PrismaClient();
 
 // Ordered keyword rules: first match wins. Specific rules above generic ones.
 const CATEGORY_RULES = [
-  [/additional .*(shelf|divider)|replacement cartridge|filter paper|pan rack|\bcaster|flex hose|bottle organizer|wall mount kit|griddle cleaner|coil cleaner|water filter/i, "Parts & Accessories"],
+  [/additional .*(shelf|divider)|replacement cartridge|filter paper|pan rack|\bcaster|flex hose|bottle organizer|wall mount kit|griddle cleaner|coil cleaner|water filter|faucet|drainboard|dunnage rack|foot valve|knee valve|waste valve|overflow pipe|table legs|leg set|side splash|pot rack|hinge bracket|hose kit|sneeze guard|slant rack|security unit|utility (cart|transport)|bussing|\bwheel\b|\binsert\b|shelf mat|shelf clip|shelving post|wall bracket|(refrigerator|freezer) rack/i, "Parts & Accessories"],
   [/walk-?in/i, "Walk-In Coolers & Freezers"],
   [/ice (machine|maker)|ice storage bin|ice bin/i, "Ice Machines & Bins"],
   [/blast chiller/i, "Blast Chillers"],
@@ -35,13 +35,14 @@ const CATEGORY_RULES = [
   [/pizza prep|sandwich|salad prep|mega top|prep table/i, "Prep Tables"],
   [/chef base|worktop|work top|undercounter|under-counter/i, "Undercounter & Worktop Refrigeration"],
   [/reach-?in|refrigerator|freezer/i, "Reach-In Refrigeration"],
-  [/combi oven|convection oven/i, "Ovens"],
+  [/combi oven|convection oven|pizza oven/i, "Ovens"],
   [/fryer/i, "Fryers"],
-  [/griddle|charbroiler|char-broiler|cheesemelter|salamander/i, "Griddles & Charbroilers"],
-  [/heated holding|food warmer|food cooker\/warmer|rice cooker|steam table|heated display/i, "Holding & Warming"],
-  [/range|wok|hotplate|hot plate|stock pot|stove/i, "Ranges & Cooking"],
-  [/work table|equipment stand|\bsink\b|compartment sink/i, "Work Tables & Sinks"],
-  [/overshelf|wall shelf|wall-mounted shel|shelving|\bshelves\b/i, "Shelving"],
+  [/griddle|charbroiler|char-broiler|cheesemelter|salamander|portable grill/i, "Griddles & Charbroilers"],
+  [/heated holding|food warmer|food (pan )?warmer|food cooker\/warmer|rice cooker|steam table|heated display|hot food (table|serving)|hot dog steamer|warming drawer|chip warmer|proofer cabinet|heater proofer/i, "Holding & Warming"],
+  [/meat slicer|planetary|dough mixer|\bmixer\b|food processor/i, "Food Prep Equipment"],
+  [/range|wok|hotplate|hot plate|stock pot|stove|gas burner/i, "Ranges & Cooking"],
+  [/work table|equipment stand|\bsink\b|compartment sink|dishtable|dish table/i, "Work Tables & Sinks"],
+  [/overshelf|undershelf|wall shelf|wall-mounted shel|shelving|\bshelves\b|\bshelf\b/i, "Shelving"],
   [/shelf|caster|pan rack|flex hose|bottle organizer|wall mount kit|cleaner|water filter|cartridge|wire divider/i, "Parts & Accessories"],
 ];
 
