@@ -264,7 +264,10 @@ model PurchaseOrder {
   poNumber      String  @unique
   vendor        String
   status        String  @default("OPEN")
+  // subtotalCents = every item line amount + shippingCents.
   subtotalCents Int     @default(0)
+  // Flat freight/shipping charge entered on the item-details section.
+  shippingCents Int     @default(0)
   note          String?
 
   // Header

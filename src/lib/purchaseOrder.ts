@@ -30,10 +30,14 @@ export function itemAmountCents(l: Pick<ItemLine, "quantity" | "rateCents">): nu
   return Math.round(l.quantity * l.rateCents);
 }
 
-export function computeSubtotalCents(categoryLines: CategoryLine[], itemLines: ItemLine[]): number {
+export function computeSubtotalCents(
+  categoryLines: CategoryLine[],
+  itemLines: ItemLine[],
+  shippingCents = 0,
+): number {
   const cat = categoryLines.reduce((s, l) => s + l.amountCents, 0);
   const item = itemLines.reduce((s, l) => s + itemAmountCents(l), 0);
-  return cat + item;
+  return cat + item + shippingCents;
 }
 
 /** Nested `create` payloads for the two line tables. */

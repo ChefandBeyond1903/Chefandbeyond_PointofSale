@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
 import { MoneyInput } from "@/components/MoneyInput";
-import type { PurchaseOrder, PurchaseOrderStatus, Vendor } from "@/lib/types";
+import type { Customer, PurchaseOrder, PurchaseOrderStatus, Store, Vendor } from "@/lib/types";
 
 const STATUSES: PurchaseOrderStatus[] = ["OPEN", "CLOSED", "SENT", "RECEIVED", "CANCELLED"];
 
@@ -17,15 +17,6 @@ type ItemRow = {
   description: string;
   quantity: number;
   rateCents: number;
-  customerProject: string;
-  klass: string;
-};
-
-type CatRow = {
-  key: string;
-  category: string;
-  description: string;
-  amountCents: number;
   customerProject: string;
   klass: string;
 };
@@ -50,15 +41,6 @@ const blankItem = (): ItemRow => ({
   description: "",
   quantity: 0,
   rateCents: 0,
-  customerProject: "",
-  klass: "",
-});
-
-const blankCat = (): CatRow => ({
-  key: uid(),
-  category: "",
-  description: "",
-  amountCents: 0,
   customerProject: "",
   klass: "",
 });
@@ -93,6 +75,8 @@ export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readO
 
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [products, setProducts] = useState<ProductLite[]>([]);
+  const [stores, setStores] = useState<Store[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -112,19 +96,11 @@ export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readO
   const [shipVia, setShipVia] = useState("");
   const [storeName, setStoreName] = useState("");
   const [permitNumber, setPermitNumber] = useState("");
-  const [messageToCustomer, setMessageToCustomer] = useState("");
-  const [poRef, setPoRef] = useState("");
-  const [salesRep, setSalesRep] = useState("");
-  const [mobileNumber, setMobileNumber] = useState("");
-  const [tags, setTags] = useState<string[]>([]);
-  const [tagDraft, setTagDraft] = useState("");
   const [messageToVendor, setMessageToVendor] = useState("");
   const [memo, setMemo] = useState("");
-  const [catLines, setCatLines] = useState<CatRow[]>([blankCat(), blankCat()]);
+  const [shippingCents, setShippingCents] = useState(0);
   const [itemLines, setItemLines] = useState<ItemRow[]>([blankItem(), blankItem()]);
 
-  const [headerCollapsed, setHeaderCollapsed] = useState(false);
-  const [catOpen, setCatOpen] = useState(true);
   const [itemOpen, setItemOpen] = useState(true);
 
   const prevVendorRef = useRef<Vendor | null>(null);
@@ -144,28 +120,9 @@ export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readO
     setShipVia(po.shipVia);
     setStoreName(po.storeName);
     setPermitNumber(po.permitNumber);
-    setMessageToCustomer(po.messageToCustomer);
-    setPoRef(po.poRef);
-    setSalesRep(po.salesRep);
-    setMobileNumber(po.mobileNumber);
-    try {
-      const t = JSON.parse(po.tags);
-      setTags(Array.isArray(t) ? t : []);
-    } catch {
-      setTags([]);
-    }
     setMessageToVendor(po.messageToVendor);
     setMemo(po.memo);
-    setCatLines(
-      (po.categoryLines ?? []).map((l) => ({
-        key: uid(),
-        category: l.category,
-        description: l.description,
-        amountCents: l.amountCents,
-        customerProject: l.customerProject,
-        klass: l.klass,
-      })),
-    );
+    setShippingCents(po.shippingCents ?? 0);
     setItemLines(
       (po.items ?? []).map((l) => ({
         key: uid(),
@@ -184,12 +141,16 @@ export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readO
   useEffect(() => {
     (async () => {
       try {
-        const [v, p] = await Promise.all([
+        const [v, p, s, c] = await Promise.all([
           api<{ vendors: Vendor[] }>("/api/vendors"),
           api<{ products: ProductLite[] }>("/api/products?take=5000"),
+          api<{ stores: Store[] }>("/api/stores"),
+          api<{ customers: Customer[] }>("/api/customers"),
         ]);
         setVendors(v.vendors);
         setProducts(p.products);
+        setStores(s.stores);
+        setCustomers(c.customers);
         if (isEdit) {
           const res = await api<{ purchaseOrder: PurchaseOrder }>(`/api/purchase-orders/${id}`);
           applyPo(res.purchaseOrder);
@@ -239,8 +200,17 @@ export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readO
     () => itemLines.reduce((s, l) => s + Math.round(l.quantity * l.rateCents), 0),
     [itemLines],
   );
-  const catTotal = useMemo(() => catLines.reduce((s, l) => s + l.amountCents, 0), [catLines]);
-  const grandTotal = itemTotal + catTotal;
+  const grandTotal = itemTotal + shippingCents;
+
+  // Pick a store or customer for "Ship to"; fill in their address (still editable).
+  function onShipToPick(name: string) {
+    setShipTo(name);
+    const addr =
+      stores.find((s) => s.name === name)?.address ||
+      customers.find((c) => c.name === name)?.address ||
+      "";
+    if (addr) setShippingAddress(addr);
+  }
 
   // Free-freight minimum for the chosen vendor. Ordering below it warns only.
   const selectedVendor = useMemo(
@@ -250,13 +220,6 @@ export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readO
   const freightMinCents = selectedVendor?.freightMinimumCents ?? 0;
   const freightShortfallCents =
     freightMinCents > 0 && grandTotal < freightMinCents ? freightMinCents - grandTotal : 0;
-
-  function addTag(raw: string) {
-    const t = raw.trim();
-    if (!t) return;
-    setTags((cur) => (cur.includes(t) ? cur : [...cur, t]));
-    setTagDraft("");
-  }
 
   function buildPayload(overrideStatus?: PurchaseOrderStatus) {
     return {
@@ -273,22 +236,17 @@ export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readO
       shipVia,
       storeName,
       permitNumber,
-      messageToCustomer,
-      poRef,
-      salesRep,
-      mobileNumber,
-      tags,
       messageToVendor,
       memo,
-      categoryLines: catLines
-        .filter((l) => l.category || l.description || l.amountCents)
-        .map((l) => ({
-          category: l.category,
-          description: l.description,
-          amountCents: l.amountCents,
-          customerProject: l.customerProject,
-          klass: l.klass,
-        })),
+      shippingCents,
+      // These header fields and the category-line section were removed from the
+      // form; send empties so a save clears any legacy values.
+      messageToCustomer: "",
+      poRef: "",
+      salesRep: "",
+      mobileNumber: "",
+      tags: [],
+      categoryLines: [],
       itemLines: itemLines
         .filter((l) => l.productService || l.description || l.quantity || l.rateCents)
         .map((l) => ({
@@ -360,14 +318,9 @@ export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readO
     setShipVia("");
     setStoreName("");
     setPermitNumber("");
-    setMessageToCustomer("");
-    setPoRef("");
-    setSalesRep("");
-    setMobileNumber("");
-    setTags([]);
     setMessageToVendor("");
     setMemo("");
-    setCatLines([blankCat(), blankCat()]);
+    setShippingCents(0);
     setItemLines([blankItem(), blankItem()]);
   }
 
@@ -476,274 +429,106 @@ export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readO
           </div>
         )}
 
-        {!headerCollapsed && (
-          <>
-            <div className="mt-4 grid gap-4 lg:grid-cols-3">
-              <div>
-                <label className="label">Mailing address</label>
-                <textarea
-                  className="input"
-                  rows={4}
-                  value={mailingAddress}
-                  onChange={(e) => setMailingAddress(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="label">Ship to</label>
-                <input
-                  className="input mb-2"
-                  placeholder="Ship-to name"
-                  value={shipTo}
-                  onChange={(e) => setShipTo(e.target.value)}
-                />
-                <textarea
-                  className="input"
-                  rows={3}
-                  placeholder="Shipping address"
-                  value={shippingAddress}
-                  onChange={(e) => setShippingAddress(e.target.value)}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label">Purchase Order date</label>
-                  <input
-                    type="date"
-                    className="input"
-                    value={poDate}
-                    onChange={(e) => setPoDate(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="label">Due date</label>
-                  <input
-                    type="date"
-                    className="input"
-                    value={dueDate}
-                    onChange={(e) => setDueDate(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="label">Ship Via</label>
-                  <input className="input" value={shipVia} onChange={(e) => setShipVia(e.target.value)} />
-                </div>
-                <div>
-                  <label className="label">PO no.</label>
-                  <input
-                    className="input"
-                    value={poNumber}
-                    onChange={(e) => setPoNumber(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="label">Store</label>
-                  <input
-                    className="input"
-                    value={storeName}
-                    onChange={(e) => setStoreName(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="label">Permit no.</label>
-                  <input
-                    className="input"
-                    value={permitNumber}
-                    onChange={(e) => setPermitNumber(e.target.value)}
-                  />
-                </div>
-              </div>
+        <div className="mt-4 grid gap-4 lg:grid-cols-3">
+          <div>
+            <label className="label">Mailing address</label>
+            <textarea
+              className="input"
+              rows={4}
+              value={mailingAddress}
+              onChange={(e) => setMailingAddress(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="label">Ship to</label>
+            <select
+              className="input mb-2"
+              value={shipTo}
+              onChange={(e) => onShipToPick(e.target.value)}
+            >
+              <option value="">Select a store or customer…</option>
+              {shipTo &&
+                !stores.some((s) => s.name === shipTo) &&
+                !customers.some((c) => c.name === shipTo) && (
+                  <option value={shipTo}>{shipTo}</option>
+                )}
+              {stores.length > 0 && (
+                <optgroup label="Stores">
+                  {stores.map((s) => (
+                    <option key={s.id} value={s.name}>
+                      {s.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {customers.length > 0 && (
+                <optgroup label="Customers">
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.name}>
+                      {c.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+            <textarea
+              className="input"
+              rows={3}
+              placeholder="Shipping address"
+              value={shippingAddress}
+              onChange={(e) => setShippingAddress(e.target.value)}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Purchase Order date</label>
+              <input
+                type="date"
+                className="input"
+                value={poDate}
+                onChange={(e) => setPoDate(e.target.value)}
+              />
             </div>
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="no-print">
-                <label className="label">Message to Customer</label>
-                <input
-                  className="input"
-                  value={messageToCustomer}
-                  onChange={(e) => setMessageToCustomer(e.target.value)}
-                />
-                <p className="mt-0.5 text-[11px] text-zinc-400">Not printed on form</p>
-              </div>
-              <div className="no-print">
-                <label className="label">P.O.</label>
-                <input className="input" value={poRef} onChange={(e) => setPoRef(e.target.value)} />
-                <p className="mt-0.5 text-[11px] text-zinc-400">Not printed on form</p>
-              </div>
-              <div>
-                <label className="label">Sales Rep</label>
-                <input className="input" value={salesRep} onChange={(e) => setSalesRep(e.target.value)} />
-              </div>
-              <div className="no-print">
-                <label className="label">Mobile number</label>
-                <input
-                  className="input"
-                  value={mobileNumber}
-                  onChange={(e) => setMobileNumber(e.target.value)}
-                />
-                <p className="mt-0.5 text-[11px] text-zinc-400">Not printed on form</p>
-              </div>
+            <div>
+              <label className="label">Due date</label>
+              <input
+                type="date"
+                className="input"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+              />
             </div>
-
-            <div className="mt-4">
-              <label className="label">Tags</label>
-              <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-zinc-300 px-2 py-1.5">
-                {tags.map((t) => (
-                  <span
-                    key={t}
-                    className="flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-xs"
-                  >
-                    {t}
-                    <button
-                      type="button"
-                      onClick={() => setTags((cur) => cur.filter((x) => x !== t))}
-                      className="text-zinc-400 hover:text-zinc-700"
-                    >
-                      ✕
-                    </button>
-                  </span>
-                ))}
-                <input
-                  className="min-w-[8rem] flex-1 bg-transparent text-sm outline-none"
-                  placeholder="Start typing to add a tag"
-                  value={tagDraft}
-                  onChange={(e) => setTagDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === ",") {
-                      e.preventDefault();
-                      addTag(tagDraft);
-                    } else if (e.key === "Backspace" && !tagDraft && tags.length) {
-                      setTags((cur) => cur.slice(0, -1));
-                    }
-                  }}
-                  onBlur={() => addTag(tagDraft)}
-                />
-              </div>
+            <div>
+              <label className="label">Ship Via</label>
+              <input className="input" value={shipVia} onChange={(e) => setShipVia(e.target.value)} />
             </div>
-          </>
-        )}
-
-        <button
-          type="button"
-          onClick={() => setHeaderCollapsed((v) => !v)}
-          className="mt-3 w-full text-center text-xs text-zinc-400 hover:text-zinc-600"
-        >
-          {headerCollapsed ? "▾ Expand header" : "▴ Collapse header"}
-        </button>
+            <div>
+              <label className="label">PO no.</label>
+              <input
+                className="input"
+                value={poNumber}
+                onChange={(e) => setPoNumber(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="label">Store</label>
+              <input
+                className="input"
+                value={storeName}
+                onChange={(e) => setStoreName(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="label">Permit no.</label>
+              <input
+                className="input"
+                value={permitNumber}
+                onChange={(e) => setPermitNumber(e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
       </section>
-
-      {/* ============ CATEGORY DETAILS ============ */}
-      <LineSection
-        title="Category details"
-        open={catOpen}
-        onToggle={() => setCatOpen((v) => !v)}
-        onAdd={() => setCatLines((r) => [...r, blankCat()])}
-        onClear={() => setCatLines([])}
-      >
-        <table className="w-full min-w-[820px] text-sm">
-          <thead className="text-left text-xs uppercase tracking-wide text-zinc-400">
-            <tr>
-              <th className="w-8 py-1.5"></th>
-              <th className="w-8 py-1.5">#</th>
-              <th className="py-1.5">Category</th>
-              <th className="py-1.5">Description</th>
-              <th className="w-32 py-1.5 text-right">Amount</th>
-              <th className="py-1.5">Customer/Project</th>
-              <th className="py-1.5">Class</th>
-              <th className="w-16 py-1.5"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {catLines.map((row, i) => (
-              <tr
-                key={row.key}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => {
-                  const from = Number(e.dataTransfer.getData("text/plain"));
-                  if (!Number.isNaN(from) && from !== i) setCatLines((r) => move(r, from, i));
-                }}
-                className="border-t border-zinc-100"
-              >
-                <td
-                  className="cursor-grab py-1 text-center text-zinc-300"
-                  draggable
-                  onDragStart={(e) => e.dataTransfer.setData("text/plain", String(i))}
-                  title="Drag to reorder"
-                >
-                  ⠿
-                </td>
-                <td className="py-1 text-zinc-400">{i + 1}</td>
-                <td className="py-1 pr-2">
-                  <input
-                    className="input h-8"
-                    value={row.category}
-                    onChange={(e) =>
-                      setCatLines((r) => r.map((x) => (x.key === row.key ? { ...x, category: e.target.value } : x)))
-                    }
-                  />
-                </td>
-                <td className="py-1 pr-2">
-                  <input
-                    className="input h-8"
-                    value={row.description}
-                    onChange={(e) =>
-                      setCatLines((r) =>
-                        r.map((x) => (x.key === row.key ? { ...x, description: e.target.value } : x)),
-                      )
-                    }
-                  />
-                </td>
-                <td className="py-1 pr-2">
-                  <MoneyInput
-                    cents={row.amountCents}
-                    onCentsChange={(c) =>
-                      setCatLines((r) => r.map((x) => (x.key === row.key ? { ...x, amountCents: c } : x)))
-                    }
-                    className="input h-8 text-right"
-                  />
-                </td>
-                <td className="py-1 pr-2">
-                  <input
-                    className="input h-8"
-                    value={row.customerProject}
-                    onChange={(e) =>
-                      setCatLines((r) =>
-                        r.map((x) => (x.key === row.key ? { ...x, customerProject: e.target.value } : x)),
-                      )
-                    }
-                  />
-                </td>
-                <td className="py-1 pr-2">
-                  <input
-                    className="input h-8"
-                    value={row.klass}
-                    onChange={(e) =>
-                      setCatLines((r) => r.map((x) => (x.key === row.key ? { ...x, klass: e.target.value } : x)))
-                    }
-                  />
-                </td>
-                <td className="py-1 text-right whitespace-nowrap">
-                  <button
-                    type="button"
-                    title="Copy row"
-                    onClick={() => setCatLines((r) => [...r.slice(0, i + 1), { ...row, key: uid() }, ...r.slice(i + 1)])}
-                    className="px-1 text-zinc-400 hover:text-zinc-700"
-                  >
-                    ⧉
-                  </button>
-                  <button
-                    type="button"
-                    title="Delete row"
-                    onClick={() => setCatLines((r) => r.filter((x) => x.key !== row.key))}
-                    className="px-1 text-zinc-400 hover:text-red-600"
-                  >
-                    🗑
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </LineSection>
 
       {/* ============ ITEM DETAILS ============ */}
       <LineSection
@@ -753,9 +538,23 @@ export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readO
         onAdd={() => setItemLines((r) => [...r, blankItem()])}
         onClear={() => setItemLines([])}
         footer={
-          <div className="flex justify-end gap-8 border-t border-zinc-200 pt-2 text-sm">
-            <span className="text-zinc-500">Total</span>
-            <span className="font-semibold">{formatMoney(itemTotal)}</span>
+          <div className="ml-auto w-full max-w-xs space-y-1.5 border-t border-zinc-200 pt-2 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-zinc-500">Items</span>
+              <span>{formatMoney(itemTotal)}</span>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-zinc-500">Shipping charge</span>
+              <MoneyInput
+                cents={shippingCents}
+                onCentsChange={setShippingCents}
+                className="input h-8 w-28 text-right"
+              />
+            </div>
+            <div className="flex items-center justify-between border-t border-zinc-200 pt-1.5 font-semibold">
+              <span>Total</span>
+              <span>{formatMoney(grandTotal)}</span>
+            </div>
           </div>
         }
       >

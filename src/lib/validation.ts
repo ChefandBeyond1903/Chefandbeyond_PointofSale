@@ -297,6 +297,7 @@ export const purchaseOrderFormSchema = z.object({
   tags: z.array(z.string().trim().max(60)).max(50).default([]),
   messageToVendor: z.string().trim().max(2000).default(""),
   memo: z.string().trim().max(2000).default(""),
+  shippingCents: z.number().int().min(0).default(0),
   categoryLines: z.array(poCategoryLineSchema).default([]),
   itemLines: z.array(poItemLineSchema).default([]),
 });
@@ -325,6 +326,7 @@ export const purchaseOrderPatchSchema = z.object({
   tags: z.array(z.string().trim().max(60)).max(50).optional(),
   messageToVendor: z.string().trim().max(2000).optional(),
   memo: z.string().trim().max(2000).optional(),
+  shippingCents: z.number().int().min(0).optional(),
   categoryLines: z.array(poCategoryLineSchema).optional(),
   itemLines: z.array(poItemLineSchema).optional(),
 });

@@ -57,13 +57,16 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       if (f[k] !== undefined) (data as Record<string, unknown>)[k] = f[k];
     }
     if (f.tags !== undefined) data.tags = JSON.stringify(f.tags);
+    if (f.shippingCents !== undefined) data.shippingCents = f.shippingCents;
     if (f.poDate !== undefined) data.poDate = f.poDate ? new Date(f.poDate) : new Date();
     if (f.dueDate !== undefined) data.dueDate = f.dueDate ? new Date(f.dueDate) : null;
 
     const replacingLines = f.categoryLines !== undefined || f.itemLines !== undefined;
+    // The subtotal folds in shipping, so a shipping-only change also recomputes.
+    const recompute = replacingLines || f.shippingCents !== undefined;
 
     const po = await prisma.$transaction(async (tx) => {
-      if (replacingLines) {
+      if (recompute) {
         const current = await tx.purchaseOrder.findUnique({
           where: { id },
           include: { categoryLines: true, items: true },
@@ -102,7 +105,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
             })),
           });
         }
-        data.subtotalCents = computeSubtotalCents(catLines, itemLines);
+        const shippingCents = f.shippingCents ?? current.shippingCents;
+        data.subtotalCents = computeSubtotalCents(catLines, itemLines, shippingCents);
       }
 
       return tx.purchaseOrder.update({

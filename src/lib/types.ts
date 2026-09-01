@@ -195,6 +195,7 @@ export interface PurchaseOrder {
   vendor: string;
   status: PurchaseOrderStatus;
   subtotalCents: number;
+  shippingCents: number;
   note: string | null;
   storeId?: string | null;
 
