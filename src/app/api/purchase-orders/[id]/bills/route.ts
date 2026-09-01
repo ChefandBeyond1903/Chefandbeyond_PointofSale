@@ -117,6 +117,14 @@ export async function POST(req: NextRequest, { params }: Params) {
             create: { productId: l.it.productId, storeId, quantity: l.receiveQty },
             update: { quantity: { increment: l.receiveQty } },
           });
+          // Roll the received unit cost onto the product (latest cost wins).
+          // Negative lines are corrections — don't disturb the cost.
+          if (l.receiveQty > 0) {
+            await tx.product.update({
+              where: { id: l.it.productId },
+              data: { costCents: l.unitCostCents },
+            });
+          }
         }
       }
 
