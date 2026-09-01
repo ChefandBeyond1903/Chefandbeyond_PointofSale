@@ -5,6 +5,7 @@ import { HttpError } from "@/lib/auth";
 import { requireScopedUser } from "@/lib/scope";
 import { inventoryAdjustSchema } from "@/lib/validation";
 import { ok, toErrorResponse } from "@/lib/api";
+import { searchTerms } from "@/lib/search";
 
 // Every store's on-hand quantities, visible to all staff.
 export async function GET(req: NextRequest) {
@@ -17,12 +18,20 @@ export async function GET(req: NextRequest) {
     const where: Prisma.ProductWhereInput = {};
     if (!includeInactive) where.active = true;
     if (q) {
-      where.OR = [
-        { name: { contains: q } },
-        { sku: { contains: q } },
-        { barcode: { contains: q } },
-        { vendor: { contains: q } },
-      ];
+      // Order- and format-independent: every term must appear somewhere in the
+      // name, description, SKU, barcode, or vendor (case-insensitive), any order.
+      const terms = searchTerms(q);
+      if (terms.length) {
+        where.AND = terms.map((term) => ({
+          OR: [
+            { name: { contains: term, mode: "insensitive" } },
+            { description: { contains: term, mode: "insensitive" } },
+            { sku: { contains: term, mode: "insensitive" } },
+            { barcode: { contains: term, mode: "insensitive" } },
+            { vendor: { contains: term, mode: "insensitive" } },
+          ],
+        }));
+      }
     }
 
     const [stores, products] = await Promise.all([

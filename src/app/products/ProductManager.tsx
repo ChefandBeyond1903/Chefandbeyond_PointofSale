@@ -5,6 +5,7 @@ import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
 import { MoneyInput } from "@/components/MoneyInput";
 import type { Category, Product } from "@/lib/types";
+import { matchesSearch } from "@/lib/search";
 
 type Draft = {
   id?: string;
@@ -121,14 +122,10 @@ export function ProductManager({ canManage = true }: { canManage?: boolean }) {
   }, [load]);
 
   const filtered = useMemo(() => {
-    const s = q.trim().toLowerCase();
+    const s = q.trim();
     if (!s) return products;
-    return products.filter(
-      (p) =>
-        p.name.toLowerCase().includes(s) ||
-        p.sku.toLowerCase().includes(s) ||
-        (p.vendor ?? "").toLowerCase().includes(s) ||
-        (p.barcode ?? "").toLowerCase().includes(s),
+    return products.filter((p) =>
+      matchesSearch(s, [p.name, p.description, p.sku, p.vendor, p.barcode]),
     );
   }, [products, q]);
 

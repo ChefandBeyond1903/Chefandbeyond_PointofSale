@@ -9,6 +9,7 @@ import {
   productCreateSchema,
 } from "@/lib/validation";
 import { ok, toErrorResponse } from "@/lib/api";
+import { searchTerms } from "@/lib/search";
 
 export async function GET(req: NextRequest) {
   try {
@@ -25,19 +26,9 @@ export async function GET(req: NextRequest) {
     if (favoritesOnly) where.favorite = true;
     if (categoryId) where.categoryId = categoryId;
     if (q) {
-      // Order- and format-independent search. Split on whitespace and on
-      // digit/letter boundaries ("40lbs" -> "40", "lbs") so a query matches text
-      // written as "40 lbs" too. Every resulting term must appear somewhere in
-      // the name, description, SKU, or barcode (case-insensitive), any order.
-      const terms = [
-        ...new Set(
-          q
-            .replace(/(\d)([a-zA-Z])/g, "$1 $2")
-            .replace(/([a-zA-Z])(\d)/g, "$1 $2")
-            .split(/\s+/)
-            .filter(Boolean),
-        ),
-      ];
+      // Order- and format-independent: every term must appear somewhere in the
+      // name, description, SKU, or barcode (case-insensitive), in any order.
+      const terms = searchTerms(q);
       if (terms.length) {
         where.AND = terms.map((term) => ({
           OR: [
