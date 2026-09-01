@@ -7,7 +7,7 @@ import { InvoiceModal } from "@/components/InvoiceModal";
 import { ReceiptModal } from "@/components/ReceiptModal";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { resolvePreset, type DateRange } from "@/lib/dateRange";
-import type { ProfitRow, ReportSummary } from "@/lib/types";
+import type { Bill, ProfitRow, PurchaseOrder, ReportSummary } from "@/lib/types";
 
 export function ReportsView({
   isAdmin = false,
@@ -23,14 +23,16 @@ export function ReportsView({
   const [error, setError] = useState<string | null>(null);
   const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
   const [printSaleId, setPrintSaleId] = useState<string | null>(null);
+  const [pos, setPos] = useState<PurchaseOrder[]>([]);
+  const [bills, setBills] = useState<Bill[]>([]);
 
   const load = useCallback(
     async (from: Date, to: Date, store: string) => {
       setLoading(true);
       setError(null);
+      const qs = new URLSearchParams({ from: from.toISOString(), to: to.toISOString() });
+      if (store) qs.set("storeId", store);
       try {
-        const qs = new URLSearchParams({ from: from.toISOString(), to: to.toISOString() });
-        if (store) qs.set("storeId", store);
         const res = await api<ReportSummary>(`/api/reports/summary?${qs.toString()}`);
         setData(res);
       } catch (err) {
@@ -38,13 +40,36 @@ export function ReportsView({
       } finally {
         setLoading(false);
       }
+      if (isAdmin) {
+        api<{ purchaseOrders: PurchaseOrder[] }>(`/api/purchase-orders?take=100&${qs.toString()}`)
+          .then((r) => setPos(r.purchaseOrders))
+          .catch(() => setPos([]));
+        api<{ bills: Bill[] }>(`/api/bills?${qs.toString()}`)
+          .then((r) => setBills(r.bills))
+          .catch(() => setBills([]));
+      }
     },
-    [],
+    [isAdmin],
+  );
+
+  const reload = useCallback(
+    () => load(range.from, range.to, storeId),
+    [load, range, storeId],
   );
 
   useEffect(() => {
-    load(range.from, range.to, storeId);
-  }, [load, range, storeId]);
+    reload();
+  }, [reload]);
+
+  async function del(kind: "invoice" | "purchase order" | "bill", url: string) {
+    if (!confirm(`Delete this ${kind}? This can't be undone.`)) return;
+    try {
+      await api(url, { method: "DELETE" });
+      reload();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : `Could not delete the ${kind}`);
+    }
+  }
 
   return (
     <div className="w-full flex-1 p-4">
@@ -166,7 +191,7 @@ export function ReportsView({
                             </td>
                           )}
                           <td className="py-2 text-right font-medium">{formatMoney(s.totalCents)}</td>
-                          <td className="py-2 pl-2 text-right">
+                          <td className="py-2 pl-2 text-right whitespace-nowrap">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -177,6 +202,18 @@ export function ReportsView({
                             >
                               Print
                             </button>
+                            {isAdmin && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  del("invoice", `/api/sales/${s.id}`);
+                                }}
+                                className="btn-ghost px-2 py-0.5 text-xs text-red-500"
+                                title="Delete this invoice"
+                              >
+                                Delete
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -186,6 +223,35 @@ export function ReportsView({
               )}
             </div>
           </div>
+
+          {isAdmin && (
+            <div className="grid gap-4 lg:grid-cols-2">
+              <RecordList
+                title="Purchase orders"
+                empty="No purchase orders in this period."
+                rows={pos.map((p) => ({
+                  id: p.id,
+                  head: p.poNumber,
+                  sub: `${p.vendor} · ${p.status}`,
+                  date: p.poDate,
+                  amountCents: p.subtotalCents,
+                  onDelete: () => del("purchase order", `/api/purchase-orders/${p.id}`),
+                }))}
+              />
+              <RecordList
+                title="Bills"
+                empty="No bills in this period."
+                rows={bills.map((b) => ({
+                  id: b.id,
+                  head: b.billNumber || `Bill ${b.po?.poNumber ?? ""}`.trim(),
+                  sub: `${b.vendor} · ${b.status}`,
+                  date: b.billDate,
+                  amountCents: b.subtotalCents,
+                  onDelete: () => del("bill", `/api/bills/${b.id}`),
+                }))}
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -199,6 +265,64 @@ export function ReportsView({
 
       {printSaleId && (
         <ReceiptModal saleId={printSaleId} onClose={() => setPrintSaleId(null)} />
+      )}
+    </div>
+  );
+}
+
+function RecordList({
+  title,
+  empty,
+  rows,
+}: {
+  title: string;
+  empty: string;
+  rows: {
+    id: string;
+    head: string;
+    sub: string;
+    date: string;
+    amountCents: number;
+    onDelete: () => void;
+  }[];
+}) {
+  return (
+    <div className="card p-4">
+      <h2 className="mb-3 font-semibold">{title}</h2>
+      {rows.length === 0 ? (
+        <p className="text-sm text-zinc-400">{empty}</p>
+      ) : (
+        <div className="max-h-96 overflow-y-auto">
+          <table className="w-full text-sm">
+            <tbody className="divide-y divide-zinc-100">
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <td className="py-2">
+                    <span className="font-medium">{r.head || "—"}</span>
+                    <span className="block text-xs text-zinc-400">{r.sub}</span>
+                  </td>
+                  <td className="py-2 text-xs text-zinc-500">
+                    {new Date(r.date).toLocaleDateString([], {
+                      month: "short",
+                      day: "numeric",
+                      year: "2-digit",
+                    })}
+                  </td>
+                  <td className="py-2 text-right font-medium">{formatMoney(r.amountCents)}</td>
+                  <td className="py-2 pl-2 text-right">
+                    <button
+                      onClick={r.onDelete}
+                      className="btn-ghost px-2 py-0.5 text-xs text-red-500"
+                      title={`Delete this ${title.replace(/s$/, "").toLowerCase()}`}
+                    >
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

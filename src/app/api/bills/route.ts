@@ -13,13 +13,22 @@ export async function GET(req: NextRequest) {
     const poId = searchParams.get("poId")?.trim();
     const overdue = searchParams.get("overdue") === "1";
     const q = searchParams.get("q")?.trim();
+    const storeParam = searchParams.get("storeId")?.trim();
+    const from = searchParams.get("from");
+    const to = searchParams.get("to");
 
     const where: Prisma.BillWhereInput = {};
     const scoped = scopeStoreId(actor);
     if (scoped) where.storeId = scoped;
+    else if (storeParam) where.storeId = storeParam; // admin: filter to one store
     if (status === "OPEN" || status === "PAID") where.status = status;
     if (vendor) where.vendor = vendor;
     if (poId) where.poId = poId;
+    if (from || to) {
+      where.billDate = {};
+      if (from) where.billDate.gte = new Date(from);
+      if (to) where.billDate.lte = new Date(to);
+    }
     if (overdue) {
       where.status = "OPEN";
       where.dueDate = { lt: new Date() };

@@ -55,3 +55,47 @@ export async function GET(_req: NextRequest, { params }: Params) {
     return toErrorResponse(err);
   }
 }
+
+// Permanently delete an invoice. Admin only. Puts the sold quantities back
+// into the sale's store inventory, and cascades to line items and any purchase
+// orders that were raised from this sale.
+export async function DELETE(_req: NextRequest, { params }: Params) {
+  try {
+    const actor = await requireScopedUser();
+    if (actor.role !== "ADMIN") throw new HttpError(403, "Only an admin can delete invoices");
+    const { id } = await params;
+
+    const sale = await prisma.sale.findUnique({
+      where: { id },
+      select: { id: true, storeId: true, items: { select: { productId: true, quantity: true } } },
+    });
+    if (!sale) throw new HttpError(404, "Invoice not found");
+
+    await prisma.$transaction(async (tx) => {
+      if (sale.storeId) {
+        const ids = sale.items.map((i) => i.productId);
+        const tracked = new Set(
+          (
+            await tx.product.findMany({
+              where: { id: { in: ids }, trackStock: true },
+              select: { id: true },
+            })
+          ).map((p) => p.id),
+        );
+        for (const it of sale.items) {
+          if (!tracked.has(it.productId)) continue;
+          await tx.storeInventory.upsert({
+            where: { productId_storeId: { productId: it.productId, storeId: sale.storeId } },
+            create: { productId: it.productId, storeId: sale.storeId, quantity: it.quantity },
+            update: { quantity: { increment: it.quantity } },
+          });
+        }
+      }
+      await tx.sale.delete({ where: { id } });
+    });
+
+    return ok({ ok: true });
+  } catch (err) {
+    return toErrorResponse(err);
+  }
+}

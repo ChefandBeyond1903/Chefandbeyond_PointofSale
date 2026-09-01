@@ -14,13 +14,22 @@ export async function GET(req: NextRequest) {
     const vendor = searchParams.get("vendor")?.trim();
     const status = searchParams.get("status")?.trim();
     const saleId = searchParams.get("saleId")?.trim();
+    const storeParam = searchParams.get("storeId")?.trim();
+    const from = searchParams.get("from");
+    const to = searchParams.get("to");
 
     const where: Prisma.PurchaseOrderWhereInput = {};
     const scopedStore = scopeStoreId(actor);
     if (scopedStore) where.storeId = scopedStore;
+    else if (storeParam) where.storeId = storeParam; // admin: filter to one store
     if (vendor) where.vendor = vendor;
     if (status) where.status = status;
     if (saleId) where.saleId = saleId;
+    if (from || to) {
+      where.poDate = {};
+      if (from) where.poDate.gte = new Date(from);
+      if (to) where.poDate.lte = new Date(to);
+    }
 
     const purchaseOrders = await prisma.purchaseOrder.findMany({
       where,
