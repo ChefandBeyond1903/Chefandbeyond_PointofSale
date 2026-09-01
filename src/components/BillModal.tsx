@@ -5,7 +5,7 @@ import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
 import { MoneyInput } from "@/components/MoneyInput";
 import { BILL_TERMS, dueDateFromTerms } from "@/lib/terms";
-import type { PurchaseOrder } from "@/lib/types";
+import type { PurchaseOrder, Store } from "@/lib/types";
 
 type Line = {
   id: string;
@@ -41,6 +41,11 @@ export function BillModal({
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // Admins can direct the received stock to any store.
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [stores, setStores] = useState<Store[]>([]);
+  const [storeId, setStoreId] = useState("");
+
   const [billNumber, setBillNumber] = useState("");
   const [billDate, setBillDate] = useState(todayISO());
   const [terms, setTerms] = useState("");
@@ -52,6 +57,7 @@ export function BillModal({
     try {
       const res = await api<{ purchaseOrder: PurchaseOrder }>(`/api/purchase-orders/${poId}`);
       setPo(res.purchaseOrder);
+      setStoreId(res.purchaseOrder.storeId ?? "");
       setLines(
         (res.purchaseOrder.items ?? []).map((it) => ({
           id: it.id,
@@ -71,6 +77,13 @@ export function BillModal({
 
   useEffect(() => {
     load();
+    api<{ user: { role: string } | null }>("/api/auth/me")
+      .then((r) => {
+        if (r.user?.role !== "ADMIN") return;
+        setIsAdmin(true);
+        return api<{ stores: Store[] }>("/api/stores").then((s) => setStores(s.stores));
+      })
+      .catch(() => {});
   }, [load]);
 
   // Terms drive the due date until the user picks one by hand.
@@ -115,6 +128,7 @@ export function BillModal({
           dueDate: dueDate || null,
           terms,
           memo: memo.trim(),
+          ...(isAdmin && storeId ? { storeId } : {}),
           lines: payload,
         }),
       });
@@ -146,9 +160,27 @@ export function BillModal({
               </button>
             </div>
             <p className="mb-4 text-sm text-zinc-500">
-              {po.vendor} — received quantities post to this store&rsquo;s inventory and the bill is
-              added to Bills.
+              {po.vendor} — received quantities post to the selected store&rsquo;s inventory and the
+              bill is added to Bills.
             </p>
+
+            {isAdmin && (
+              <div className="mb-4">
+                <label className="label">Receive into store</label>
+                <select
+                  className="input sm:max-w-xs"
+                  value={storeId}
+                  onChange={(e) => setStoreId(e.target.value)}
+                >
+                  <option value="">Select a store…</option>
+                  {stores.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {err && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{err}</p>}
 
@@ -281,13 +313,16 @@ export function BillModal({
               />
             </div>
 
+            {isAdmin && !storeId && (
+              <p className="mt-4 text-xs text-amber-600">Choose a store to receive into.</p>
+            )}
             <div className="mt-5 flex gap-2">
               <button onClick={onClose} className="btn-secondary flex-1">
                 Cancel
               </button>
               <button
                 onClick={submit}
-                disabled={busy || lines.length === 0}
+                disabled={busy || lines.length === 0 || (isAdmin && !storeId)}
                 className="btn-primary flex-1"
               >
                 {busy ? "Saving…" : "Receive & save bill"}

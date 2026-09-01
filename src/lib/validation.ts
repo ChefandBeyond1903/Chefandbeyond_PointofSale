@@ -76,6 +76,9 @@ export const billCreateSchema = z.object({
   dueDate: dateInput.optional().nullable(),
   terms: z.string().trim().max(40).default(""),
   memo: z.string().trim().max(2000).default(""),
+  // Admin only: which store the received stock lands in. Others receive into
+  // the PO's own store.
+  storeId: z.string().min(1).optional(),
   lines: z
     .array(
       z.object({

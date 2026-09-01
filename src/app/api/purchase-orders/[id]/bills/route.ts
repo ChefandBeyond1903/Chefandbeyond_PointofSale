@@ -46,10 +46,21 @@ export async function POST(req: NextRequest, { params }: Params) {
     const { id } = await params;
     const body = billCreateSchema.parse(await req.json());
     const po = await loadPoScoped(id, actor);
-    if (!po.storeId) {
-      throw new HttpError(400, "This purchase order has no store — it can't receive into inventory.");
+
+    // Receiving store: an admin may direct the stock to any store; everyone
+    // else receives into the PO's own store.
+    let storeId = po.storeId;
+    if (actor.role === "ADMIN" && body.storeId) {
+      const s = await prisma.store.findUnique({ where: { id: body.storeId }, select: { id: true } });
+      if (!s) throw new HttpError(400, "That store doesn't exist.");
+      storeId = s.id;
     }
-    const storeId = po.storeId;
+    if (!storeId) {
+      throw new HttpError(
+        400,
+        "Choose a store to receive into — this purchase order isn't tied to one.",
+      );
+    }
 
     const byId = new Map(po.items.map((it) => [it.id, it]));
     const lines = body.lines
