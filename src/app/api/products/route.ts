@@ -25,17 +25,29 @@ export async function GET(req: NextRequest) {
     if (favoritesOnly) where.favorite = true;
     if (categoryId) where.categoryId = categoryId;
     if (q) {
-      // Order-independent: every whitespace-separated term must appear somewhere
-      // in the name, description, SKU, or barcode (case-insensitive). So
-      // "deep 40 fryer" and "fryer 40 deep" both match "40 lbs Deep Fryer".
-      where.AND = q.split(/\s+/).filter(Boolean).map((term) => ({
-        OR: [
-          { name: { contains: term, mode: "insensitive" } },
-          { description: { contains: term, mode: "insensitive" } },
-          { sku: { contains: term, mode: "insensitive" } },
-          { barcode: { contains: term, mode: "insensitive" } },
-        ],
-      }));
+      // Order- and format-independent search. Split on whitespace and on
+      // digit/letter boundaries ("40lbs" -> "40", "lbs") so a query matches text
+      // written as "40 lbs" too. Every resulting term must appear somewhere in
+      // the name, description, SKU, or barcode (case-insensitive), any order.
+      const terms = [
+        ...new Set(
+          q
+            .replace(/(\d)([a-zA-Z])/g, "$1 $2")
+            .replace(/([a-zA-Z])(\d)/g, "$1 $2")
+            .split(/\s+/)
+            .filter(Boolean),
+        ),
+      ];
+      if (terms.length) {
+        where.AND = terms.map((term) => ({
+          OR: [
+            { name: { contains: term, mode: "insensitive" } },
+            { description: { contains: term, mode: "insensitive" } },
+            { sku: { contains: term, mode: "insensitive" } },
+            { barcode: { contains: term, mode: "insensitive" } },
+          ],
+        }));
+      }
     }
 
     // One round trip: pull each product with its per-store inventory rows, then
