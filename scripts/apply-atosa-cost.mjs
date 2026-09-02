@@ -1,6 +1,6 @@
-// One-off: set costCents on every Atosa product to 0.475 * (Atosa list price)
-// from the Atosa price-list PDF. Matches PDF model to our SKU by stripping
-// "ATO-" (same loose matching as apply-atosa-umrp.mjs).
+// One-off: set costCents on every Atosa product to COST_FACTOR * (Atosa list
+// price) from the Atosa price-list PDF. Matches PDF model to our SKU by
+// stripping "ATO-" (same loose matching as apply-atosa-umrp.mjs).
 //
 //   node --env-file=.env scripts/apply-atosa-cost.mjs <pricelist.json> [--apply]
 //
@@ -9,7 +9,7 @@
 import { PrismaClient } from "@prisma/client";
 import { readFileSync } from "node:fs";
 
-const COST_FACTOR = 0.475;
+const COST_FACTOR = 0.45125;
 
 const [mapPath, flag] = process.argv.slice(2);
 if (!mapPath) {
