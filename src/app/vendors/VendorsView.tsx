@@ -5,6 +5,7 @@ import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
 import { MoneyInput } from "@/components/MoneyInput";
 import { matchesSearch } from "@/lib/search";
+import { VendorHistoryModal } from "@/components/VendorHistoryModal";
 import type { Vendor } from "@/lib/types";
 
 type Draft = {
@@ -35,6 +36,7 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
   const [q, setQ] = useState("");
+  const [historyVendor, setHistoryVendor] = useState<Vendor | null>(null);
 
   const filtered = useMemo(() => {
     const s = q.trim();
@@ -166,7 +168,13 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
                   </td>
                   <td className="px-4 py-2.5 text-right text-zinc-500">{v.productCount ?? 0}</td>
                   <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                    {canManage ? (
+                    <button
+                      onClick={() => setHistoryVendor(v)}
+                      className="btn-ghost text-xs"
+                    >
+                      History
+                    </button>
+                    {canManage && (
                       <>
                         <button
                           onClick={() =>
@@ -192,8 +200,6 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
                           Delete
                         </button>
                       </>
-                    ) : (
-                      <span className="text-xs text-zinc-300">—</span>
                     )}
                   </td>
                 </tr>
@@ -202,6 +208,13 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
           </tbody>
         </table>
       </div>
+
+      {historyVendor && (
+        <VendorHistoryModal
+          vendorName={historyVendor.name}
+          onClose={() => setHistoryVendor(null)}
+        />
+      )}
 
       {draft && (
         <div
