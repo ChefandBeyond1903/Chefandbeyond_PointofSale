@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { Role, SessionUser } from "@/lib/types";
 import { api } from "@/lib/client";
 
@@ -22,10 +22,83 @@ const LINKS: { href: string; label: string; roles: Role[] }[] = [
   { href: "/settings", label: "Settings", roles: STAFF_UP },
 ];
 
+// Nav tabs that show an admin "new since you last looked" badge. `key` matches
+// both the /api/activity/new-counts response and the localStorage marker.
+type NewKey = "vendors" | "customers" | "purchaseOrders" | "bills" | "users";
+const WATCHED: { key: NewKey; href: string }[] = [
+  { key: "vendors", href: "/vendors" },
+  { key: "customers", href: "/customers" },
+  { key: "purchaseOrders", href: "/purchase-orders" },
+  { key: "bills", href: "/bills" },
+  { key: "users", href: "/users" },
+];
+const SEEN_PREFIX = "cb-pos-seen-";
+
+function getSeen(key: NewKey): string {
+  try {
+    return localStorage.getItem(SEEN_PREFIX + key) || "";
+  } catch {
+    return "";
+  }
+}
+function setSeen(key: NewKey, iso: string) {
+  try {
+    localStorage.setItem(SEEN_PREFIX + key, iso);
+  } catch {
+    /* private mode / storage disabled — badges just won't persist */
+  }
+}
+
 export function Nav({ user }: { user: SessionUser }) {
   const pathname = usePathname();
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [newCounts, setNewCounts] = useState<Record<NewKey, number>>({
+    vendors: 0,
+    customers: 0,
+    purchaseOrders: 0,
+    bills: 0,
+    users: 0,
+  });
+
+  const isAdmin = user.role === "ADMIN";
+
+  const refreshNewCounts = useCallback(async () => {
+    if (!isAdmin) return;
+    const qs = new URLSearchParams();
+    for (const w of WATCHED) qs.set(w.key, getSeen(w.key));
+    try {
+      const r = await api<Record<NewKey, number>>(`/api/activity/new-counts?${qs.toString()}`);
+      setNewCounts(r);
+    } catch {
+      /* non-fatal — leave the last known counts */
+    }
+  }, [isAdmin]);
+
+  // First run seeds every marker to "now" so nothing shows as new until
+  // something is actually added later. Then poll on an interval and on focus.
+  useEffect(() => {
+    if (!isAdmin) return;
+    const now = new Date().toISOString();
+    for (const w of WATCHED) if (!getSeen(w.key)) setSeen(w.key, now);
+    refreshNewCounts();
+    const id = setInterval(refreshNewCounts, 60_000);
+    const onFocus = () => refreshNewCounts();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [isAdmin, refreshNewCounts]);
+
+  // Landing on a watched section marks it seen; leaving it re-checks so a stale
+  // count doesn't linger.
+  useEffect(() => {
+    if (!isAdmin) return;
+    const hit = WATCHED.find((w) => pathname.startsWith(w.href));
+    if (hit) setSeen(hit.key, new Date().toISOString());
+    refreshNewCounts();
+  }, [pathname, isAdmin, refreshNewCounts]);
 
   const links = LINKS.filter((l) => l.roles.includes(user.role));
 
@@ -54,15 +127,27 @@ export function Nav({ user }: { user: SessionUser }) {
         <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
           {links.map((l) => {
             const active = l.href === "/" ? pathname === "/" : pathname.startsWith(l.href);
+            const watched = WATCHED.find((w) => w.href === l.href);
+            // Hide the badge while the admin is actually on that section.
+            const badge =
+              watched && !active && isAdmin ? newCounts[watched.key] : 0;
             return (
               <Link
                 key={l.href}
                 href={l.href}
-                className={`shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                className={`flex shrink-0 items-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                   active ? "bg-zinc-100 text-zinc-900" : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800"
                 }`}
               >
                 {l.label}
+                {badge > 0 && (
+                  <span
+                    className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-indigo-600 px-1 text-[10px] font-bold text-white"
+                    title={`${badge} new since you last looked`}
+                  >
+                    {badge > 99 ? "99+" : badge}
+                  </span>
+                )}
               </Link>
             );
           })}
