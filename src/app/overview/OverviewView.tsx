@@ -107,11 +107,55 @@ export function OverviewView() {
               <dl className="grid grid-cols-3 gap-2 text-center sm:gap-3">
                 <Metric label="Open bills" value={String(data.payables.openBills.count)}
                   sub={formatMoney(data.payables.openBills.amountCents)} />
-                <Metric label="Overdue" value={String(data.payables.overdueBills.count)}
+                <Metric label="Overdue bills" value={String(data.payables.overdueBills.count)}
                   sub={formatMoney(data.payables.overdueBills.amountCents)}
                   danger={data.payables.overdueBills.count > 0} />
-                <Metric label="Open POs" value={String(data.payables.openPurchaseOrders)} />
+                <Metric
+                  label="Open POs"
+                  value={String(data.payables.openPurchaseOrders)}
+                  sub={
+                    data.payables.overduePurchaseOrders.count > 0
+                      ? `${data.payables.overduePurchaseOrders.count} overdue`
+                      : undefined
+                  }
+                  danger={data.payables.overduePurchaseOrders.count > 0}
+                />
               </dl>
+
+              {data.purchaseOrdersDue.length > 0 && (
+                <div className="mt-3 border-t border-zinc-100 pt-2">
+                  <p className="mb-1 text-xs uppercase tracking-wide text-zinc-400">
+                    Purchase orders due
+                  </p>
+                  <table className="w-full text-sm">
+                    <tbody className="divide-y divide-zinc-100">
+                      {data.purchaseOrdersDue.map((p) => (
+                        <tr key={p.id}>
+                          <td className="py-1.5">
+                            <Link
+                              href={`/purchase-orders/${p.id}`}
+                              className="font-medium text-indigo-600 hover:underline"
+                            >
+                              {p.poNumber}
+                            </Link>
+                            <span className="ml-2 text-zinc-400">{p.vendor}</span>
+                          </td>
+                          <td
+                            className={`py-1.5 text-right whitespace-nowrap ${
+                              p.overdue ? "font-medium text-red-600" : "text-zinc-500"
+                            }`}
+                          >
+                            {new Date(p.dueDate).toLocaleDateString()}
+                          </td>
+                          <td className="py-1.5 text-right whitespace-nowrap tabular-nums">
+                            {formatMoney(p.totalCents)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </Card>
 
             {/* Operations */}

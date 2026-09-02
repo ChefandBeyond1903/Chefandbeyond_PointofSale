@@ -377,7 +377,16 @@ export interface AdminOverview {
     openBills: { count: number; amountCents: number };
     overdueBills: { count: number; amountCents: number };
     openPurchaseOrders: number;
+    overduePurchaseOrders: { count: number; amountCents: number };
   };
+  purchaseOrdersDue: {
+    id: string;
+    poNumber: string;
+    vendor: string;
+    dueDate: string;
+    totalCents: number;
+    overdue: boolean;
+  }[];
   operations: {
     heldTickets: number;
     outOfStock: number;

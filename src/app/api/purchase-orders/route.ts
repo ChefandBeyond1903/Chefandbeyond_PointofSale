@@ -20,9 +20,15 @@ export async function GET(req: NextRequest) {
 
     const where: Prisma.PurchaseOrderWhereInput = {};
     const scopedStore = scopeStoreId(actor);
-    if (scopedStore) where.storeId = scopedStore;
-    else if (storeParam) where.storeId = storeParam; // admin: filter to one store
-    if (vendor) where.vendor = vendor;
+    if (scopedStore) {
+      // A scoped user sees their store's POs, plus POs not tied to any store,
+      // plus any PO they raised — so a purchase order is never invisible to the
+      // person who created it (e.g. an unassigned user, or a PO with no store).
+      where.OR = [{ storeId: scopedStore }, { storeId: null }, { createdById: actor.id }];
+    } else if (storeParam) {
+      where.storeId = storeParam; // admin: filter to one store
+    }
+    if (vendor) where.vendor = { equals: vendor, mode: "insensitive" };
     if (status) where.status = status;
     if (saleId) where.saleId = saleId;
     if (from || to) {
