@@ -12,7 +12,9 @@ export type DateRangePresetKey =
   | "this_quarter"
   | "last_quarter"
   | "last_3_months"
-  | "last_6_months";
+  | "last_6_months"
+  | "this_year"
+  | "last_year";
 
 export const DATE_RANGE_PRESETS: { key: DateRangePresetKey; label: string }[] = [
   { key: "today", label: "Today" },
@@ -26,6 +28,8 @@ export const DATE_RANGE_PRESETS: { key: DateRangePresetKey; label: string }[] = 
   { key: "last_quarter", label: "Last quarter" },
   { key: "last_3_months", label: "Last 3 months" },
   { key: "last_6_months", label: "Last 6 months" },
+  { key: "this_year", label: "This year" },
+  { key: "last_year", label: "Last year" },
 ];
 
 export interface DateRange {
@@ -65,6 +69,12 @@ function startOfMonth(d: Date): Date {
 function startOfQuarter(d: Date): Date {
   const x = startOfMonth(d);
   x.setMonth(Math.floor(x.getMonth() / 3) * 3);
+  return x;
+}
+
+function startOfYear(d: Date): Date {
+  const x = startOfDay(d);
+  x.setMonth(0, 1);
   return x;
 }
 
@@ -108,6 +118,12 @@ export function resolvePreset(key: DateRangePresetKey, now: Date = new Date()): 
       return { from: minusMonths(startOfDay(now), 3), to: now };
     case "last_6_months":
       return { from: minusMonths(startOfDay(now), 6), to: now };
+    case "this_year":
+      return { from: startOfYear(now), to: now };
+    case "last_year": {
+      const thisYear = startOfYear(now);
+      return { from: minusMonths(thisYear, 12), to: endOfDay(addDays(thisYear, -1)) };
+    }
   }
 }
 
