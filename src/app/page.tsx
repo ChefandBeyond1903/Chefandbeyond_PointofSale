@@ -6,6 +6,7 @@ import { formatMoney, formatBps, taxOn } from "@/lib/money";
 import { MoneyInput } from "@/components/MoneyInput";
 import { PercentInput } from "@/components/PercentInput";
 import { ReceiptModal } from "@/components/ReceiptModal";
+import { QuickAddProductModal } from "@/components/QuickAddProductModal";
 import type {
   Category,
   Company,
@@ -91,6 +92,7 @@ export default function RegisterPage() {
   // Brief "Added ✓" flash on the last-tapped catalog card.
   const [flashId, setFlashId] = useState<string | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
 
   const [cart, setCart] = useState<CartLine[]>([]);
   const [shippingCents, setShippingCents] = useState(0);
@@ -804,7 +806,18 @@ export default function RegisterPage() {
                 );
               })}
               {filtered.length === 0 && (
-                <p className="col-span-full text-sm text-zinc-500">No matching products.</p>
+                <div className="col-span-full flex flex-col items-start gap-2 text-sm text-zinc-500">
+                  <p>No matching products.</p>
+                  {isSearching && !searching && (
+                    <button
+                      type="button"
+                      onClick={() => setQuickAddOpen(true)}
+                      className="btn-secondary"
+                    >
+                      Add &ldquo;{query.trim()}&rdquo; as a new product
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           ))}
@@ -1163,6 +1176,20 @@ export default function RegisterPage() {
           company={company}
           onClose={() => setReceipt(null)}
           closeLabel="New sale"
+        />
+      )}
+
+      {quickAddOpen && (
+        <QuickAddProductModal
+          initialName={query.trim()}
+          categories={categories}
+          onClose={() => setQuickAddOpen(false)}
+          onCreated={(product) => {
+            addToCart(product);
+            setQuery("");
+            loadCatalog();
+            if (allProducts) loadAllProducts();
+          }}
         />
       )}
     </div>

@@ -95,7 +95,10 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const actor = await requireRole("MANAGER", "ADMIN");
+    // Cashiers can add a product too — the register lets them create one on the
+    // spot when a search finds nothing. The Products page still gates its create
+    // UI to MANAGER+ (see products/page.tsx `canManage`).
+    const actor = await requireRole("CASHIER", "MANAGER", "ADMIN");
     const data = productCreateSchema.parse(await req.json());
     // Only an admin may set a resale floor.
     if (actor.role !== "ADMIN") data.umrpCents = 0;
