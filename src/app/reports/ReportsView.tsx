@@ -142,8 +142,6 @@ export function ReportsView({
                 <Stat label="Avg. sale" value={formatMoney(data.totals.averageSaleCents)} />
               </div>
 
-              <ProfitLoss data={data} />
-
               {data.byStore.length > 1 && (
                 <ProfitTable title="By store" rows={data.byStore} firstCol="Store" />
               )}
@@ -287,6 +285,8 @@ export function ReportsView({
               />
             </div>
           )}
+
+          {!limited && <ProfitLoss data={data} />}
         </div>
       )}
 
