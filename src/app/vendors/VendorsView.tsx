@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
 import { MoneyInput } from "@/components/MoneyInput";
+import { matchesSearch } from "@/lib/search";
 import type { Vendor } from "@/lib/types";
 
 type Draft = {
@@ -33,6 +34,15 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
+  const [q, setQ] = useState("");
+
+  const filtered = useMemo(() => {
+    const s = q.trim();
+    if (!s) return vendors;
+    return vendors.filter((v) =>
+      matchesSearch(s, [v.name, v.contact, v.email, v.phone, v.address, v.notes]),
+    );
+  }, [vendors, q]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -95,8 +105,14 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
 
   return (
     <div className="w-full flex-1 p-4">
-      <div className="mb-4 flex items-center gap-3">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
         <h1 className="text-xl font-semibold">Vendors</h1>
+        <input
+          className="input max-w-xs"
+          placeholder="Search vendors…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
         {canManage ? (
           <button onClick={() => setDraft({ ...emptyDraft })} className="btn-primary ml-auto">
             + New vendor
@@ -130,14 +146,16 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
                   Loading…
                 </td>
               </tr>
-            ) : vendors.length === 0 ? (
+            ) : filtered.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-4 py-8 text-center text-zinc-400">
-                  No vendors yet. Add one to start.
+                  {vendors.length === 0
+                    ? "No vendors yet. Add one to start."
+                    : "No vendors match your search."}
                 </td>
               </tr>
             ) : (
-              vendors.map((v) => (
+              filtered.map((v) => (
                 <tr key={v.id}>
                   <td className="px-4 py-2.5 font-medium">{v.name}</td>
                   <td className="px-4 py-2.5 text-zinc-500">{v.contact || "—"}</td>
