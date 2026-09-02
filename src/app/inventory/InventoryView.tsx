@@ -59,6 +59,15 @@ export function InventoryView() {
 
   const stores = useMemo(() => data?.stores ?? [], [data]);
 
+  // In-stock first, then name. (Out-of-stock = tracked with total <= 0.)
+  const rows = useMemo(() => {
+    const rank = (r: { trackStock: boolean; total: number }) =>
+      r.trackStock && r.total <= 0 ? 1 : 0;
+    return [...(data?.rows ?? [])].sort(
+      (a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name),
+    );
+  }, [data]);
+
   return (
     <div className="w-full flex-1 p-4">
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -111,14 +120,14 @@ export function InventoryView() {
                   Loading…
                 </td>
               </tr>
-            ) : (data?.rows.length ?? 0) === 0 ? (
+            ) : rows.length === 0 ? (
               <tr>
                 <td colSpan={4 + stores.length} className="px-4 py-8 text-center text-zinc-400">
                   No products.
                 </td>
               </tr>
             ) : (
-              data!.rows.map((r) => (
+              rows.map((r) => (
                 <tr key={r.productId} className={r.active ? "" : "opacity-50"}>
                   <td className="px-4 py-2.5 font-medium">
                     {r.name}

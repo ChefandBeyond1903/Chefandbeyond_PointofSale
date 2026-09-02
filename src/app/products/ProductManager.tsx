@@ -128,10 +128,14 @@ export function ProductManager({
 
   const filtered = useMemo(() => {
     const s = q.trim();
-    if (!s) return products;
-    return products.filter((p) =>
-      matchesSearch(s, [p.name, p.description, p.sku, p.vendor, p.barcode]),
-    );
+    const list = s
+      ? products.filter((p) =>
+          matchesSearch(s, [p.name, p.description, p.sku, p.vendor, p.barcode]),
+        )
+      : products;
+    // In-stock first, then name. (Out-of-stock = tracked with stock <= 0.)
+    const rank = (p: Product) => (p.trackStock && p.stock <= 0 ? 1 : 0);
+    return [...list].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
   }, [products, q]);
 
   const filteredIds = useMemo(() => filtered.map((p) => p.id), [filtered]);
