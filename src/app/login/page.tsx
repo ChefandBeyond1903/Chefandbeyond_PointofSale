@@ -8,7 +8,7 @@ import type { SessionUser } from "@/lib/types";
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const next = params.get("next") || "/";
+  const nextParam = params.get("next");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -21,11 +21,12 @@ function LoginForm() {
     setBusy(true);
     setError(null);
     try {
-      await api<{ user: SessionUser }>("/api/auth/login", {
+      const { user } = await api<{ user: SessionUser }>("/api/auth/login", {
         method: "POST",
         body: JSON.stringify({ email, password, remember }),
       });
-      router.push(next);
+      // An admin with no explicit destination lands on their Overview.
+      router.push(nextParam || (user.role === "ADMIN" ? "/overview" : "/"));
       router.refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong");

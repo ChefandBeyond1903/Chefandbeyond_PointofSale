@@ -8,8 +8,10 @@ import { api } from "@/lib/client";
 
 const ALL: Role[] = ["CASHIER", "MANAGER", "ADMIN"];
 const STAFF_UP: Role[] = ["MANAGER", "ADMIN"];
+const ADMIN_ONLY: Role[] = ["ADMIN"];
 
 const LINKS: { href: string; label: string; roles: Role[] }[] = [
+  { href: "/overview", label: "Overview", roles: ADMIN_ONLY },
   { href: "/", label: "Register", roles: ALL },
   { href: "/products", label: "Products", roles: ALL },
   { href: "/vendors", label: "Vendors", roles: ALL },

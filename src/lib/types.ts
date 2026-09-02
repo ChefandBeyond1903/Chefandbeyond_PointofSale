@@ -362,6 +362,49 @@ export interface ManagedUser {
   editable?: boolean;
 }
 
+export interface OverviewWindow {
+  count: number;
+  grossCents: number;
+  profitCents: number;
+  itemsSold: number;
+}
+
+export interface AdminOverview {
+  generatedAt: string;
+  sales: { today: OverviewWindow; week: OverviewWindow; month: OverviewWindow };
+  month: { expensesCents: number; netProfitCents: number };
+  payables: {
+    openBills: { count: number; amountCents: number };
+    overdueBills: { count: number; amountCents: number };
+    openPurchaseOrders: number;
+  };
+  operations: {
+    heldTickets: number;
+    outOfStock: number;
+    activeProducts: number;
+    totalProducts: number;
+  };
+  directory: { vendors: number; customers: number; staff: number; stores: number };
+  byStore: { label: string; grossCents: number; profitCents: number }[];
+  topProducts: { productId: string; name: string; quantity: number; revenueCents: number }[];
+  recentSales: {
+    id: string;
+    number: number;
+    createdAt: string;
+    totalCents: number;
+    store: string;
+    who: string;
+  }[];
+  recentExpenses: {
+    id: string;
+    category: string;
+    payee: string;
+    amountCents: number;
+    expenseDate: string;
+    store: string;
+  }[];
+}
+
 export interface ProfitRow {
   key: string;
   label: string;
