@@ -32,6 +32,7 @@ export function QuickAddProductModal({
   onCreated: (product: Product) => void;
 }) {
   const [name, setName] = useState(initialName.trim());
+  const [description, setDescription] = useState("");
   const [sku, setSku] = useState(suggestSku(initialName));
   const [priceCents, setPriceCents] = useState(0);
   const [categoryId, setCategoryId] = useState("");
@@ -50,6 +51,7 @@ export function QuickAddProductModal({
         method: "POST",
         body: JSON.stringify({
           name: name.trim(),
+          description: description.trim() || undefined,
           sku: sku.trim(),
           priceCents,
           trackStock,
@@ -88,6 +90,17 @@ export function QuickAddProductModal({
               value={name}
               onChange={(e) => setName(e.target.value)}
               autoFocus
+            />
+          </div>
+
+          <div>
+            <label className="label">Description</label>
+            <textarea
+              className="input"
+              rows={2}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Optional"
             />
           </div>
 
