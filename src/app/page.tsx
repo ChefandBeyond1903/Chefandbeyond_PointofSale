@@ -28,9 +28,6 @@ const TICKET_KEY = "cb-pos-register-ticket-v1";
 
 interface TicketSnapshot {
   cart: CartLine[];
-  orderDiscountCents: number;
-  orderDiscPercent: number;
-  orderDiscMode: DiscMode;
   shippingCents: number;
   custId: string | null;
   custName: string;
@@ -96,9 +93,6 @@ export default function RegisterPage() {
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [cart, setCart] = useState<CartLine[]>([]);
-  const [orderDiscountCents, setOrderDiscountCents] = useState(0);
-  const [orderDiscPercent, setOrderDiscPercent] = useState(0);
-  const [orderDiscMode, setOrderDiscMode] = useState<DiscMode>("AMOUNT");
   const [shippingCents, setShippingCents] = useState(0);
 
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -236,9 +230,6 @@ export default function RegisterPage() {
         const s = JSON.parse(raw) as Partial<TicketSnapshot>;
         if (Array.isArray(s.cart) && s.cart.length > 0) {
           setCart(s.cart as CartLine[]);
-          setOrderDiscountCents(s.orderDiscountCents ?? 0);
-          setOrderDiscPercent(s.orderDiscPercent ?? 0);
-          setOrderDiscMode(s.orderDiscMode === "PERCENT" ? "PERCENT" : "AMOUNT");
           setShippingCents(s.shippingCents ?? 0);
           setCustId(s.custId ?? null);
           setCustName(s.custName ?? "");
@@ -266,9 +257,6 @@ export default function RegisterPage() {
       }
       const snap: TicketSnapshot = {
         cart,
-        orderDiscountCents,
-        orderDiscPercent,
-        orderDiscMode,
         shippingCents,
         custId,
         custName,
@@ -284,9 +272,6 @@ export default function RegisterPage() {
     }
   }, [
     cart,
-    orderDiscountCents,
-    orderDiscPercent,
-    orderDiscMode,
     shippingCents,
     custId,
     custName,
@@ -412,14 +397,9 @@ export default function RegisterPage() {
       perLineAfter.push(net);
     }
     const sumAfterLine = perLineAfter.reduce((a, b) => a + b, 0);
-    const orderDisc =
-      orderDiscMode === "PERCENT"
-        ? Math.min(sumAfterLine, Math.round((sumAfterLine * orderDiscPercent) / 100))
-        : Math.min(orderDiscountCents, sumAfterLine);
     const rateBps = storeTaxRateBps ?? 0;
 
     let tax = 0;
-    let allocated = 0;
     const umrpViolations: {
       productId: string;
       name: string;
@@ -427,14 +407,7 @@ export default function RegisterPage() {
       eachCents: number;
     }[] = [];
     cart.forEach((line, idx) => {
-      const share =
-        idx === cart.length - 1
-          ? orderDisc - allocated
-          : sumAfterLine > 0
-            ? Math.round((orderDisc * perLineAfter[idx]) / sumAfterLine)
-            : 0;
-      allocated += idx === cart.length - 1 ? 0 : share;
-      const net = perLineAfter[idx] - share;
+      const net = perLineAfter[idx];
       tax += taxOn(net, rateBps);
 
       const umrp = line.product.umrpCents ?? 0;
@@ -448,7 +421,7 @@ export default function RegisterPage() {
       }
     });
 
-    const discount = lineAdjust + orderDisc;
+    const discount = lineAdjust;
     const shipping = Math.max(0, shippingCents);
     const total = subtotal - discount + tax + shipping;
     // "Customer total saving" vs. catalog list — only when it's actually a saving.
@@ -463,15 +436,18 @@ export default function RegisterPage() {
       total,
       umrpViolations,
       sumAfterLine,
-      orderDiscountResolved: orderDisc,
+      orderDiscountResolved: 0,
       savedCents,
       overListCents,
       savedPct,
     };
-  }, [cart, orderDiscountCents, orderDiscPercent, orderDiscMode, storeTaxRateBps, shippingCents]);
+  }, [cart, storeTaxRateBps, shippingCents]);
 
   function addToCart(product: Product) {
     setError(null);
+    // Clear the search so the results grid collapses and the ticket is right
+    // there — no scrolling past a long list of hits.
+    setQuery("");
     setFlashId(product.id);
     if (flashTimer.current) clearTimeout(flashTimer.current);
     flashTimer.current = setTimeout(() => setFlashId(null), 800);
@@ -561,21 +537,8 @@ export default function RegisterPage() {
     );
   }
 
-  // Toggle the order discount unit, carrying the current value across.
-  function changeOrderDiscMode(mode: DiscMode) {
-    if (mode === orderDiscMode) return;
-    const s = totals.sumAfterLine;
-    const cents = totals.orderDiscountResolved;
-    if (mode === "PERCENT") setOrderDiscPercent(s > 0 ? (cents / s) * 100 : 0);
-    else setOrderDiscountCents(cents);
-    setOrderDiscMode(mode);
-  }
-
   function clearCart() {
     setCart([]);
-    setOrderDiscountCents(0);
-    setOrderDiscPercent(0);
-    setOrderDiscMode("AMOUNT");
     setShippingCents(0);
     clearCustomer();
   }
@@ -654,9 +617,6 @@ export default function RegisterPage() {
         return;
       }
       setCart(lines);
-      setOrderDiscountCents(res.heldSale.orderDiscountCents);
-      setOrderDiscPercent(0);
-      setOrderDiscMode("AMOUNT");
       setShippingCents(res.heldSale.shippingCents);
       setCustId(res.heldSale.customerId);
       setCustName(res.heldSale.customerName);
@@ -1113,50 +1073,6 @@ export default function RegisterPage() {
           </div>
 
           <div className="space-y-2 border-t border-zinc-100 px-4 py-3 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-zinc-500">
-                Order discount
-                {totals.orderDiscountResolved > 0 && (
-                  <span className="ml-1 text-xs text-green-600">
-                    − {formatMoney(totals.orderDiscountResolved)}
-                    {totals.sumAfterLine > 0 &&
-                      ` (${Math.round((totals.orderDiscountResolved / totals.sumAfterLine) * 100)}%)`}
-                  </span>
-                )}
-              </span>
-              <div className="flex items-center gap-1">
-                <div className="flex overflow-hidden rounded-md border border-zinc-300 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => changeOrderDiscMode("AMOUNT")}
-                    className={`px-2 py-1 ${orderDiscMode === "AMOUNT" ? "bg-indigo-600 text-white" : "text-zinc-500"}`}
-                  >
-                    $
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => changeOrderDiscMode("PERCENT")}
-                    className={`px-2 py-1 ${orderDiscMode === "PERCENT" ? "bg-indigo-600 text-white" : "text-zinc-500"}`}
-                  >
-                    %
-                  </button>
-                </div>
-                {orderDiscMode === "PERCENT" ? (
-                  <PercentInput
-                    value={orderDiscPercent}
-                    onValueChange={setOrderDiscPercent}
-                    className="input h-8 w-24 px-2 text-right"
-                    aria-label="Order discount percent"
-                  />
-                ) : (
-                  <MoneyInput
-                    cents={orderDiscountCents}
-                    onCentsChange={setOrderDiscountCents}
-                    className="input h-8 w-24 px-2 text-right"
-                  />
-                )}
-              </div>
-            </div>
             <Row label="Subtotal (list)" value={formatMoney(totals.subtotal)} />
             <Row
               label={totals.discount >= 0 ? "Discount" : "Price adjustment"}
