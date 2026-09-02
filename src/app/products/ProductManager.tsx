@@ -52,7 +52,6 @@ export function ProductManager({
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [newCategory, setNewCategory] = useState("");
   const [vendorNames, setVendorNames] = useState<string[]>([]);
 
   // Per-store on-hand for the product open in the edit modal.
@@ -389,16 +388,6 @@ export function ProductManager({
     }
   }
 
-  async function addCategory() {
-    if (!newCategory.trim()) return;
-    try {
-      await api("/api/categories", { method: "POST", body: JSON.stringify({ name: newCategory.trim() }) });
-      setNewCategory("");
-      load();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not add category");
-    }
-  }
 
   return (
     <div className="w-full flex-1 p-4">
@@ -416,29 +405,6 @@ export function ProductManager({
           </button>
         ) : (
           <span className="ml-auto text-xs text-zinc-400">View only</span>
-        )}
-      </div>
-
-      <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
-        <span className="text-zinc-500">Categories:</span>
-        {categories.map((c) => (
-          <span key={c.id} className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs">
-            {c.name} · {c._count?.products ?? 0}
-          </span>
-        ))}
-        {canManage && (
-          <>
-            <input
-              className="input h-8 w-40"
-              placeholder="New category"
-              value={newCategory}
-              onChange={(e) => setNewCategory(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && addCategory()}
-            />
-            <button onClick={addCategory} className="btn-secondary h-8">
-              Add
-            </button>
-          </>
         )}
       </div>
 

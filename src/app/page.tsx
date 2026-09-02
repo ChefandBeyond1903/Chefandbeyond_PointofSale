@@ -1132,26 +1132,9 @@ function ShiftWidget({
   stats: ShiftStats | null;
   onChanged: () => void;
 }) {
-  const [floatCents, setFloatCents] = useState(0);
   const [countCents, setCountCents] = useState(0);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-
-  async function open() {
-    setBusy(true);
-    setErr(null);
-    try {
-      await api("/api/shifts", {
-        method: "POST",
-        body: JSON.stringify({ openingFloatCents: floatCents }),
-      });
-      onChanged();
-    } catch (e) {
-      setErr(e instanceof ApiError ? e.message : "Failed");
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function close() {
     if (!shift) return;
@@ -1170,25 +1153,7 @@ function ShiftWidget({
     }
   }
 
-  if (!shift) {
-    return (
-      <div className="card p-3 text-sm">
-        <p className="mb-2 font-medium">Till closed</p>
-        <div className="flex items-center gap-2">
-          <MoneyInput
-            cents={floatCents}
-            onCentsChange={setFloatCents}
-            className="input h-8"
-            placeholder="Opening float"
-          />
-          <button onClick={open} disabled={busy} className="btn-primary h-8 whitespace-nowrap">
-            Open till
-          </button>
-        </div>
-        {err && <p className="mt-1 text-xs text-red-600">{err}</p>}
-      </div>
-    );
-  }
+  if (!shift) return null;
 
   return (
     <div className="card p-3 text-sm">
