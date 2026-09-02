@@ -218,6 +218,22 @@ export interface Bill {
   _count?: { items: number };
 }
 
+export type ExpenseStatus = "PAID" | "UNPAID";
+
+export interface Expense {
+  id: string;
+  category: string;
+  payee: string;
+  amountCents: number;
+  expenseDate: string;
+  memo: string;
+  status: ExpenseStatus;
+  storeId: string | null;
+  store?: { id: string; name: string } | null;
+  createdBy?: { id: string; name: string } | null;
+  createdAt: string;
+}
+
 export interface PurchaseOrderCategoryLine {
   id: string;
   category: string;
@@ -373,7 +389,13 @@ export interface ReportSummary {
     marginPct: number;
     itemsSold: number;
     averageSaleCents: number;
+    /** Operating expenses in the period (0 for the cashier view). */
+    expensesCents: number;
+    /** Gross profit minus operating expenses. */
+    netProfitCents: number;
   };
+  /** Operating expenses grouped by category, largest first. */
+  expensesByCategory: { category: string; amountCents: number }[];
   byStore: ProfitRow[];
   byStaff: ProfitRow[];
   byPaymentMethod: { method: string; count: number; totalCents: number }[];

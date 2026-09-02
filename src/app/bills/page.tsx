@@ -6,5 +6,5 @@ export default async function BillsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/bills");
   if (user.role === "CASHIER") redirect("/");
-  return <BillsView canManage />;
+  return <BillsView canManage isAdmin={user.role === "ADMIN"} />;
 }

@@ -44,29 +44,30 @@ model Store {
   purchaseOrders PurchaseOrder[]
   inventory      StoreInventory[]
   bills          Bill[]
+  expenses       Expense[]
 }
 
 /// Staff who can sign in. role is "CASHIER", "MANAGER" (scoped to one store),
 /// or "ADMIN" (all stores, cross-store reports).
 model User {
-  id     String  @id @default(cuid())
-  email  String  @unique
-  name   String
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
   // Supabase Auth user id (auth.users.id). Identity and passwords live in
   // Supabase; this row carries the POS role/store assignment.
-  authId String? @unique
-  role   String  @default("CASHIER")
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  authId    String?  @unique
+  role      String   @default("CASHIER")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   storeId String?
   store   Store?  @relation(fields: [storeId], references: [id])
 
   // Who created this account. A cashier can only manage the staff they created.
-  createdById String?
-  createdBy   User?   @relation("UserCreatedBy", fields: [createdById], references: [id])
-  createdUsers User[] @relation("UserCreatedBy")
+  createdById  String?
+  createdBy    User?   @relation("UserCreatedBy", fields: [createdById], references: [id])
+  createdUsers User[]  @relation("UserCreatedBy")
 
   sales          Sale[]          @relation("SaleCashier")
   salesCredited  Sale[]          @relation("SaleSalesperson")
@@ -74,6 +75,7 @@ model User {
   purchaseOrders PurchaseOrder[]
   bills          Bill[]
   heldSales      HeldSale[]
+  expenses       Expense[]
 
   @@index([storeId])
   @@index([createdById])
@@ -83,20 +85,20 @@ model User {
 /// in the warehouse) and holds it instead of charging; it can then be recalled
 /// on another device — e.g. a desktop in the office — and the sale finished.
 model HeldSale {
-  id                String  @id @default(cuid())
-  label             String  @default("")
-  note              String  @default("")
+  id                 String @id @default(cuid())
+  label              String @default("")
+  note               String @default("")
   orderDiscountCents Int    @default(0)
-  shippingCents     Int     @default(0)
+  shippingCents      Int    @default(0)
 
-  storeId       String?
-  salespersonId String?
-  customerId    String?
-  customerName    String @default("")
-  customerEmail   String @default("")
-  customerPhone   String @default("")
-  customerAddress String @default("")
-  customerCompany String @default("")
+  storeId         String?
+  salespersonId   String?
+  customerId      String?
+  customerName    String  @default("")
+  customerEmail   String  @default("")
+  customerPhone   String  @default("")
+  customerAddress String  @default("")
+  customerCompany String  @default("")
 
   /// [{ productId, quantity, unitPriceCents, discountCents }]
   items Json
@@ -120,18 +122,18 @@ model Category {
 /// Supplier directory. Products carry the vendor name as a string (see
 /// Product.vendor); this table holds the contact details for that name.
 model Vendor {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  contact   String   @default("")
-  email     String   @default("")
-  phone     String   @default("")
-  address   String   @default("")
-  notes     String   @default("")
+  id                  String   @id @default(cuid())
+  name                String   @unique
+  contact             String   @default("")
+  email               String   @default("")
+  phone               String   @default("")
+  address             String   @default("")
+  notes               String   @default("")
   // Order total (in cents) this vendor requires for free freight. 0 = none.
   // Ordering below this only warns; it never blocks the purchase order.
-  freightMinimumCents Int @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  freightMinimumCents Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 }
 
 /// Customer directory. Rows are created automatically the first time a sale is
@@ -207,23 +209,23 @@ model StoreInventory {
 /// A completed (or voided) transaction. status is "COMPLETED" or "VOIDED".
 /// paymentMethod is "CASH" or "CARD".
 model Sale {
-  id            String @id @default(cuid())
-  number        Int    @unique
-  status        String @default("COMPLETED")
-  subtotalCents Int
+  id                String  @id @default(cuid())
+  number            Int     @unique
+  status            String  @default("COMPLETED")
+  subtotalCents     Int
   // Sum of catalog list price × qty, before any manual price change or
   // discount. Used to show the customer's saving vs. list. 0 on old rows.
-  listSubtotalCents Int @default(0)
-  discountCents Int    @default(0)
-  taxCents      Int    @default(0)
-  taxRateBps    Int    @default(0)
+  listSubtotalCents Int     @default(0)
+  discountCents     Int     @default(0)
+  taxCents          Int     @default(0)
+  taxRateBps        Int     @default(0)
   // Flat shipping/delivery charge added to the invoice. Not taxed.
-  shippingCents Int    @default(0)
-  totalCents    Int
-  paymentMethod String
-  tenderedCents Int    @default(0)
-  changeCents   Int    @default(0)
-  note          String?
+  shippingCents     Int     @default(0)
+  totalCents        Int
+  paymentMethod     String
+  tenderedCents     Int     @default(0)
+  changeCents       Int     @default(0)
+  note              String?
 
   // Store the sale was rung at (the cashier's assigned store). storeId may be
   // null for historic rows; the snapshots freeze the store's details onto the
@@ -245,17 +247,17 @@ model Sale {
   customerAddressSnapshot String    @default("")
 
   // The operator who was signed in and rang the sale.
-  cashierId String
-  cashier   User   @relation("SaleCashier", fields: [cashierId], references: [id])
+  cashierId     String
+  cashier       User    @relation("SaleCashier", fields: [cashierId], references: [id])
   // The salesperson credited with the sale. Defaults to the cashier; the
   // operator can switch it at the register. Null on legacy rows (= cashier).
   salespersonId String?
-  salesperson   User?  @relation("SaleSalesperson", fields: [salespersonId], references: [id])
-  shiftId   String?
-  shift     Shift?  @relation(fields: [shiftId], references: [id])
+  salesperson   User?   @relation("SaleSalesperson", fields: [salespersonId], references: [id])
+  shiftId       String?
+  shift         Shift?  @relation(fields: [shiftId], references: [id])
 
-  createdAt DateTime        @default(now())
-  items     SaleItem[]
+  createdAt      DateTime        @default(now())
+  items          SaleItem[]
   purchaseOrders PurchaseOrder[]
 
   @@index([createdAt])
@@ -305,21 +307,21 @@ model PurchaseOrder {
   note          String?
 
   // Header
-  email          String  @default("")
-  ccBcc          String  @default("")
-  mailingAddress String  @default("")
-  shipTo         String  @default("")
-  shippingAddress String @default("")
-  poDate         DateTime @default(now())
-  dueDate        DateTime?
-  shipVia        String  @default("")
-  storeName      String  @default("")
-  permitNumber   String  @default("")
-  messageToCustomer String @default("")
-  poRef          String  @default("")
-  salesRep       String  @default("")
-  mobileNumber   String  @default("")
-  tags           String  @default("[]")
+  email             String    @default("")
+  ccBcc             String    @default("")
+  mailingAddress    String    @default("")
+  shipTo            String    @default("")
+  shippingAddress   String    @default("")
+  poDate            DateTime  @default(now())
+  dueDate           DateTime?
+  shipVia           String    @default("")
+  storeName         String    @default("")
+  permitNumber      String    @default("")
+  messageToCustomer String    @default("")
+  poRef             String    @default("")
+  salesRep          String    @default("")
+  mobileNumber      String    @default("")
+  tags              String    @default("[]")
 
   // Footer
   messageToVendor String @default("")
@@ -349,18 +351,18 @@ model PurchaseOrder {
 
 /// "Item details" table row: a product/service being ordered.
 model PurchaseOrderItem {
-  id              String @id @default(cuid())
-  nameSnapshot    String @default("")
-  skuSnapshot     String @default("")
-  description     String @default("")
-  quantity        Int
+  id               String @id @default(cuid())
+  nameSnapshot     String @default("")
+  skuSnapshot      String @default("")
+  description      String @default("")
+  quantity         Int
   // Units received so far against this line (supports partial / corrected receipts).
-  receivedQuantity Int   @default(0)
-  unitCostCents   Int
-  lineCostCents   Int
-  customerProject String @default("")
-  klass           String @default("")
-  sortOrder       Int    @default(0)
+  receivedQuantity Int    @default(0)
+  unitCostCents    Int
+  lineCostCents    Int
+  customerProject  String @default("")
+  klass            String @default("")
+  sortOrder        Int    @default(0)
 
   poId      String
   po        PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
@@ -388,14 +390,14 @@ model Bill {
   subtotalCents Int       @default(0)
 
   storeId String?
-  store   Store?  @relation(fields: [storeId], references: [id])
+  store   Store?         @relation(fields: [storeId], references: [id])
   poId    String?
   po      PurchaseOrder? @relation(fields: [poId], references: [id], onDelete: SetNull)
 
   createdById String
-  createdBy   User   @relation(fields: [createdById], references: [id])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdBy   User       @relation(fields: [createdById], references: [id])
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
   items       BillItem[]
 
   @@index([vendor])
@@ -406,23 +408,57 @@ model Bill {
 }
 
 model BillItem {
-  id            String  @id @default(cuid())
-  nameSnapshot  String  @default("")
-  skuSnapshot   String  @default("")
+  id            String @id @default(cuid())
+  nameSnapshot  String @default("")
+  skuSnapshot   String @default("")
   quantity      Int
   unitCostCents Int
   lineCostCents Int
 
-  billId   String
-  bill     Bill    @relation(fields: [billId], references: [id], onDelete: Cascade)
-  poItemId String?
-  poItem   PurchaseOrderItem? @relation(fields: [poItemId], references: [id], onDelete: SetNull)
+  billId    String
+  bill      Bill               @relation(fields: [billId], references: [id], onDelete: Cascade)
+  poItemId  String?
+  poItem    PurchaseOrderItem? @relation(fields: [poItemId], references: [id], onDelete: SetNull)
   productId String?
-  product  Product? @relation(fields: [productId], references: [id])
+  product   Product?           @relation(fields: [productId], references: [id])
 
   @@index([billId])
   @@index([poItemId])
   @@index([productId])
+}
+
+/// An operating expense — rent, utilities, insurance, and the like. Not tied to
+/// a purchase order or a product; recorded so the P&L can show net profit after
+/// all costs.
+model Expense {
+  id          String   @id @default(cuid())
+  category    String
+  payee       String   @default("") // landlord, utility company, …
+  amountCents Int
+  expenseDate DateTime @default(now())
+  memo        String   @default("")
+  status      String   @default("PAID") // "PAID" | "UNPAID"
+
+  storeId String?
+  store   Store?  @relation(fields: [storeId], references: [id])
+
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+  @@index([storeId])
+  @@index([expenseDate])
+  @@index([status])
+}
+
+/// A custom expense category added by a manager. The ready-made categories live
+/// in code (lib/expenseCategories.ts); this table only holds the extras.
+model ExpenseCategory {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
 }
 
 /// "Category details" table row: an expense category, amount entered directly.

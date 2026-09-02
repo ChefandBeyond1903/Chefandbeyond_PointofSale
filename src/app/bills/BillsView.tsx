@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
 import { BILL_TERMS } from "@/lib/terms";
+import { ExpensesPanel } from "./ExpensesPanel";
 import type { Bill } from "@/lib/types";
 
 const FILTERS = ["ALL", "OPEN", "OVERDUE", "PAID"] as const;
@@ -17,7 +18,13 @@ function daysFromNow(s: string | null) {
   return Math.round((new Date(s).getTime() - Date.now()) / 86_400_000);
 }
 
-export function BillsView({ canManage }: { canManage: boolean }) {
+export function BillsView({
+  canManage,
+  isAdmin = false,
+}: {
+  canManage: boolean;
+  isAdmin?: boolean;
+}) {
   const [bills, setBills] = useState<Bill[]>([]);
   const [filter, setFilter] = useState<Filter>("OPEN");
   const [q, setQ] = useState("");
@@ -172,6 +179,8 @@ export function BillsView({ canManage }: { canManage: boolean }) {
           </tbody>
         </table>
       </div>
+
+      <ExpensesPanel isAdmin={isAdmin} />
 
       {openId && (
         <BillDetailModal

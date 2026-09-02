@@ -125,9 +125,15 @@ export function ReportsView({
                 />
                 <Stat label="Cost of goods" value={formatMoney(data.totals.costCents)} />
                 <Stat
-                  label="Net profit"
+                  label="Gross profit"
                   value={formatMoney(data.totals.profitCents)}
                   sub={`${data.totals.marginPct}% margin`}
+                />
+                <Stat label="Operating expenses" value={formatMoney(data.totals.expensesCents)} />
+                <Stat
+                  label="Net profit"
+                  value={formatMoney(data.totals.netProfitCents)}
+                  sub="after expenses"
                   accent
                 />
                 <Stat label="Transactions" value={String(data.totals.saleCount)} />
@@ -135,6 +141,8 @@ export function ReportsView({
                 <Stat label="Tax collected" value={formatMoney(data.totals.taxCents)} />
                 <Stat label="Avg. sale" value={formatMoney(data.totals.averageSaleCents)} />
               </div>
+
+              <ProfitLoss data={data} />
 
               {data.byStore.length > 1 && (
                 <ProfitTable title="By store" rows={data.byStore} firstCol="Store" />
@@ -351,6 +359,96 @@ function RecordList({
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+function PLRow({
+  label,
+  value,
+  indent,
+  strong,
+  border,
+  negative,
+}: {
+  label: string;
+  value: string;
+  indent?: boolean;
+  strong?: boolean;
+  border?: boolean;
+  negative?: boolean;
+}) {
+  return (
+    <div
+      className={`flex items-center justify-between py-1.5 ${
+        border ? "border-t border-zinc-200" : ""
+      } ${strong ? "font-semibold" : ""}`}
+    >
+      <span className={indent ? "pl-4 text-zinc-500" : "text-zinc-600"}>{label}</span>
+      <span className={`tabular-nums ${negative ? "text-red-600" : ""}`}>{value}</span>
+    </div>
+  );
+}
+
+function ProfitLoss({ data }: { data: ReportSummary }) {
+  const t = data.totals;
+  const grossSales = t.subtotalCents - t.discountCents;
+  return (
+    <div className="card p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <h2 className="font-semibold">Profit &amp; loss</h2>
+        <span className="text-xs text-zinc-400">
+          {new Date(data.range.from).toLocaleDateString()} –{" "}
+          {new Date(data.range.to).toLocaleDateString()}
+        </span>
+      </div>
+      <div className="text-sm">
+        <PLRow label="Gross sales (ex-tax)" value={formatMoney(grossSales)} />
+        <PLRow
+          label="Cost of goods sold"
+          value={`(${formatMoney(t.costCents)})`}
+          negative
+        />
+        <PLRow
+          label="Gross profit"
+          value={formatMoney(t.profitCents)}
+          strong
+          border
+        />
+
+        <div className="mt-3 pt-1 text-xs font-medium uppercase tracking-wide text-zinc-400">
+          Operating expenses
+        </div>
+        {data.expensesByCategory.length === 0 ? (
+          <PLRow label="None recorded" value={formatMoney(0)} indent />
+        ) : (
+          data.expensesByCategory.map((e) => (
+            <PLRow
+              key={e.category}
+              label={e.category}
+              value={`(${formatMoney(e.amountCents)})`}
+              indent
+              negative
+            />
+          ))
+        )}
+        <PLRow
+          label="Total operating expenses"
+          value={`(${formatMoney(t.expensesCents)})`}
+          border
+          negative
+        />
+
+        <PLRow
+          label="Net profit"
+          value={formatMoney(t.netProfitCents)}
+          strong
+          border
+        />
+      </div>
+      <p className="mt-2 text-xs text-zinc-400">
+        Sales tax collected ({formatMoney(t.taxCents)}) is excluded — it isn&apos;t revenue.
+      </p>
     </div>
   );
 }

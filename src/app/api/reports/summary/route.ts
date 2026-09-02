@@ -72,6 +72,23 @@ export async function GET(req: NextRequest) {
       prisma.store.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     ]);
 
+    // Operating expenses in the same window and store scope, for the P&L.
+    const expenseWhere: Prisma.ExpenseWhereInput = {
+      expenseDate: { gte: from, lte: to },
+    };
+    if (storeId) expenseWhere.storeId = storeId;
+    const expenseRows = limited
+      ? []
+      : await prisma.expense.groupBy({
+          by: ["category"],
+          where: expenseWhere,
+          _sum: { amountCents: true },
+        });
+    const expensesByCategory = expenseRows
+      .map((r) => ({ category: r.category, amountCents: r._sum.amountCents ?? 0 }))
+      .sort((a, b) => b.amountCents - a.amountCents);
+    const expensesCents = expensesByCategory.reduce((s, e) => s + e.amountCents, 0);
+
     const storeNameById = new Map(stores.map((s) => [s.id, s.name]));
 
     let grossCents = 0;
@@ -221,7 +238,10 @@ export async function GET(req: NextRequest) {
           marginPct: 0,
           itemsSold,
           averageSaleCents: 0,
+          expensesCents: 0,
+          netProfitCents: 0,
         },
+        expensesByCategory: [],
         byStore: [],
         byStaff: [],
         byPaymentMethod: [],
@@ -250,7 +270,10 @@ export async function GET(req: NextRequest) {
         marginPct: pct(profitCents, netCents),
         itemsSold,
         averageSaleCents: saleCount > 0 ? Math.round(grossCents / saleCount) : 0,
+        expensesCents,
+        netProfitCents: profitCents - expensesCents,
       },
+      expensesByCategory,
       byStore: toRows(byStore),
       byStaff: toRows(byStaff),
       byPaymentMethod: [...byMethod.entries()].map(([method, v]) => ({

@@ -90,6 +90,33 @@ export const billCreateSchema = z.object({
     .min(1),
 });
 
+// An operating expense (rent, utilities, …) recorded for the P&L.
+export const expenseCreateSchema = z.object({
+  category: z.string().trim().min(1).max(120),
+  payee: z.string().trim().max(160).default(""),
+  amountCents: z.number().int().min(1).max(100_000_000_00),
+  expenseDate: dateInput.optional(),
+  memo: z.string().trim().max(2000).default(""),
+  status: z.enum(["PAID", "UNPAID"]).default("PAID"),
+  // Admin only: which store the expense belongs to. A manager's expenses are
+  // pinned to their own store.
+  storeId: z.string().trim().min(1).optional().or(z.literal("")).transform((v) => (v ? v : undefined)),
+});
+
+export const expenseUpdateSchema = z.object({
+  category: z.string().trim().min(1).max(120).optional(),
+  payee: z.string().trim().max(160).optional(),
+  amountCents: z.number().int().min(1).max(100_000_000_00).optional(),
+  expenseDate: dateInput.optional(),
+  memo: z.string().trim().max(2000).optional(),
+  status: z.enum(["PAID", "UNPAID"]).optional(),
+  storeId: z.string().trim().max(64).nullable().optional(),
+});
+
+export const expenseCategoryCreateSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+});
+
 export const billUpdateSchema = z.object({
   billNumber: z.string().trim().max(120).optional(),
   billDate: dateInput.optional(),
