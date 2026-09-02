@@ -73,6 +73,11 @@ export function ProductManager({
   const [newVendor, setNewVendor] = useState({ name: "", email: "", phone: "" });
   const [savingVendor, setSavingVendor] = useState(false);
 
+  // Inline "add category" state for the product modal.
+  const [addingCategory, setAddingCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [savingCategory, setSavingCategory] = useState(false);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -119,6 +124,29 @@ export function ProductManager({
       setError(err instanceof ApiError ? err.message : "Could not add vendor");
     } finally {
       setSavingVendor(false);
+    }
+  }
+
+  async function saveNewCategory() {
+    const name = newCategoryName.trim();
+    if (!name) return;
+    setSavingCategory(true);
+    setError(null);
+    try {
+      const { category } = await api<{ category: Category }>("/api/categories", {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      });
+      setCategories((cur) =>
+        [...cur, category].sort((a, b) => a.name.localeCompare(b.name)),
+      );
+      setDraft((d) => (d ? { ...d, categoryId: category.id } : d));
+      setAddingCategory(false);
+      setNewCategoryName("");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not add category");
+    } finally {
+      setSavingCategory(false);
     }
   }
 
@@ -243,9 +271,12 @@ export function ProductManager({
     }
   }
 
+  // Collapse the inline "add vendor" / "add category" sub-forms in the drawer.
   function resetVendorAdd() {
     setAddingVendor(false);
     setNewVendor({ name: "", email: "", phone: "" });
+    setAddingCategory(false);
+    setNewCategoryName("");
   }
 
   function closeDraft() {
@@ -790,20 +821,70 @@ export function ProductManager({
                   </p>
                 )}
               </div>
-              <div>
+              <div className={addingCategory ? "col-span-2" : undefined}>
                 <label className="label">Category</label>
-                <select
-                  className="input"
-                  value={draft.categoryId}
-                  onChange={(e) => setDraft({ ...draft, categoryId: e.target.value })}
-                >
-                  <option value="">— None —</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+                {!addingCategory ? (
+                  <select
+                    className="input"
+                    value={draft.categoryId}
+                    onChange={(e) => {
+                      if (e.target.value === "__add__") {
+                        setNewCategoryName("");
+                        setAddingCategory(true);
+                      } else {
+                        setDraft({ ...draft, categoryId: e.target.value });
+                      }
+                    }}
+                  >
+                    <option value="">— None —</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                    <option value="__add__">＋ Add new category…</option>
+                  </select>
+                ) : (
+                  <div className="rounded-md border border-zinc-200 p-3">
+                    <p className="mb-2 text-xs font-medium text-zinc-600">New category</p>
+                    <input
+                      className="input"
+                      placeholder="Category name *"
+                      value={newCategoryName}
+                      onChange={(e) => setNewCategoryName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          saveNewCategory();
+                        }
+                      }}
+                      autoFocus
+                    />
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={saveNewCategory}
+                        disabled={savingCategory || !newCategoryName.trim()}
+                        className="btn-primary h-8 text-xs"
+                      >
+                        {savingCategory ? "Adding…" : "Add category"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAddingCategory(false);
+                          setNewCategoryName("");
+                        }}
+                        className="btn-ghost h-8 text-xs"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                    <p className="mt-1 text-[11px] text-zinc-400">
+                      Saved to Categories and selected for this product.
+                    </p>
+                  </div>
+                )}
               </div>
               <div className="col-span-2">
                 <label className="label">Vendor</label>
