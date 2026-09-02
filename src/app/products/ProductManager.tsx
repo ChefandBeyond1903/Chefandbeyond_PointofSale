@@ -307,24 +307,37 @@ export function ProductManager({
       .finally(() => setEditStockLoading(false));
   }
 
-  // Turn the product open in the drawer into a new-product draft: same details,
-  // fresh name and SKU, no id — "Save product" then creates a copy.
-  function duplicateDraft() {
-    setDraft((d) =>
-      d
-        ? {
-            ...d,
-            id: undefined,
-            name: `${d.name} (copy)`,
-            sku: d.sku ? `${d.sku}-COPY` : "",
-          }
-        : d,
-    );
+  // Open the edit drawer as a *new* product pre-filled from an existing one:
+  // same details, fresh name and SKU, no id — "Save product" creates the copy.
+  function startDuplicate(p: Product) {
+    setError(null);
+    resetVendorAdd();
     setEditStock(null);
     setEditStockLoading(false);
     setEditableStoreIds([]);
     setStockDraft({});
-    setError(null);
+    setDraft({
+      name: `${p.name} (copy)`,
+      sku: p.sku ? `${p.sku}-COPY` : "",
+      barcode: "", // barcodes are unique — don't copy
+      description: p.description ?? "",
+      priceCents: p.priceCents,
+      costCents: p.costCents,
+      umrpCents: p.umrpCents,
+      trackStock: p.trackStock,
+      categoryId: p.categoryId ?? "",
+      active: p.active,
+      favorite: p.favorite,
+      vendor: p.vendor ?? "",
+    });
+    // The list omits description to stay small — fetch the full one.
+    api<{ product: { description: string | null } }>(`/api/products/${p.id}`)
+      .then((res) =>
+        setDraft((d) =>
+          d && !d.id ? { ...d, description: res.product.description ?? d.description } : d,
+        ),
+      )
+      .catch(() => {});
   }
 
   async function saveStock(storeId: string) {
@@ -553,6 +566,12 @@ export function ProductManager({
                   <button onClick={() => startEdit(p)} className="btn-ghost px-2 py-0.5 text-xs">
                     Edit
                   </button>
+                  <button
+                    onClick={() => startDuplicate(p)}
+                    className="btn-ghost px-2 py-0.5 text-xs"
+                  >
+                    Duplicate
+                  </button>
                   {p.active && (
                     <button
                       onClick={() => archive(p)}
@@ -680,6 +699,9 @@ export function ProductManager({
                       <>
                         <button onClick={() => startEdit(p)} className="btn-ghost text-xs">
                           Edit
+                        </button>
+                        <button onClick={() => startDuplicate(p)} className="btn-ghost text-xs">
+                          Duplicate
                         </button>
                         {p.active && (
                           <button
@@ -982,16 +1004,6 @@ export function ProductManager({
               <button onClick={closeDraft} className="btn-secondary flex-1">
                 Cancel
               </button>
-              {draft.id && (
-                <button
-                  onClick={duplicateDraft}
-                  disabled={saving}
-                  className="btn-ghost"
-                  title="Create a new product pre-filled from this one"
-                >
-                  Duplicate
-                </button>
-              )}
               <button onClick={save} disabled={saving} className="btn-primary flex-1">
                 {saving ? "Saving…" : "Save product"}
               </button>
