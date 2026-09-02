@@ -97,7 +97,65 @@ export function InventoryView() {
 
       {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      <div className="card overflow-x-auto">
+      {/* Mobile: stacked cards (the wide table doesn't fit a phone). */}
+      <div className="space-y-2 sm:hidden">
+        {loading ? (
+          <p className="text-sm text-zinc-400">Loading…</p>
+        ) : rows.length === 0 ? (
+          <p className="text-sm text-zinc-400">No products.</p>
+        ) : (
+          rows.map((r) => (
+            <div
+              key={r.productId}
+              className={`card p-3 text-sm ${r.active ? "" : "opacity-50"}`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-medium">
+                    {r.name}
+                    {!r.trackStock && (
+                      <span className="ml-1 text-xs text-zinc-400">(not tracked)</span>
+                    )}
+                  </p>
+                  <p className="break-all text-xs text-zinc-400">
+                    {r.sku}
+                    {r.vendor ? ` · ${r.vendor}` : ""}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-400">Total</p>
+                  <p className="font-semibold tabular-nums">{r.total}</p>
+                </div>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {stores.map((s) => {
+                  const qty = r.byStore[s.id] ?? 0;
+                  const label = s.name.replace(/^Chef and Beyond - /, "");
+                  const cls = `rounded-md border px-2 py-1 text-xs tabular-nums ${
+                    qty < 0 ? "border-red-200 text-red-500" : "border-zinc-200 text-zinc-600"
+                  }`;
+                  return canEditStore(s.id) ? (
+                    <button
+                      key={s.id}
+                      onClick={() => adjust(r.productId, s.id, r.name, s.name, qty)}
+                      className={`${cls} hover:bg-zinc-50`}
+                    >
+                      {label}: {qty}
+                    </button>
+                  ) : (
+                    <span key={s.id} className={cls}>
+                      {label}: {qty}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Desktop / tablet: full table. */}
+      <div className="card hidden overflow-x-auto sm:block">
         <table className="w-full min-w-[640px] text-sm">
           <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
             <tr>

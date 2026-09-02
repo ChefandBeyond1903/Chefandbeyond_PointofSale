@@ -470,7 +470,83 @@ export function ProductManager({
         </div>
       )}
 
-      <div className="card overflow-x-auto">
+      {/* Mobile: stacked cards (the wide table doesn't fit a phone). */}
+      <div className="space-y-2 sm:hidden">
+        {loading ? (
+          <p className="text-sm text-zinc-400">Loading…</p>
+        ) : filtered.length === 0 ? (
+          <p className="text-sm text-zinc-400">No products.</p>
+        ) : (
+          filtered.map((p) => (
+            <div key={p.id} className={`card p-3 text-sm ${p.active ? "" : "opacity-50"}`}>
+              <div className="flex items-start gap-2">
+                {canManage && (
+                  <input
+                    type="checkbox"
+                    aria-label={`Select ${p.name}`}
+                    checked={selected.has(p.id)}
+                    onChange={() => toggleOne(p.id)}
+                    className="mt-1"
+                  />
+                )}
+                <button
+                  onClick={() => canManage && toggleFavorite(p)}
+                  disabled={!canManage}
+                  aria-label={p.favorite ? "Remove from register" : "Show on register"}
+                  className={`shrink-0 text-lg leading-none ${
+                    p.favorite ? "text-amber-500" : "text-zinc-300"
+                  }`}
+                >
+                  {p.favorite ? "★" : "☆"}
+                </button>
+                <button
+                  onClick={() => canManage && startEdit(p)}
+                  disabled={!canManage}
+                  className="min-w-0 flex-1 text-left"
+                >
+                  <p className="font-medium">
+                    {p.name}
+                    {!p.active && <span className="ml-1 text-xs text-zinc-400">(archived)</span>}
+                  </p>
+                  <p className="break-all text-xs text-zinc-400">{p.sku}</p>
+                  <p className="text-xs text-zinc-400">
+                    {p.vendor || "—"}
+                    {p.category?.name ? ` · ${p.category.name}` : ""}
+                  </p>
+                </button>
+                <div className="shrink-0 text-right">
+                  <p className="font-semibold">{formatMoney(p.priceCents)}</p>
+                  <p className="text-xs text-zinc-400">
+                    {p.trackStock ? (
+                      <span className={p.stock <= 0 ? "text-red-500" : ""}>{p.stock} in stock</span>
+                    ) : (
+                      "∞"
+                    )}
+                  </p>
+                </div>
+              </div>
+              {canManage && (
+                <div className="mt-2 flex gap-2 border-t border-zinc-100 pt-2">
+                  <button onClick={() => startEdit(p)} className="btn-ghost px-2 py-0.5 text-xs">
+                    Edit
+                  </button>
+                  {p.active && (
+                    <button
+                      onClick={() => archive(p)}
+                      className="btn-ghost px-2 py-0.5 text-xs text-red-500"
+                    >
+                      Archive
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Desktop / tablet: full table. */}
+      <div className="card hidden overflow-x-auto sm:block">
         <table className="w-full min-w-[820px] text-sm">
           <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
             <tr>
