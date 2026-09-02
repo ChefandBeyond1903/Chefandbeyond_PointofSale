@@ -55,9 +55,11 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
-    await requireRole("MANAGER", "ADMIN");
+    const actor = await requireRole("MANAGER", "ADMIN");
     const { id } = await params;
     const data = productUpdateSchema.parse(await req.json());
+    // Only an admin may change the resale floor — silently drop it otherwise.
+    if (actor.role !== "ADMIN") delete data.umrpCents;
 
     // Enforce: sticker price may never sit below the UMRP. Fall back to the
     // stored values for whichever of the two isn't part of this update.

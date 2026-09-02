@@ -38,7 +38,13 @@ const emptyDraft: Draft = {
   vendor: "",
 };
 
-export function ProductManager({ canManage = true }: { canManage?: boolean }) {
+export function ProductManager({
+  canManage = true,
+  isAdmin = false,
+}: {
+  canManage?: boolean;
+  isAdmin?: boolean;
+}) {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [q, setQ] = useState("");
@@ -323,7 +329,7 @@ export function ProductManager({ canManage = true }: { canManage?: boolean }) {
 
   async function save() {
     if (!draft) return;
-    if (draft.umrpCents > 0 && draft.priceCents < draft.umrpCents) {
+    if (isAdmin && draft.umrpCents > 0 && draft.priceCents < draft.umrpCents) {
       setError("Price can't be below the minimum resale price (UMRP).");
       return;
     }
@@ -336,7 +342,8 @@ export function ProductManager({ canManage = true }: { canManage?: boolean }) {
       description: draft.description || undefined,
       priceCents: draft.priceCents,
       costCents: draft.costCents,
-      umrpCents: draft.umrpCents,
+      // Only an admin may set/change the resale floor.
+      ...(isAdmin ? { umrpCents: draft.umrpCents } : {}),
       trackStock: draft.trackStock,
       categoryId: draft.categoryId || undefined,
       active: draft.active,
@@ -678,9 +685,13 @@ export function ProductManager({ canManage = true }: { canManage?: boolean }) {
                 <MoneyInput
                   cents={draft.umrpCents}
                   onCentsChange={(c) => setDraft({ ...draft, umrpCents: c })}
+                  disabled={!isAdmin}
+                  className={`input ${isAdmin ? "" : "bg-zinc-50 text-zinc-400"}`}
                 />
                 <p className="mt-0.5 text-[11px] text-zinc-400">
-                  The register blocks any sale below this after discounts. Leave 0 for no floor.
+                  {isAdmin
+                    ? "The register blocks any sale below this after discounts. Leave 0 for no floor."
+                    : "Only an admin can change the minimum resale price."}
                 </p>
                 {draft.umrpCents > 0 && draft.priceCents < draft.umrpCents && (
                   <p className="mt-0.5 text-[11px] text-red-600">

@@ -11,6 +11,7 @@ export function MoneyInput({
   placeholder = "0.00",
   autoFocus,
   id,
+  disabled,
 }: {
   cents: number;
   onCentsChange: (cents: number) => void;
@@ -18,6 +19,7 @@ export function MoneyInput({
   placeholder?: string;
   autoFocus?: boolean;
   id?: string;
+  disabled?: boolean;
 }) {
   const [text, setText] = useState(cents ? (cents / 100).toFixed(2) : "");
 
@@ -35,7 +37,9 @@ export function MoneyInput({
       placeholder={placeholder}
       value={text}
       autoFocus={autoFocus}
+      disabled={disabled}
       onChange={(e) => {
+        if (disabled) return;
         const raw = e.target.value.replace(/[^0-9.]/g, "");
         setText(raw);
         onCentsChange(parseMoney(raw));
