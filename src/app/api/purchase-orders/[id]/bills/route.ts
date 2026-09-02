@@ -10,7 +10,7 @@ type Params = { params: Promise<{ id: string }> };
 async function loadPoScoped(id: string, actor: Awaited<ReturnType<typeof requireScopedUser>>) {
   const po = await prisma.purchaseOrder.findUnique({
     where: { id },
-    select: { id: true, vendor: true, storeId: true, status: true, items: true },
+    select: { id: true, vendor: true, storeId: true, shipTo: true, status: true, items: true },
   });
   const scoped = scopeStoreId(actor);
   if (!po || (scoped && po.storeId !== scoped)) {
@@ -47,13 +47,22 @@ export async function POST(req: NextRequest, { params }: Params) {
     const body = billCreateSchema.parse(await req.json());
     const po = await loadPoScoped(id, actor);
 
-    // Receiving store: an admin may direct the stock to any store; everyone
-    // else receives into the PO's own store.
+    // Receiving store, in order of preference:
+    //  1. the store an admin explicitly chose for this receipt;
+    //  2. the PO's "Ship to" store, when it names one of ours (case-insensitive) —
+    //     received stock lands where the order was shipped, whoever receives it;
+    //  3. the store that raised the PO.
     let storeId = po.storeId;
     if (actor.role === "ADMIN" && body.storeId) {
       const s = await prisma.store.findUnique({ where: { id: body.storeId }, select: { id: true } });
       if (!s) throw new HttpError(400, "That store doesn't exist.");
       storeId = s.id;
+    } else if (po.shipTo?.trim()) {
+      const shipToStore = await prisma.store.findFirst({
+        where: { name: { equals: po.shipTo.trim(), mode: "insensitive" } },
+        select: { id: true },
+      });
+      if (shipToStore) storeId = shipToStore.id;
     }
     if (!storeId) {
       throw new HttpError(

@@ -5,7 +5,7 @@ import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
 import { MoneyInput } from "@/components/MoneyInput";
 import { BILL_TERMS, dueDateFromTerms } from "@/lib/terms";
-import type { PurchaseOrder, Store } from "@/lib/types";
+import type { PurchaseOrder, SessionUser, Store } from "@/lib/types";
 
 type Line = {
   id: string;
@@ -41,7 +41,8 @@ export function BillModal({
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // Admins can direct the received stock to any store.
+  // Admins can direct the received stock to any store; it defaults to the PO's
+  // "Ship to" store (falling back to the store that raised the PO).
   const [isAdmin, setIsAdmin] = useState(false);
   const [stores, setStores] = useState<Store[]>([]);
   const [storeId, setStoreId] = useState("");
@@ -55,11 +56,15 @@ export function BillModal({
 
   const load = useCallback(async () => {
     try {
-      const res = await api<{ purchaseOrder: PurchaseOrder }>(`/api/purchase-orders/${poId}`);
-      setPo(res.purchaseOrder);
-      setStoreId(res.purchaseOrder.storeId ?? "");
+      const [res, meRes] = await Promise.all([
+        api<{ purchaseOrder: PurchaseOrder }>(`/api/purchase-orders/${poId}`),
+        api<{ user: SessionUser | null }>("/api/auth/me"),
+      ]);
+      const purchaseOrder = res.purchaseOrder;
+      setPo(purchaseOrder);
+      setStoreId(purchaseOrder.storeId ?? "");
       setLines(
-        (res.purchaseOrder.items ?? []).map((it) => ({
+        (purchaseOrder.items ?? []).map((it) => ({
           id: it.id,
           name: it.nameSnapshot || "—",
           sku: it.skuSnapshot,
@@ -70,6 +75,16 @@ export function BillModal({
           costCents: it.unitCostCents,
         })),
       );
+
+      if (meRes.user?.role === "ADMIN") {
+        setIsAdmin(true);
+        const { stores: list } = await api<{ stores: Store[] }>("/api/stores");
+        setStores(list);
+        // Default the picker to the PO's "Ship to" store when it names one of ours.
+        const shipTo = purchaseOrder.shipTo?.trim().toLowerCase();
+        const match = shipTo ? list.find((s) => s.name.trim().toLowerCase() === shipTo) : undefined;
+        setStoreId(match?.id ?? purchaseOrder.storeId ?? list[0]?.id ?? "");
+      }
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "Failed to load purchase order");
     }
@@ -77,13 +92,6 @@ export function BillModal({
 
   useEffect(() => {
     load();
-    api<{ user: { role: string } | null }>("/api/auth/me")
-      .then((r) => {
-        if (r.user?.role !== "ADMIN") return;
-        setIsAdmin(true);
-        return api<{ stores: Store[] }>("/api/stores").then((s) => setStores(s.stores));
-      })
-      .catch(() => {});
   }, [load]);
 
   // Terms drive the due date until the user picks one by hand.
@@ -160,8 +168,18 @@ export function BillModal({
               </button>
             </div>
             <p className="mb-4 text-sm text-zinc-500">
-              {po.vendor} — received quantities post to the selected store&rsquo;s inventory and the
-              bill is added to Bills.
+              {po.vendor} —{" "}
+              {isAdmin ? (
+                <>received quantities post to the store chosen below and the bill is added to Bills.</>
+              ) : (
+                <>
+                  received quantities post to{" "}
+                  <span className="font-medium text-zinc-700">
+                    {po.shipTo?.trim() ? `${po.shipTo.trim()}’s` : "the ordering store’s"}
+                  </span>{" "}
+                  inventory (the &ldquo;Ship to&rdquo; store) and the bill is added to Bills.
+                </>
+              )}
             </p>
 
             {isAdmin && (
@@ -179,6 +197,10 @@ export function BillModal({
                     </option>
                   ))}
                 </select>
+                <p className="mt-0.5 text-[11px] text-zinc-400">
+                  Defaults to the &ldquo;Ship to&rdquo; store
+                  {po.shipTo?.trim() ? ` (${po.shipTo.trim()})` : ""}.
+                </p>
               </div>
             )}
 
