@@ -297,6 +297,29 @@ export default function RegisterPage() {
     salespersonId,
   ]);
 
+  // A line may never be priced below its minimum (UMRP). If an edit takes it
+  // there — a low line total, too big a discount — snap the unit price back up
+  // to the UMRP and clear the line discount so the ticket shows the minimum.
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    let changed = false;
+    const next = cart.map((l) => {
+      const umrp = l.product.umrpCents ?? 0;
+      if (umrp <= 0 || l.quantity <= 0) return l;
+      if (lineNetCents(l) >= umrp * l.quantity) return l;
+      changed = true;
+      return {
+        ...l,
+        unitPriceCents: umrp,
+        discountCents: 0,
+        discPercent: 0,
+        discMode: "AMOUNT" as const,
+      };
+    });
+    if (changed) setCart(next);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [cart]);
+
   function pickCustomer(name: string) {
     setCustName(name);
     const match = customers.find((c) => c.name.toLowerCase() === name.trim().toLowerCase());
