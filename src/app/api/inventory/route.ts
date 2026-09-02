@@ -34,7 +34,9 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const [stores, products] = await Promise.all([
+    // All three in one round trip. StoreInventory is small (only products ever
+    // stocked at a store) so pulling it whole beats a 1000+ id IN filter.
+    const [stores, products, inv] = await Promise.all([
       prisma.store.findMany({
         orderBy: { name: "asc" },
         select: { id: true, name: true, active: true },
@@ -45,14 +47,11 @@ export async function GET(req: NextRequest) {
         take: 5000,
         select: { id: true, name: true, sku: true, vendor: true, trackStock: true, active: true },
       }),
+      prisma.storeInventory.findMany({
+        select: { productId: true, storeId: true, quantity: true },
+      }),
     ]);
 
-    const inv = products.length
-      ? await prisma.storeInventory.findMany({
-          where: { productId: { in: products.map((p) => p.id) } },
-          select: { productId: true, storeId: true, quantity: true },
-        })
-      : [];
     const byProduct = new Map<string, Record<string, number>>();
     for (const i of inv) {
       const e = byProduct.get(i.productId) ?? {};

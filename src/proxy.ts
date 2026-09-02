@@ -3,7 +3,13 @@ import { createServerClient } from "@supabase/ssr";
 
 // Public paths that never require a session. Logout must be reachable with an
 // expired/absent session, and /api/auth/me returns { user: null } on its own.
-const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/auth/logout", "/api/auth/me"];
+const PUBLIC_PATHS = [
+  "/login",
+  "/api/auth/login",
+  "/api/auth/logout",
+  "/api/auth/me",
+  "/api/version",
+];
 
 // Page sections a plain CASHIER may not open. Enforced here (not just in the
 // page component) so the redirect is a clean 307 even for routes that stream

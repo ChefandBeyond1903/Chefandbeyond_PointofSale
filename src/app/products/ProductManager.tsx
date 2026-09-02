@@ -77,7 +77,7 @@ export function ProductManager({
     setLoading(true);
     try {
       const [p, c, v] = await Promise.all([
-        api<{ products: Product[] }>("/api/products?all=1&detail=1&take=5000"),
+        api<{ products: Product[] }>("/api/products?all=1&take=5000"),
         api<{ categories: Category[] }>("/api/categories"),
         api<{ vendors: { name: string }[] }>("/api/vendors"),
       ]);
@@ -290,10 +290,13 @@ export function ProductManager({
     setStockDraft({});
     setEditStockLoading(true);
     api<{
+      product: { description: string | null };
       storeStock: { storeId: string; storeName: string; quantity: number }[];
       editableStoreIds: string[];
     }>(`/api/products/${p.id}`)
       .then((res) => {
+        // The list omits description to stay small — fill it in now.
+        setDraft((d) => (d && d.id === p.id ? { ...d, description: res.product.description ?? "" } : d));
         setEditStock(res.storeStock);
         setEditableStoreIds(res.editableStoreIds ?? []);
         setStockDraft(
