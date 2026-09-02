@@ -38,8 +38,8 @@ export function OverviewView() {
   }, [load]);
 
   return (
-    <div className="w-full flex-1 p-4">
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+    <div className="w-full flex-1 p-3 sm:p-4">
+      <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1">
         <h1 className="text-xl font-semibold">Overview</h1>
         {data && (
           <span className="text-xs text-zinc-400">
@@ -58,7 +58,7 @@ export function OverviewView() {
       ) : (
         <div className="space-y-4">
           {/* Headline numbers */}
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-4">
             <Kpi label="Sales today" value={formatMoney(data.sales.today.grossCents)}
               sub={`${data.sales.today.count} sale${data.sales.today.count === 1 ? "" : "s"}`} />
             <Kpi label="Sales this week" value={formatMoney(data.sales.week.grossCents)}
@@ -76,22 +76,24 @@ export function OverviewView() {
           <div className="grid gap-4 lg:grid-cols-2">
             {/* Sales windows */}
             <Card title="Sales" href="/reports" hrefLabel="Reports">
-              <table className="w-full text-sm">
-                <thead className="text-left text-xs uppercase tracking-wide text-zinc-400">
-                  <tr>
-                    <th className="py-1.5">Period</th>
-                    <th className="py-1.5 text-right">Sales</th>
-                    <th className="py-1.5 text-right">Gross</th>
-                    <th className="py-1.5 text-right">Gross profit</th>
-                    <th className="py-1.5 text-right">Items</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-100">
-                  <SalesRow label="Today" w={data.sales.today} />
-                  <SalesRow label="This week" w={data.sales.week} />
-                  <SalesRow label="This month" w={data.sales.month} />
-                </tbody>
-              </table>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="text-left text-xs uppercase tracking-wide text-zinc-400">
+                    <tr>
+                      <th className="py-1.5">Period</th>
+                      <th className="py-1.5 text-right">Sales</th>
+                      <th className="py-1.5 text-right">Gross</th>
+                      <th className="py-1.5 text-right sm:table-cell hidden">Gross profit</th>
+                      <th className="py-1.5 text-right sm:table-cell hidden">Items</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100">
+                    <SalesRow label="Today" w={data.sales.today} />
+                    <SalesRow label="This week" w={data.sales.week} />
+                    <SalesRow label="This month" w={data.sales.month} />
+                  </tbody>
+                </table>
+              </div>
               <div className="mt-3 space-y-1 border-t border-zinc-100 pt-2 text-sm">
                 <Line label="Gross profit (month)" value={formatMoney(data.sales.month.profitCents)} />
                 <Line label="Operating expenses (month)" value={`(${formatMoney(data.month.expensesCents)})`} negative />
@@ -101,7 +103,7 @@ export function OverviewView() {
 
             {/* Money owed */}
             <Card title="Money owed" href="/bills" hrefLabel="Bills">
-              <dl className="grid grid-cols-3 gap-3 text-center">
+              <dl className="grid grid-cols-3 gap-2 text-center sm:gap-3">
                 <Metric label="Open bills" value={String(data.payables.openBills.count)}
                   sub={formatMoney(data.payables.openBills.amountCents)} />
                 <Metric label="Overdue" value={String(data.payables.overdueBills.count)}
@@ -113,7 +115,7 @@ export function OverviewView() {
 
             {/* Operations */}
             <Card title="Operations">
-              <dl className="grid grid-cols-3 gap-3 text-center">
+              <dl className="grid grid-cols-3 gap-2 text-center sm:gap-3">
                 <LinkMetric href="/" label="Held tickets" value={String(data.operations.heldTickets)} />
                 <LinkMetric href="/inventory" label="Out of stock" value={String(data.operations.outOfStock)}
                   danger={data.operations.outOfStock > 0} />
@@ -125,7 +127,7 @@ export function OverviewView() {
 
             {/* Directory */}
             <Card title="Directory">
-              <dl className="grid grid-cols-4 gap-3 text-center">
+              <dl className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4 sm:gap-3">
                 <LinkMetric href="/vendors" label="Vendors" value={String(data.directory.vendors)} />
                 <LinkMetric href="/customers" label="Customers" value={String(data.directory.customers)} />
                 <LinkMetric href="/users" label="Staff" value={String(data.directory.staff)} />
@@ -138,26 +140,30 @@ export function OverviewView() {
               {data.byStore.length === 0 ? (
                 <p className="text-sm text-zinc-400">No sales this month.</p>
               ) : (
-                <table className="w-full text-sm">
-                  <thead className="text-left text-xs uppercase tracking-wide text-zinc-400">
-                    <tr>
-                      <th className="py-1.5">Store</th>
-                      <th className="py-1.5 text-right">Gross</th>
-                      <th className="py-1.5 text-right">Gross profit</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-100">
-                    {data.byStore.map((s) => (
-                      <tr key={s.label}>
-                        <td className="py-1.5">{s.label}</td>
-                        <td className="py-1.5 text-right">{formatMoney(s.grossCents)}</td>
-                        <td className="py-1.5 text-right font-medium text-green-700">
-                          {formatMoney(s.profitCents)}
-                        </td>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="text-left text-xs uppercase tracking-wide text-zinc-400">
+                      <tr>
+                        <th className="py-1.5">Store</th>
+                        <th className="py-1.5 text-right">Gross</th>
+                        <th className="py-1.5 text-right">Gross profit</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100">
+                      {data.byStore.map((s) => (
+                        <tr key={s.label}>
+                          <td className="py-1.5">{s.label}</td>
+                          <td className="py-1.5 text-right whitespace-nowrap">
+                            {formatMoney(s.grossCents)}
+                          </td>
+                          <td className="py-1.5 text-right font-medium whitespace-nowrap text-green-700">
+                            {formatMoney(s.profitCents)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </Card>
 
@@ -170,9 +176,13 @@ export function OverviewView() {
                   <tbody className="divide-y divide-zinc-100">
                     {data.topProducts.map((p) => (
                       <tr key={p.productId}>
-                        <td className="py-1.5">{p.name}</td>
-                        <td className="py-1.5 text-right text-zinc-500">{p.quantity} sold</td>
-                        <td className="py-1.5 text-right font-medium">{formatMoney(p.revenueCents)}</td>
+                        <td className="py-1.5 pr-2">{p.name}</td>
+                        <td className="py-1.5 pr-2 text-right whitespace-nowrap text-zinc-500">
+                          {p.quantity} sold
+                        </td>
+                        <td className="py-1.5 text-right font-medium whitespace-nowrap">
+                          {formatMoney(p.revenueCents)}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -187,15 +197,19 @@ export function OverviewView() {
               ) : (
                 <ul className="divide-y divide-zinc-100 text-sm">
                   {data.recentSales.map((s) => (
-                    <li key={s.id} className="flex items-center justify-between py-1.5">
+                    <li key={s.id} className="flex items-start justify-between gap-2 py-1.5">
                       <span className="min-w-0 truncate">
                         <span className="font-medium">#{s.number}</span>{" "}
                         <span className="text-zinc-400">{s.who}</span>
                         {s.store && <span className="text-zinc-400"> · {s.store}</span>}
                       </span>
-                      <span className="ml-2 shrink-0 text-right">
-                        <span className="font-medium">{formatMoney(s.totalCents)}</span>
-                        <span className="ml-2 text-xs text-zinc-400">{fmtDateTime(s.createdAt)}</span>
+                      <span className="flex shrink-0 flex-col items-end leading-tight">
+                        <span className="font-medium whitespace-nowrap">
+                          {formatMoney(s.totalCents)}
+                        </span>
+                        <span className="text-xs text-zinc-400 whitespace-nowrap">
+                          {fmtDateTime(s.createdAt)}
+                        </span>
                       </span>
                     </li>
                   ))}
@@ -210,15 +224,17 @@ export function OverviewView() {
               ) : (
                 <ul className="divide-y divide-zinc-100 text-sm">
                   {data.recentExpenses.map((e) => (
-                    <li key={e.id} className="flex items-center justify-between py-1.5">
+                    <li key={e.id} className="flex items-start justify-between gap-2 py-1.5">
                       <span className="min-w-0 truncate">
                         <span className="font-medium">{e.category}</span>
                         {e.payee && <span className="text-zinc-400"> · {e.payee}</span>}
                         <span className="text-zinc-400"> · {e.store}</span>
                       </span>
-                      <span className="ml-2 shrink-0 text-right">
-                        <span className="font-medium">{formatMoney(e.amountCents)}</span>
-                        <span className="ml-2 text-xs text-zinc-400">
+                      <span className="flex shrink-0 flex-col items-end leading-tight">
+                        <span className="font-medium whitespace-nowrap">
+                          {formatMoney(e.amountCents)}
+                        </span>
+                        <span className="text-xs text-zinc-400 whitespace-nowrap">
                           {new Date(e.expenseDate).toLocaleDateString()}
                         </span>
                       </span>
@@ -246,9 +262,15 @@ function Kpi({
   accent?: boolean;
 }) {
   return (
-    <div className={`card p-4 ${accent ? "ring-1 ring-indigo-200" : ""}`}>
+    <div className={`card p-3 sm:p-4 ${accent ? "ring-1 ring-indigo-200" : ""}`}>
       <p className="text-xs uppercase tracking-wide text-zinc-400">{label}</p>
-      <p className={`mt-1 text-xl font-bold ${accent ? "text-indigo-700" : ""}`}>{value}</p>
+      <p
+        className={`mt-1 text-lg font-bold tabular-nums break-words sm:text-xl ${
+          accent ? "text-indigo-700" : ""
+        }`}
+      >
+        {value}
+      </p>
       {sub && <p className="text-xs text-zinc-400">{sub}</p>}
     </div>
   );
@@ -266,8 +288,8 @@ function Card({
   children: React.ReactNode;
 }) {
   return (
-    <div className="card p-4">
-      <div className="mb-2 flex items-center justify-between">
+    <div className="card p-3 sm:p-4">
+      <div className="mb-2 flex items-center justify-between gap-2">
         <h2 className="font-semibold">{title}</h2>
         {href && (
           <Link href={href} className="text-xs font-medium text-indigo-600 hover:underline">
@@ -283,11 +305,13 @@ function Card({
 function SalesRow({ label, w }: { label: string; w: OverviewWindow }) {
   return (
     <tr>
-      <td className="py-1.5">{label}</td>
-      <td className="py-1.5 text-right text-zinc-500">{w.count}</td>
-      <td className="py-1.5 text-right">{formatMoney(w.grossCents)}</td>
-      <td className="py-1.5 text-right font-medium text-green-700">{formatMoney(w.profitCents)}</td>
-      <td className="py-1.5 text-right text-zinc-500">{w.itemsSold}</td>
+      <td className="py-1.5 pr-2">{label}</td>
+      <td className="py-1.5 pr-2 text-right text-zinc-500">{w.count}</td>
+      <td className="py-1.5 text-right whitespace-nowrap">{formatMoney(w.grossCents)}</td>
+      <td className="py-1.5 pl-2 text-right font-medium whitespace-nowrap text-green-700 sm:table-cell hidden">
+        {formatMoney(w.profitCents)}
+      </td>
+      <td className="py-1.5 pl-2 text-right text-zinc-500 sm:table-cell hidden">{w.itemsSold}</td>
     </tr>
   );
 }
@@ -323,10 +347,10 @@ function Metric({
   danger?: boolean;
 }) {
   return (
-    <div>
+    <div className="min-w-0">
       <dt className="text-xs text-zinc-400">{label}</dt>
-      <dd className={`text-lg font-bold ${danger ? "text-red-600" : ""}`}>{value}</dd>
-      {sub && <dd className="text-xs text-zinc-400">{sub}</dd>}
+      <dd className={`text-base font-bold sm:text-lg ${danger ? "text-red-600" : ""}`}>{value}</dd>
+      {sub && <dd className="text-xs break-words text-zinc-400">{sub}</dd>}
     </div>
   );
 }
@@ -345,10 +369,10 @@ function LinkMetric({
   danger?: boolean;
 }) {
   return (
-    <Link href={href} className="rounded-md p-1 hover:bg-zinc-50">
+    <Link href={href} className="min-w-0 rounded-md p-1 hover:bg-zinc-50">
       <dt className="text-xs text-zinc-400">{label}</dt>
-      <dd className={`text-lg font-bold ${danger ? "text-red-600" : ""}`}>{value}</dd>
-      {sub && <dd className="text-xs text-zinc-400">{sub}</dd>}
+      <dd className={`text-base font-bold sm:text-lg ${danger ? "text-red-600" : ""}`}>{value}</dd>
+      {sub && <dd className="text-xs break-words text-zinc-400">{sub}</dd>}
     </Link>
   );
 }
