@@ -71,6 +71,9 @@ export default function RegisterPage() {
   // register opens straight to the search box and the current sale. A search
   // always reveals its results regardless.
   const [catalogOpen, setCatalogOpen] = useState(false);
+  // Brief "Added ✓" flash on the last-tapped catalog card.
+  const [flashId, setFlashId] = useState<string | null>(null);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [cart, setCart] = useState<CartLine[]>([]);
   const [orderDiscountCents, setOrderDiscountCents] = useState(0);
@@ -196,6 +199,10 @@ export default function RegisterPage() {
       .then((r) => setSalespeople(r.people))
       .catch(() => {});
   }, [loadCatalog, loadShift, loadCustomers, loadHeld]);
+
+  useEffect(() => () => {
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+  }, []);
 
   function pickCustomer(name: string) {
     setCustName(name);
@@ -349,6 +356,9 @@ export default function RegisterPage() {
 
   function addToCart(product: Product) {
     setError(null);
+    setFlashId(product.id);
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    flashTimer.current = setTimeout(() => setFlashId(null), 800);
     setCart((cur) => {
       const idx = cur.findIndex((l) => l.product.id === product.id);
       if (idx >= 0) {
@@ -683,12 +693,25 @@ export default function RegisterPage() {
             <div className="grid grid-cols-2 gap-2 overflow-y-auto pb-4 sm:grid-cols-3 xl:grid-cols-4">
               {filtered.map((p) => {
                 const low = p.trackStock && p.stock <= 0;
+                const inCart = cart.find((l) => l.product.id === p.id)?.quantity ?? 0;
                 return (
                   <button
                     key={p.id}
                     onClick={() => addToCart(p)}
-                    className="card flex min-w-0 flex-col items-start gap-1 p-3 text-left transition-transform hover:-translate-y-0.5 hover:shadow-md"
+                    className={`card relative flex min-w-0 flex-col items-start gap-1 p-3 text-left transition-transform hover:-translate-y-0.5 hover:shadow-md ${
+                      inCart > 0 ? "ring-2 ring-green-500" : ""
+                    }`}
                   >
+                    {inCart > 0 && (
+                      <span className="absolute right-1.5 top-1.5 grid h-5 min-w-[1.25rem] place-items-center rounded-full bg-green-600 px-1 text-[11px] font-bold text-white">
+                        {inCart}
+                      </span>
+                    )}
+                    {flashId === p.id && (
+                      <span className="pointer-events-none absolute inset-0 z-10 grid place-items-center rounded-lg bg-green-600/90 text-sm font-semibold text-white">
+                        Added ✓
+                      </span>
+                    )}
                     <span className="line-clamp-2 w-full break-words text-sm font-medium">
                       {p.name}
                     </span>
