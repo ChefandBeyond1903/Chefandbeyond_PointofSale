@@ -7,7 +7,13 @@ import { InvoiceModal } from "@/components/InvoiceModal";
 import { ReceiptModal } from "@/components/ReceiptModal";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { resolvePreset, type DateRange } from "@/lib/dateRange";
-import type { Bill, ProfitRow, PurchaseOrder, ReportSummary } from "@/lib/types";
+import type {
+  Bill,
+  HeldSaleSummary,
+  ProfitRow,
+  PurchaseOrder,
+  ReportSummary,
+} from "@/lib/types";
 
 export function ReportsView({
   isAdmin = false,
@@ -25,6 +31,7 @@ export function ReportsView({
   const [printSaleId, setPrintSaleId] = useState<string | null>(null);
   const [pos, setPos] = useState<PurchaseOrder[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
+  const [heldTickets, setHeldTickets] = useState<HeldSaleSummary[]>([]);
 
   const load = useCallback(
     async (from: Date, to: Date, store: string) => {
@@ -47,6 +54,9 @@ export function ReportsView({
         api<{ bills: Bill[] }>(`/api/bills?${qs.toString()}`)
           .then((r) => setBills(r.bills))
           .catch(() => setBills([]));
+        api<{ heldSales: HeldSaleSummary[] }>(`/api/held-sales`)
+          .then((r) => setHeldTickets(r.heldSales))
+          .catch(() => setHeldTickets([]));
       }
     },
     [isAdmin],
@@ -61,7 +71,10 @@ export function ReportsView({
     reload();
   }, [reload]);
 
-  async function del(kind: "invoice" | "purchase order" | "bill", url: string) {
+  async function del(
+    kind: "invoice" | "purchase order" | "bill" | "held ticket",
+    url: string,
+  ) {
     if (!confirm(`Delete this ${kind}? This can't be undone.`)) return;
     try {
       await api(url, { method: "DELETE" });
@@ -248,6 +261,20 @@ export function ReportsView({
                   date: b.billDate,
                   amountCents: b.subtotalCents,
                   onDelete: () => del("bill", `/api/bills/${b.id}`),
+                }))}
+              />
+              <RecordList
+                title="Held tickets"
+                empty="No held tickets."
+                rows={heldTickets.map((h) => ({
+                  id: h.id,
+                  head: h.label || h.customerName || "Untitled ticket",
+                  sub: `${h.itemCount} item${h.itemCount === 1 ? "" : "s"} · ${
+                    h.salespersonName ?? h.createdByName
+                  }`,
+                  date: h.createdAt,
+                  amountCents: h.approxTotalCents,
+                  onDelete: () => del("held ticket", `/api/held-sales/${h.id}`),
                 }))}
               />
             </div>
