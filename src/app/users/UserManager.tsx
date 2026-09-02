@@ -93,6 +93,23 @@ export function UserManager({
     }
   }
 
+  async function removeUser(u: ManagedUser) {
+    if (
+      !confirm(
+        `Delete ${u.name}? This removes the account and its login for good. ` +
+          `Staff with sales history can't be deleted — deactivate them instead.`,
+      )
+    )
+      return;
+    setError(null);
+    try {
+      await api(`/api/users/${u.id}`, { method: "DELETE" });
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not delete staff");
+    }
+  }
+
   async function resetPassword(u: ManagedUser) {
     const pw = prompt(`New password for ${u.name} (min 8 chars):`);
     if (!pw) return;
@@ -282,6 +299,14 @@ export function UserManager({
                           >
                             {u.active ? "Deactivate" : "Reactivate"}
                           </button>
+                          {currentRole === "ADMIN" && (
+                            <button
+                              onClick={() => removeUser(u)}
+                              className="btn-ghost text-xs text-red-500"
+                            >
+                              Delete
+                            </button>
+                          )}
                         </>
                       ) : (
                         <span className="text-xs text-zinc-300">—</span>

@@ -93,3 +93,60 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     return toErrorResponse(err);
   }
 }
+
+// Permanently remove a staff account. Admin only. A staff member with sales or
+// other history is kept (deactivate them instead) so the records stay intact.
+export async function DELETE(_req: NextRequest, { params }: Params) {
+  try {
+    const actor = await requireScopedUser();
+    if (actor.role !== "ADMIN") {
+      throw new HttpError(403, "Only an admin can delete staff");
+    }
+    const { id } = await params;
+    if (id === actor.id) throw new HttpError(400, "You cannot delete your own account");
+
+    const target = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        authId: true,
+        _count: {
+          select: {
+            sales: true,
+            salesCredited: true,
+            shifts: true,
+            purchaseOrders: true,
+            bills: true,
+            heldSales: true,
+          },
+        },
+      },
+    });
+    if (!target) throw new HttpError(404, "User not found");
+
+    const c = target._count;
+    const activity =
+      c.sales + c.salesCredited + c.shifts + c.purchaseOrders + c.bills + c.heldSales;
+    if (activity > 0) {
+      throw new HttpError(
+        409,
+        "This staff member has sales or other activity on record. Deactivate them instead.",
+      );
+    }
+
+    // Detach any staff rows this account created so the FK doesn't block delete.
+    await prisma.user.updateMany({ where: { createdById: id }, data: { createdById: null } });
+    await prisma.user.delete({ where: { id } });
+
+    // Drop the Supabase login too, so the email can be reused later.
+    if (target.authId) {
+      await supabaseAdmin()
+        .auth.admin.deleteUser(target.authId)
+        .catch(() => {});
+    }
+
+    return ok({ ok: true });
+  } catch (err) {
+    return toErrorResponse(err);
+  }
+}
