@@ -307,6 +307,26 @@ export function ProductManager({
       .finally(() => setEditStockLoading(false));
   }
 
+  // Turn the product open in the drawer into a new-product draft: same details,
+  // fresh name and SKU, no id — "Save product" then creates a copy.
+  function duplicateDraft() {
+    setDraft((d) =>
+      d
+        ? {
+            ...d,
+            id: undefined,
+            name: `${d.name} (copy)`,
+            sku: d.sku ? `${d.sku}-COPY` : "",
+          }
+        : d,
+    );
+    setEditStock(null);
+    setEditStockLoading(false);
+    setEditableStoreIds([]);
+    setStockDraft({});
+    setError(null);
+  }
+
   async function saveStock(storeId: string) {
     if (!draft?.id) return;
     const raw = stockDraft[storeId] ?? "";
@@ -962,6 +982,16 @@ export function ProductManager({
               <button onClick={closeDraft} className="btn-secondary flex-1">
                 Cancel
               </button>
+              {draft.id && (
+                <button
+                  onClick={duplicateDraft}
+                  disabled={saving}
+                  className="btn-ghost"
+                  title="Create a new product pre-filled from this one"
+                >
+                  Duplicate
+                </button>
+              )}
               <button onClick={save} disabled={saving} className="btn-primary flex-1">
                 {saving ? "Saving…" : "Save product"}
               </button>
