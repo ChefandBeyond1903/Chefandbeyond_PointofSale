@@ -21,6 +21,26 @@ import type {
 
 type DiscMode = "AMOUNT" | "PERCENT";
 
+// Persist the in-progress ticket so a page refresh (or an auto-reload on a new
+// deploy) doesn't wipe what the salesperson has rung up. Cleared as soon as the
+// cart is emptied — completed, held, or cleared by hand.
+const TICKET_KEY = "cb-pos-register-ticket-v1";
+
+interface TicketSnapshot {
+  cart: CartLine[];
+  orderDiscountCents: number;
+  orderDiscPercent: number;
+  orderDiscMode: DiscMode;
+  shippingCents: number;
+  custId: string | null;
+  custName: string;
+  custEmail: string;
+  custPhone: string;
+  custAddress: string;
+  custCompany: string;
+  salespersonId: string;
+}
+
 interface CartLine {
   product: Product;
   quantity: number;
@@ -108,6 +128,9 @@ export default function RegisterPage() {
   const [salespeople, setSalespeople] = useState<{ id: string; name: string }[]>([]);
   const [salespersonId, setSalespersonId] = useState<string>(""); // "" = signed-in operator
   const searchRef = useRef<HTMLInputElement>(null);
+  // Guards the persist effect so it can't overwrite saved state before the
+  // first load has read it back in.
+  const ticketHydrated = useRef(false);
 
   const loadCatalog = useCallback(async () => {
     setLoading(true);
@@ -203,6 +226,76 @@ export default function RegisterPage() {
   useEffect(() => () => {
     if (flashTimer.current) clearTimeout(flashTimer.current);
   }, []);
+
+  // Rehydrate the in-progress ticket from the last visit.
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    try {
+      const raw = localStorage.getItem(TICKET_KEY);
+      if (raw) {
+        const s = JSON.parse(raw) as Partial<TicketSnapshot>;
+        if (Array.isArray(s.cart) && s.cart.length > 0) {
+          setCart(s.cart as CartLine[]);
+          setOrderDiscountCents(s.orderDiscountCents ?? 0);
+          setOrderDiscPercent(s.orderDiscPercent ?? 0);
+          setOrderDiscMode(s.orderDiscMode === "PERCENT" ? "PERCENT" : "AMOUNT");
+          setShippingCents(s.shippingCents ?? 0);
+          setCustId(s.custId ?? null);
+          setCustName(s.custName ?? "");
+          setCustEmail(s.custEmail ?? "");
+          setCustPhone(s.custPhone ?? "");
+          setCustAddress(s.custAddress ?? "");
+          setCustCompany(s.custCompany ?? "");
+          setSalespersonId(s.salespersonId ?? "");
+        }
+      }
+    } catch {
+      /* ignore malformed/unavailable storage */
+    }
+    ticketHydrated.current = true;
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, []);
+
+  // Save the ticket on every change; drop it once the cart is empty.
+  useEffect(() => {
+    if (!ticketHydrated.current) return;
+    try {
+      if (cart.length === 0) {
+        localStorage.removeItem(TICKET_KEY);
+        return;
+      }
+      const snap: TicketSnapshot = {
+        cart,
+        orderDiscountCents,
+        orderDiscPercent,
+        orderDiscMode,
+        shippingCents,
+        custId,
+        custName,
+        custEmail,
+        custPhone,
+        custAddress,
+        custCompany,
+        salespersonId,
+      };
+      localStorage.setItem(TICKET_KEY, JSON.stringify(snap));
+    } catch {
+      /* storage full or unavailable — non-fatal */
+    }
+  }, [
+    cart,
+    orderDiscountCents,
+    orderDiscPercent,
+    orderDiscMode,
+    shippingCents,
+    custId,
+    custName,
+    custEmail,
+    custPhone,
+    custAddress,
+    custCompany,
+    salespersonId,
+  ]);
 
   function pickCustomer(name: string) {
     setCustName(name);
