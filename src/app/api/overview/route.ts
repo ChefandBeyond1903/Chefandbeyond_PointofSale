@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { requireScopedRole } from "@/lib/scope";
+import { cardFeeCents } from "@/lib/money";
 import { ok, toErrorResponse } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
@@ -54,6 +55,7 @@ export async function GET() {
           storeId: true,
           storeNameSnapshot: true,
           totalCents: true,
+          paymentMethod: true,
           items: {
             select: {
               productId: true,
@@ -122,6 +124,7 @@ export async function GET() {
     const today = emptyWin();
     const week = emptyWin();
     const month = emptyWin();
+    let monthCardGrossCents = 0;
     const byStoreMap = new Map<string, { label: string; grossCents: number; profitCents: number }>();
     const byProductMap = new Map<string, { name: string; quantity: number; revenueCents: number }>();
 
@@ -153,6 +156,7 @@ export async function GET() {
       add(month);
       if (s.createdAt >= startWeek) add(week);
       if (s.createdAt >= startToday) add(today);
+      if (s.paymentMethod === "CARD") monthCardGrossCents += s.totalCents;
 
       const key = s.storeId ?? "unassigned";
       const st = byStoreMap.get(key) ?? {
@@ -170,13 +174,15 @@ export async function GET() {
     for (const p of trackedProducts) if ((invByProduct.get(p.id) ?? 0) <= 0) outOfStock += 1;
 
     const monthExpensesCents = monthExpenseAgg._sum.amountCents ?? 0;
+    const monthCardFeeCents = cardFeeCents(monthCardGrossCents);
 
     return ok({
       generatedAt: now.toISOString(),
       sales: { today, week, month },
       month: {
         expensesCents: monthExpensesCents,
-        netProfitCents: month.profitCents - monthExpensesCents,
+        cardFeeCents: monthCardFeeCents,
+        netProfitCents: month.profitCents - monthExpensesCents - monthCardFeeCents,
       },
       payables: {
         openBills: {

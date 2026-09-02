@@ -372,7 +372,7 @@ export interface OverviewWindow {
 export interface AdminOverview {
   generatedAt: string;
   sales: { today: OverviewWindow; week: OverviewWindow; month: OverviewWindow };
-  month: { expensesCents: number; netProfitCents: number };
+  month: { expensesCents: number; cardFeeCents: number; netProfitCents: number };
   payables: {
     openBills: { count: number; amountCents: number };
     overdueBills: { count: number; amountCents: number };

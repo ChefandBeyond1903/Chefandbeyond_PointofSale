@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireScopedRole, scopeStoreId } from "@/lib/scope";
+import { cardFeeCents, CARD_FEE_LABEL } from "@/lib/money";
 import { ok, toErrorResponse } from "@/lib/api";
 
 function startOfDay(d: Date): Date {
@@ -84,10 +85,12 @@ export async function GET(req: NextRequest) {
           where: expenseWhere,
           _sum: { amountCents: true },
         });
-    const expensesByCategory = expenseRows
-      .map((r) => ({ category: r.category, amountCents: r._sum.amountCents ?? 0 }))
-      .sort((a, b) => b.amountCents - a.amountCents);
-    const expensesCents = expensesByCategory.reduce((s, e) => s + e.amountCents, 0);
+    const expensesByCategory = expenseRows.map((r) => ({
+      category: r.category,
+      amountCents: r._sum.amountCents ?? 0,
+    }));
+    // Card-processing fee (3% of the ticket total on every card sale) is added
+    // below once the card total is known from the sales loop.
 
     const storeNameById = new Map(stores.map((s) => [s.id, s.name]));
 
@@ -194,6 +197,13 @@ export async function GET(req: NextRequest) {
 
     const profitCents = netCents - costCents;
     const saleCount = sales.length;
+
+    // 3% card-processing fee on the full total of every card ticket, shown as
+    // its own P&L expense line.
+    const cardFee = limited ? 0 : cardFeeCents(byMethod.get("CARD")?.totalCents ?? 0);
+    if (cardFee > 0) expensesByCategory.push({ category: CARD_FEE_LABEL, amountCents: cardFee });
+    expensesByCategory.sort((a, b) => b.amountCents - a.amountCents);
+    const expensesCents = expensesByCategory.reduce((s, e) => s + e.amountCents, 0);
 
     const toRows = (
       m: Map<string, { label: string; saleCount: number; net: number; cost: number; profit: number }>,

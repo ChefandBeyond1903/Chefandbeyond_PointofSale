@@ -129,7 +129,7 @@ export function ReportsView({
                   value={formatMoney(data.totals.profitCents)}
                   sub={`${data.totals.marginPct}% margin`}
                 />
-                <Stat label="Operating expenses" value={formatMoney(data.totals.expensesCents)} />
+                <Stat label="Expenses (incl. card fees)" value={formatMoney(data.totals.expensesCents)} />
                 <Stat
                   label="Net profit"
                   value={formatMoney(data.totals.netProfitCents)}
