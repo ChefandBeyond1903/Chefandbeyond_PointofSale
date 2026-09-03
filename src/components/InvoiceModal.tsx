@@ -204,6 +204,23 @@ export function InvoiceModal({
                     ) : null}
                   </p>
                 ) : null}
+                {(sale.dueDate || sale.termsSnapshot || sale.customerTaxExemptSnapshot) && (
+                  <p className="mt-1 text-sm">
+                    {sale.termsSnapshot ? (
+                      <span className="text-zinc-400">Terms {sale.termsSnapshot} · </span>
+                    ) : null}
+                    {sale.dueDate ? (
+                      <span className="font-medium">
+                        Due {new Date(sale.dueDate).toLocaleDateString()}
+                      </span>
+                    ) : null}
+                    {sale.customerTaxExemptSnapshot ? (
+                      <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">
+                        Tax-exempt
+                      </span>
+                    ) : null}
+                  </p>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <button

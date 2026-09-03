@@ -198,6 +198,19 @@ export const heldSaleCreateSchema = z.object({
   customer: saleCustomerSchema.partial().optional(),
 });
 
+// Payment terms a customer can be given; "" means due on receipt.
+export const PAYMENT_TERMS = ["", "Due on receipt", "Net 15", "Net 30", "Net 45", "Net 60"] as const;
+const paymentTermsSchema = z.enum(PAYMENT_TERMS);
+
+const customerTaxFields = {
+  taxExempt: z.boolean(),
+  taxExemptCertNumber: z.string().trim().max(120),
+  taxExemptState: z.string().trim().max(60),
+  // ISO date or ""/null; the route converts to a Date. null/"" clears it.
+  taxExemptExpiresAt: dateInput.nullable(),
+  paymentTerms: paymentTermsSchema,
+};
+
 export const customerCreateSchema = z.object({
   name: z.string().trim().min(1).max(160),
   email: z.string().trim().max(200).default(""),
@@ -205,6 +218,11 @@ export const customerCreateSchema = z.object({
   address: z.string().trim().max(400).default(""),
   company: z.string().trim().max(160).default(""),
   notes: z.string().trim().max(1000).default(""),
+  taxExempt: customerTaxFields.taxExempt.default(false),
+  taxExemptCertNumber: customerTaxFields.taxExemptCertNumber.default(""),
+  taxExemptState: customerTaxFields.taxExemptState.default(""),
+  taxExemptExpiresAt: customerTaxFields.taxExemptExpiresAt.optional(),
+  paymentTerms: customerTaxFields.paymentTerms.default(""),
 });
 
 export const customerUpdateSchema = z.object({
@@ -214,6 +232,11 @@ export const customerUpdateSchema = z.object({
   address: z.string().trim().max(400).optional(),
   company: z.string().trim().max(160).optional(),
   notes: z.string().trim().max(1000).optional(),
+  taxExempt: customerTaxFields.taxExempt.optional(),
+  taxExemptCertNumber: customerTaxFields.taxExemptCertNumber.optional(),
+  taxExemptState: customerTaxFields.taxExemptState.optional(),
+  taxExemptExpiresAt: customerTaxFields.taxExemptExpiresAt.optional(),
+  paymentTerms: customerTaxFields.paymentTerms.optional(),
 });
 
 export const userCreateSchema = z.object({

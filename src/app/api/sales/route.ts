@@ -5,6 +5,7 @@ import { requireUser, HttpError } from "@/lib/auth";
 import { requireScopedUser, scopeStoreId } from "@/lib/scope";
 import { saleCreateSchema } from "@/lib/validation";
 import { computeSale, type PricedInput } from "@/lib/sale";
+import { dueDateFromTerms } from "@/lib/terms";
 import { formatMoney } from "@/lib/money";
 import { ok, toErrorResponse } from "@/lib/api";
 
@@ -57,8 +58,28 @@ export async function POST(req: NextRequest) {
       where: { id: user.id },
       include: { store: true },
     });
-    const taxRateBps = actor?.store?.taxRateBps ?? 0;
+    let taxRateBps = actor?.store?.taxRateBps ?? 0;
     const storeId = actor?.storeId ?? null;
+
+    // A tax-exempt customer (with an unexpired certificate) rings at 0% tax.
+    // Their payment terms set the invoice due date.
+    let customerTaxExempt = false;
+    let customerTerms = "";
+    if (body.customerId) {
+      const c = await prisma.customer.findUnique({
+        where: { id: body.customerId },
+        select: { taxExempt: true, taxExemptExpiresAt: true, paymentTerms: true },
+      });
+      if (c) {
+        customerTerms = c.paymentTerms ?? "";
+        const notExpired = !c.taxExemptExpiresAt || c.taxExemptExpiresAt >= new Date();
+        if (c.taxExempt && notExpired) {
+          customerTaxExempt = true;
+          taxRateBps = 0;
+        }
+      }
+    }
+    const invoiceDueDate = customerTerms ? dueDateFromTerms(new Date(), customerTerms) : null;
     const storeNameSnapshot = actor?.store?.name ?? "";
     const storeAddressSnapshot = actor?.store?.address ?? "";
     const storePhoneSnapshot = actor?.store?.phone ?? "";
@@ -222,6 +243,9 @@ export async function POST(req: NextRequest) {
           tenderedCents,
           changeCents,
           note: body.note,
+          termsSnapshot: customerTerms,
+          dueDate: invoiceDueDate,
+          customerTaxExemptSnapshot: customerTaxExempt,
           cashierId: user.id,
           salespersonId,
           storeId,

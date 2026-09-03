@@ -112,6 +112,15 @@ export function ReceiptModal({
               {sale.customerNameSnapshot ? (
                 <p className="text-center text-zinc-500">Customer: {sale.customerNameSnapshot}</p>
               ) : null}
+              {sale.dueDate ? (
+                <p className="text-center text-zinc-500">
+                  {sale.termsSnapshot ? `${sale.termsSnapshot} — ` : ""}Due{" "}
+                  {new Date(sale.dueDate).toLocaleDateString()}
+                </p>
+              ) : null}
+              {sale.customerTaxExemptSnapshot ? (
+                <p className="text-center text-zinc-500">Tax-exempt sale</p>
+              ) : null}
               <hr className="my-2 border-dashed" />
               {sale.items.map((it) => (
                 <div key={it.id} className="flex justify-between">

@@ -62,6 +62,13 @@ export interface Customer {
   address: string;
   company: string;
   notes: string;
+  taxExempt: boolean;
+  taxExemptCertNumber: string;
+  taxExemptState: string;
+  taxExemptExpiresAt: string | null;
+  taxExemptDocPath: string;
+  taxExemptDocName: string;
+  paymentTerms: string;
   createdAt?: string;
   _count?: { sales: number };
   sales?: { id: string; number: number; totalCents: number; createdAt: string }[];
@@ -312,6 +319,9 @@ export interface Sale {
   tenderedCents: number;
   changeCents: number;
   note: string | null;
+  termsSnapshot?: string;
+  dueDate?: string | null;
+  customerTaxExemptSnapshot?: boolean;
   createdAt: string;
   storeId?: string | null;
   storeNameSnapshot?: string;

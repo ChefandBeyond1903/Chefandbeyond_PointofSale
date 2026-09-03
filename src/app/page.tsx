@@ -7,6 +7,7 @@ import { MoneyInput } from "@/components/MoneyInput";
 import { PercentInput } from "@/components/PercentInput";
 import { ReceiptModal } from "@/components/ReceiptModal";
 import { QuickAddProductModal } from "@/components/QuickAddProductModal";
+import { dueDateFromTerms } from "@/lib/terms";
 import type {
   Category,
   Company,
@@ -387,6 +388,15 @@ export default function RegisterPage() {
     return source.filter((p) => !activeCategory || p.categoryId === activeCategory);
   }, [isSearching, searchHits, browseAll, allProducts, favorites, activeCategory]);
 
+  // A selected tax-exempt customer (cert not past its expiry) zeroes the tax
+  // and gives the invoice a due date from their payment terms.
+  const selectedCustomer = custId ? (customers.find((c) => c.id === custId) ?? null) : null;
+  const taxExemptActive =
+    !!selectedCustomer?.taxExempt &&
+    (!selectedCustomer.taxExemptExpiresAt ||
+      new Date(selectedCustomer.taxExemptExpiresAt) >= new Date(new Date().toDateString()));
+  const effectiveTaxRateBps = taxExemptActive ? 0 : (storeTaxRateBps ?? 0);
+
   const totals = useMemo(() => {
     let subtotal = 0; // catalog list value
     let lineAdjust = 0; // list − charged, per line (negative = priced above list)
@@ -399,7 +409,7 @@ export default function RegisterPage() {
       perLineAfter.push(net);
     }
     const sumAfterLine = perLineAfter.reduce((a, b) => a + b, 0);
-    const rateBps = storeTaxRateBps ?? 0;
+    const rateBps = effectiveTaxRateBps;
 
     let tax = 0;
     const umrpViolations: {
@@ -443,7 +453,7 @@ export default function RegisterPage() {
       overListCents,
       savedPct,
     };
-  }, [cart, storeTaxRateBps, shippingCents]);
+  }, [cart, effectiveTaxRateBps, shippingCents]);
 
   function addToCart(product: Product) {
     setError(null);
@@ -915,6 +925,24 @@ export default function RegisterPage() {
             {custId && (
               <p className="mt-1 text-[11px] text-green-600">Existing customer — details on file</p>
             )}
+            {selectedCustomer?.taxExempt && (
+              <p
+                className={`mt-1 text-[11px] ${taxExemptActive ? "text-emerald-600" : "text-red-600"}`}
+              >
+                {taxExemptActive
+                  ? "Tax-exempt — no sales tax on this invoice"
+                  : "Tax-exempt certificate has expired — sales tax applies"}
+              </p>
+            )}
+            {selectedCustomer?.paymentTerms && (
+              <p className="mt-0.5 text-[11px] text-zinc-500">
+                Terms: {selectedCustomer.paymentTerms} · invoice due{" "}
+                {(() => {
+                  const d = dueDateFromTerms(new Date(), selectedCustomer.paymentTerms);
+                  return d ? d.toLocaleDateString() : "on receipt";
+                })()}
+              </p>
+            )}
             {custOpen && (
               <div className="mt-2 grid gap-2">
                 <input
@@ -1096,7 +1124,13 @@ export default function RegisterPage() {
               }
             />
             <Row
-              label={`Tax${storeTaxRateBps != null ? ` (${formatBps(storeTaxRateBps)})` : ""}`}
+              label={`Tax${
+                taxExemptActive
+                  ? " (exempt)"
+                  : storeTaxRateBps != null
+                    ? ` (${formatBps(storeTaxRateBps)})`
+                    : ""
+              }`}
               value={formatMoney(totals.tax)}
             />
             <div className="flex items-center justify-between">

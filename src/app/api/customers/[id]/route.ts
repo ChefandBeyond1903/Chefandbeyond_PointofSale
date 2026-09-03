@@ -32,7 +32,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     await requireRole("MANAGER", "ADMIN");
     const { id } = await params;
-    const data = customerUpdateSchema.parse(await req.json());
+    const parsed = customerUpdateSchema.parse(await req.json());
+    const data: Record<string, unknown> = { ...parsed };
+    // "" / null clears the expiry; a string becomes a Date; undefined is left alone.
+    if ("taxExemptExpiresAt" in parsed) {
+      data.taxExemptExpiresAt = parsed.taxExemptExpiresAt
+        ? new Date(parsed.taxExemptExpiresAt)
+        : null;
+    }
     const customer = await prisma.customer.update({ where: { id }, data });
     return ok({ customer });
   } catch (err) {

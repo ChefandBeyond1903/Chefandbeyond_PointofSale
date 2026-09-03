@@ -33,8 +33,10 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     await requireRole("MANAGER", "ADMIN");
-    const data = customerCreateSchema.parse(await req.json());
-    const customer = await prisma.customer.create({ data });
+    const { taxExemptExpiresAt, ...data } = customerCreateSchema.parse(await req.json());
+    const customer = await prisma.customer.create({
+      data: { ...data, taxExemptExpiresAt: taxExemptExpiresAt ? new Date(taxExemptExpiresAt) : null },
+    });
     return ok({ customer }, 201);
   } catch (err) {
     return toErrorResponse(err);

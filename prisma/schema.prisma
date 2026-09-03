@@ -146,6 +146,21 @@ model Customer {
   address   String   @default("")
   company   String   @default("")
   notes     String   @default("")
+
+  // Sales-tax exemption. When taxExempt is on (and not past taxExemptExpiresAt),
+  // invoices to this customer ring at 0% tax. The certificate itself is stored
+  // in a private Supabase Storage bucket; taxExemptDocPath is the object key.
+  taxExempt           Boolean   @default(false)
+  taxExemptCertNumber String    @default("")
+  taxExemptState      String    @default("")
+  taxExemptExpiresAt  DateTime?
+  taxExemptDocPath    String    @default("")
+  taxExemptDocName    String    @default("")
+
+  // Default payment terms for this customer's invoices ("" = due on receipt).
+  // "" | "Due on receipt" | "Net 15" | "Net 30" | "Net 45" | "Net 60".
+  paymentTerms String @default("")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   sales     Sale[]
@@ -226,6 +241,12 @@ model Sale {
   tenderedCents     Int     @default(0)
   changeCents       Int     @default(0)
   note              String?
+
+  // Invoice payment terms, snapshotted from the customer at sale time, and the
+  // due date they imply. dueDate is null for due-on-receipt / walk-in sales.
+  termsSnapshot             String    @default("")
+  dueDate                   DateTime?
+  customerTaxExemptSnapshot Boolean   @default(false)
 
   // Store the sale was rung at (the cashier's assigned store). storeId may be
   // null for historic rows; the snapshots freeze the store's details onto the
