@@ -19,6 +19,7 @@ import type {
   Sale,
   Shift,
   ShiftStats,
+  Store,
 } from "@/lib/types";
 
 type DiscMode = "AMOUNT" | "PERCENT";
@@ -121,6 +122,10 @@ export default function RegisterPage() {
   const [meName, setMeName] = useState<string | null>(null);
   const [storeName, setStoreName] = useState<string | null>(null);
   const [storeTaxRateBps, setStoreTaxRateBps] = useState<number | null>(null);
+  // Admin only: the store to ring sales from (admins have no assigned store).
+  const [stores, setStores] = useState<Store[]>([]);
+  const [sellStoreId, setSellStoreId] = useState<string>("");
+  const sellStoreLoaded = useRef(false);
   const [company, setCompany] = useState<Company | null>(null);
   const [salespeople, setSalespeople] = useState<{ id: string; name: string }[]>([]);
   const [salespersonId, setSalespersonId] = useState<string>(""); // "" = signed-in operator
@@ -210,6 +215,11 @@ export default function RegisterPage() {
         setMeName(r.user?.name ?? null);
         setStoreName(r.user?.storeName ?? null);
         setStoreTaxRateBps(r.user?.storeTaxRateBps ?? null);
+        if (r.user?.role === "ADMIN") {
+          api<{ stores: Store[] }>("/api/stores")
+            .then((s) => setStores(s.stores))
+            .catch(() => {});
+        }
       })
       .catch(() => {});
     api<{ company: Company }>("/api/company")
@@ -388,6 +398,32 @@ export default function RegisterPage() {
     return source.filter((p) => !activeCategory || p.categoryId === activeCategory);
   }, [isSearching, searchHits, browseAll, allProducts, favorites, activeCategory]);
 
+  // An admin has no assigned store and picks one to sell from; everyone else
+  // sells from their own store. The picked store's name and tax rate drive the
+  // register.
+  const isAdmin = role === "ADMIN";
+  const sellStore = isAdmin ? (stores.find((s) => s.id === sellStoreId) ?? null) : null;
+  const effectiveStoreName = isAdmin ? (sellStore?.name ?? null) : storeName;
+  const baseTaxRateBps = isAdmin ? (sellStore?.taxRateBps ?? null) : storeTaxRateBps;
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("cbpos.sellStoreId");
+      if (saved) setSellStoreId(saved);
+    } catch {
+      /* private mode / storage disabled — fine */
+    }
+    sellStoreLoaded.current = true;
+  }, []);
+  useEffect(() => {
+    if (!sellStoreLoaded.current) return;
+    try {
+      localStorage.setItem("cbpos.sellStoreId", sellStoreId);
+    } catch {
+      /* ignore */
+    }
+  }, [sellStoreId]);
+
   // A selected tax-exempt customer (cert not past its expiry) zeroes the tax
   // and gives the invoice a due date from their payment terms.
   const selectedCustomer = custId ? (customers.find((c) => c.id === custId) ?? null) : null;
@@ -395,7 +431,7 @@ export default function RegisterPage() {
     !!selectedCustomer?.taxExempt &&
     (!selectedCustomer.taxExemptExpiresAt ||
       new Date(selectedCustomer.taxExemptExpiresAt) >= new Date(new Date().toDateString()));
-  const effectiveTaxRateBps = taxExemptActive ? 0 : (storeTaxRateBps ?? 0);
+  const effectiveTaxRateBps = taxExemptActive ? 0 : (baseTaxRateBps ?? 0);
 
   const totals = useMemo(() => {
     let subtotal = 0; // catalog list value
@@ -678,6 +714,10 @@ export default function RegisterPage() {
 
   async function completeSale(paymentMethod: "CASH" | "CARD", tenderedCents: number) {
     setError(null);
+    if (isAdmin && !sellStoreId) {
+      setError("Choose a store to sell from.");
+      return;
+    }
     try {
       const res = await api<{ sale: Sale }>("/api/sales", {
         method: "POST",
@@ -692,6 +732,7 @@ export default function RegisterPage() {
           shippingCents: totals.shipping,
           paymentMethod,
           tenderedCents,
+          ...(isAdmin && sellStoreId ? { storeId: sellStoreId } : {}),
           ...(salespersonId && salespersonId !== meId ? { salespersonId } : {}),
           ...(custId
             ? { customerId: custId }
@@ -841,18 +882,42 @@ export default function RegisterPage() {
           <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-3">
             <div className="min-w-0">
               <h2 className="font-semibold">Current sale</h2>
-              <p className="truncate text-xs text-zinc-400">
-                {storeName ? (
-                  <>
-                    {storeName}
-                    {storeTaxRateBps != null && ` · tax ${formatBps(storeTaxRateBps)}`}
-                  </>
-                ) : (
-                  <span className="text-amber-600">
-                    No store assigned — sales ring at 0% tax
-                  </span>
-                )}
-              </p>
+              {isAdmin ? (
+                <div className="mt-0.5 flex items-center gap-1.5">
+                  <select
+                    className={`input h-7 w-auto min-w-44 text-xs ${
+                      sellStoreId ? "" : "border-amber-400 text-amber-700"
+                    }`}
+                    value={sellStoreId}
+                    onChange={(e) => setSellStoreId(e.target.value)}
+                  >
+                    <option value="">Choose store to sell from…</option>
+                    {stores.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                  {sellStore && (
+                    <span className="whitespace-nowrap text-[11px] text-zinc-400">
+                      tax {formatBps(sellStore.taxRateBps)}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <p className="truncate text-xs text-zinc-400">
+                  {storeName ? (
+                    <>
+                      {storeName}
+                      {storeTaxRateBps != null && ` · tax ${formatBps(storeTaxRateBps)}`}
+                    </>
+                  ) : (
+                    <span className="text-amber-600">
+                      No store assigned — sales ring at 0% tax
+                    </span>
+                  )}
+                </p>
+              )}
             </div>
             <div className="flex shrink-0 items-center gap-1">
               {held.length > 0 && (
@@ -1175,9 +1240,16 @@ export default function RegisterPage() {
             >
               {holding ? "Holding…" : "Hold sale for later"}
             </button>
+            {isAdmin && !sellStoreId && cart.length > 0 && (
+              <p className="text-xs text-amber-700">Choose a store to sell from (top of the ticket).</p>
+            )}
             <button
               onClick={() => setPayOpen(true)}
-              disabled={cart.length === 0 || totals.umrpViolations.length > 0}
+              disabled={
+                cart.length === 0 ||
+                totals.umrpViolations.length > 0 ||
+                (isAdmin && !sellStoreId)
+              }
               className="btn-primary w-full py-3 text-base"
             >
               Charge {formatMoney(totals.total)}

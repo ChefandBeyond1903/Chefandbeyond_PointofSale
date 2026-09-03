@@ -53,13 +53,22 @@ export async function POST(req: NextRequest) {
     const user = await requireUser();
     const body = saleCreateSchema.parse(await req.json());
 
-    // Sales tax is the cashier's assigned-store rate, applied to every line.
     const actor = await prisma.user.findUnique({
       where: { id: user.id },
       include: { store: true },
     });
-    let taxRateBps = actor?.store?.taxRateBps ?? 0;
-    const storeId = actor?.storeId ?? null;
+
+    // The selling store: the operator's assigned store, or — for an ADMIN, who
+    // has none — one they choose per sale. Its rate is the sales-tax rate and
+    // its inventory is what the sale draws down.
+    let sellStore = actor?.store ?? null;
+    if (actor?.role === "ADMIN" && body.storeId) {
+      const picked = await prisma.store.findUnique({ where: { id: body.storeId } });
+      if (!picked) throw new HttpError(400, "That store doesn't exist.");
+      sellStore = picked;
+    }
+    let taxRateBps = sellStore?.taxRateBps ?? 0;
+    const storeId = sellStore?.id ?? null;
 
     // A tax-exempt customer (with an unexpired certificate) rings at 0% tax.
     // Their payment terms set the invoice due date.
@@ -80,10 +89,10 @@ export async function POST(req: NextRequest) {
       }
     }
     const invoiceDueDate = customerTerms ? dueDateFromTerms(new Date(), customerTerms) : null;
-    const storeNameSnapshot = actor?.store?.name ?? "";
-    const storeAddressSnapshot = actor?.store?.address ?? "";
-    const storePhoneSnapshot = actor?.store?.phone ?? "";
-    const storeEmailSnapshot = actor?.store?.email ?? "";
+    const storeNameSnapshot = sellStore?.name ?? "";
+    const storeAddressSnapshot = sellStore?.address ?? "";
+    const storePhoneSnapshot = sellStore?.phone ?? "";
+    const storeEmailSnapshot = sellStore?.email ?? "";
 
     // Credit the sale to the chosen salesperson (defaults to the operator).
     // They must be an active user in the same store (any active user for admin).

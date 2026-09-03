@@ -178,6 +178,9 @@ export const saleCreateSchema = z.object({
   tenderedCents: z.number().int().min(0).default(0),
   // Staff credited with the sale. Omit to credit the signed-in operator.
   salespersonId: z.string().min(1).optional(),
+  // ADMIN only: the store to ring the sale at (tax rate, snapshots, inventory).
+  // Ignored for everyone else — they always sell from their assigned store.
+  storeId: z.string().min(1).optional(),
   note: z.string().trim().max(500).optional().or(z.literal("")).transform((v) => (v ? v : undefined)),
   // Bill the invoice to a customer: either an existing id, or details to
   // match/auto-create by name.
