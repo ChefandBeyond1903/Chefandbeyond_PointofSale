@@ -10,6 +10,7 @@ import { resolvePreset, type DateRange } from "@/lib/dateRange";
 import type {
   Bill,
   HeldSaleSummary,
+  InventoryValuation,
   ProfitRow,
   PurchaseOrder,
   ReportSummary,
@@ -32,6 +33,7 @@ export function ReportsView({
   const [pos, setPos] = useState<PurchaseOrder[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
   const [heldTickets, setHeldTickets] = useState<HeldSaleSummary[]>([]);
+  const [inv, setInv] = useState<InventoryValuation | null>(null);
 
   const load = useCallback(
     async (from: Date, to: Date, store: string) => {
@@ -58,8 +60,15 @@ export function ReportsView({
           .then((r) => setHeldTickets(r.heldSales))
           .catch(() => setHeldTickets([]));
       }
+      if (!limited) {
+        // Inventory valuation is a live snapshot — no date range, store only.
+        const invQs = store ? `?storeId=${encodeURIComponent(store)}` : "";
+        api<InventoryValuation>(`/api/reports/inventory${invQs}`)
+          .then((r) => setInv(r))
+          .catch(() => setInv(null));
+      }
     },
-    [isAdmin],
+    [isAdmin, limited],
   );
 
   const reload = useCallback(
@@ -153,6 +162,8 @@ export function ReportsView({
               />
             </>
           )}
+
+          {!limited && inv && <InventorySection inv={inv} />}
 
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="card p-4">
@@ -449,6 +460,79 @@ function ProfitLoss({ data }: { data: ReportSummary }) {
       <p className="mt-2 text-xs text-zinc-400">
         Sales tax collected ({formatMoney(t.taxCents)}) is excluded — it isn&apos;t revenue.
       </p>
+    </div>
+  );
+}
+
+function InventorySection({ inv }: { inv: InventoryValuation }) {
+  const t = inv.totals;
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Stat
+          label="Inventory value (at cost)"
+          value={formatMoney(t.costCents)}
+          sub="total on-hand"
+          accent
+        />
+        <Stat label="Retail value" value={formatMoney(t.retailCents)} sub="at selling price" />
+        <Stat label="Units on hand" value={t.quantity.toLocaleString()} />
+        <Stat label="Products stocked" value={String(t.productCount)} />
+      </div>
+
+      <div className="card overflow-hidden">
+        <h2 className="border-b border-zinc-100 px-4 py-3 font-semibold">
+          Inventory by vendor
+          {!inv.scope.allStores && inv.scope.storeName ? ` — ${inv.scope.storeName}` : ""}
+        </h2>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[560px] text-sm">
+            <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
+              <tr>
+                <th className="px-4 py-2">Vendor</th>
+                <th className="px-4 py-2 text-right">Products</th>
+                <th className="px-4 py-2 text-right">Units</th>
+                <th className="px-4 py-2 text-right">Cost value</th>
+                <th className="px-4 py-2 text-right">Retail value</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-100">
+              {inv.byVendor.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-6 text-center text-zinc-400">
+                    No stock on hand.
+                  </td>
+                </tr>
+              ) : (
+                inv.byVendor.map((r) => (
+                  <tr key={r.vendor}>
+                    <td className="px-4 py-2 font-medium">{r.vendor}</td>
+                    <td className="px-4 py-2 text-right text-zinc-500">{r.productCount}</td>
+                    <td className="px-4 py-2 text-right text-zinc-500">
+                      {r.quantity.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-2 text-right font-medium">{formatMoney(r.costCents)}</td>
+                    <td className="px-4 py-2 text-right text-zinc-500">
+                      {formatMoney(r.retailCents)}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+            {inv.byVendor.length > 0 && (
+              <tfoot>
+                <tr className="border-t border-zinc-200 bg-zinc-50 font-semibold">
+                  <td className="px-4 py-2">Total</td>
+                  <td className="px-4 py-2 text-right">{t.productCount}</td>
+                  <td className="px-4 py-2 text-right">{t.quantity.toLocaleString()}</td>
+                  <td className="px-4 py-2 text-right">{formatMoney(t.costCents)}</td>
+                  <td className="px-4 py-2 text-right">{formatMoney(t.retailCents)}</td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
+      </div>
     </div>
   );
 }

@@ -466,3 +466,24 @@ export interface ReportSummary {
     profitCents: number;
   }[];
 }
+
+export interface InventoryValuationRow {
+  vendor: string;
+  productCount: number;
+  quantity: number;
+  costCents: number;
+  retailCents: number;
+}
+
+export interface InventoryValuation {
+  generatedAt: string;
+  scope: { allStores: boolean; storeId: string | null; storeName: string | null };
+  stores: { id: string; name: string }[];
+  byVendor: InventoryValuationRow[];
+  totals: {
+    productCount: number;
+    quantity: number;
+    costCents: number;
+    retailCents: number;
+  };
+}
