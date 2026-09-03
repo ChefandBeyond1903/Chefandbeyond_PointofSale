@@ -24,6 +24,19 @@ export function ExpensesPanel({ isAdmin }: { isAdmin: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  type EditForm = {
+    id: string;
+    category: string;
+    payee: string;
+    amountCents: number;
+    expenseDate: string;
+    memo: string;
+    status: "PAID" | "UNPAID";
+    storeId: string;
+  };
+  const [edit, setEdit] = useState<EditForm | null>(null);
+  const [editBusy, setEditBusy] = useState(false);
+
   const [form, setForm] = useState({
     category: "",
     payee: "",
@@ -129,6 +142,48 @@ export function ExpensesPanel({ isAdmin }: { isAdmin: boolean }) {
       load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not delete the expense");
+    }
+  }
+
+  function startEdit(r: Expense) {
+    setError(null);
+    setEdit({
+      id: r.id,
+      category: r.category,
+      payee: r.payee,
+      amountCents: r.amountCents,
+      expenseDate: r.expenseDate ? r.expenseDate.slice(0, 10) : todayInput(),
+      memo: r.memo,
+      status: r.status,
+      storeId: r.storeId ?? "",
+    });
+  }
+
+  async function saveEdit() {
+    if (!edit) return;
+    if (!edit.category) return setError("Pick a category");
+    if (edit.amountCents <= 0) return setError("Enter an amount");
+    setEditBusy(true);
+    setError(null);
+    try {
+      await api(`/api/expenses/${edit.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          category: edit.category,
+          payee: edit.payee.trim(),
+          amountCents: edit.amountCents,
+          expenseDate: edit.expenseDate,
+          memo: edit.memo.trim(),
+          status: edit.status,
+          ...(isAdmin ? { storeId: edit.storeId || null } : {}),
+        }),
+      });
+      setEdit(null);
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not save the expense");
+    } finally {
+      setEditBusy(false);
     }
   }
 
@@ -290,7 +345,13 @@ export function ExpensesPanel({ isAdmin }: { isAdmin: boolean }) {
                       {r.status}
                     </span>
                   </td>
-                  <td className="px-4 py-2.5 text-right">
+                  <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                    <button
+                      onClick={() => startEdit(r)}
+                      className="btn-ghost px-2 py-0.5 text-xs text-indigo-600"
+                    >
+                      Edit
+                    </button>
                     <button
                       onClick={() => remove(r.id)}
                       className="btn-ghost px-2 py-0.5 text-xs text-red-500"
@@ -304,6 +365,114 @@ export function ExpensesPanel({ isAdmin }: { isAdmin: boolean }) {
           </tbody>
         </table>
       </div>
+
+      {edit && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"
+          onClick={() => setEdit(null)}
+        >
+          <div
+            className="card max-h-[90vh] w-full max-w-md overflow-y-auto p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="mb-4 text-lg font-semibold">Edit expense</h2>
+            {error && (
+              <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+            )}
+            <div className="grid gap-3">
+              <div>
+                <label className="label">Category</label>
+                <select
+                  className="input"
+                  value={edit.category}
+                  onChange={(e) => setEdit({ ...edit, category: e.target.value })}
+                >
+                  <option value="">— Pick —</option>
+                  {[...new Set([...categories, edit.category].filter(Boolean))].map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Amount</label>
+                  <MoneyInput
+                    cents={edit.amountCents}
+                    onCentsChange={(c) => setEdit({ ...edit, amountCents: c })}
+                  />
+                </div>
+                <div>
+                  <label className="label">Date</label>
+                  <input
+                    type="date"
+                    className="input"
+                    value={edit.expenseDate}
+                    onChange={(e) => setEdit({ ...edit, expenseDate: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="label">Payee</label>
+                <input
+                  className="input"
+                  value={edit.payee}
+                  onChange={(e) => setEdit({ ...edit, payee: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="label">Memo</label>
+                <input
+                  className="input"
+                  value={edit.memo}
+                  onChange={(e) => setEdit({ ...edit, memo: e.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Status</label>
+                  <select
+                    className="input"
+                    value={edit.status}
+                    onChange={(e) =>
+                      setEdit({ ...edit, status: e.target.value as "PAID" | "UNPAID" })
+                    }
+                  >
+                    <option value="PAID">Paid</option>
+                    <option value="UNPAID">Unpaid</option>
+                  </select>
+                </div>
+                {isAdmin && (
+                  <div>
+                    <label className="label">Store</label>
+                    <select
+                      className="input"
+                      value={edit.storeId}
+                      onChange={(e) => setEdit({ ...edit, storeId: e.target.value })}
+                    >
+                      <option value="">Company-wide</option>
+                      {stores.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="mt-5 flex gap-2">
+              <button onClick={() => setEdit(null)} className="btn-secondary flex-1">
+                Cancel
+              </button>
+              <button onClick={saveEdit} disabled={editBusy} className="btn-primary flex-1">
+                {editBusy ? "Saving…" : "Save expense"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
