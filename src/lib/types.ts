@@ -472,9 +472,13 @@ export interface ReportSummary {
     marginPct: number;
     itemsSold: number;
     averageSaleCents: number;
-    /** Operating expenses in the period (0 for the cashier view). */
+    /** Operating expenses in the period (0 for the cashier view). Excludes card fees. */
     expensesCents: number;
-    /** Gross profit minus operating expenses. */
+    /** Total of card-paid sales in the period. */
+    cardSalesCents: number;
+    /** 3% card-processing fee on those card sales — tracked on its own. */
+    cardFeeCents: number;
+    /** Gross profit minus operating expenses minus card fees. */
     netProfitCents: number;
   };
   /** Operating expenses grouped by category, largest first. */

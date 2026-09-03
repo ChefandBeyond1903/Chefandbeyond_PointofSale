@@ -139,7 +139,16 @@ export function ReportsView({
                   value={formatMoney(data.totals.profitCents)}
                   sub={`${data.totals.marginPct}% margin`}
                 />
-                <Stat label="Expenses (incl. card fees)" value={formatMoney(data.totals.expensesCents)} />
+                <Stat label="Operating expenses" value={formatMoney(data.totals.expensesCents)} />
+                <Stat
+                  label="Card processing fees"
+                  value={formatMoney(data.totals.cardFeeCents)}
+                  sub={
+                    data.totals.cardSalesCents > 0
+                      ? `3% of ${formatMoney(data.totals.cardSalesCents)} card sales`
+                      : "3% of card sales"
+                  }
+                />
                 <Stat
                   label="Net profit"
                   value={formatMoney(data.totals.netProfitCents)}
@@ -502,6 +511,16 @@ function ProfitLoss({ data }: { data: ReportSummary }) {
           label="Total operating expenses"
           value={`(${formatMoney(t.expensesCents)})`}
           border
+          negative
+        />
+
+        <div className="mt-3 pt-1 text-xs font-medium uppercase tracking-wide text-zinc-400">
+          Card processing
+        </div>
+        <PLRow
+          label="Credit card fees (3% of card sales)"
+          value={`(${formatMoney(t.cardFeeCents)})`}
+          indent
           negative
         />
 

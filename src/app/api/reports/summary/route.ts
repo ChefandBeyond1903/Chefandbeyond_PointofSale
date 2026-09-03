@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireScopedRole, scopeStoreId } from "@/lib/scope";
-import { cardFeeCents, CARD_FEE_LABEL } from "@/lib/money";
+import { cardFeeCents } from "@/lib/money";
 import { ok, toErrorResponse } from "@/lib/api";
 
 function startOfDay(d: Date): Date {
@@ -240,12 +240,12 @@ export async function GET(req: NextRequest) {
     const profitCents = netCents - costCents;
     const saleCount = sales.length;
 
-    // 3% card-processing fee on the full total of every card ticket, shown as
-    // its own P&L expense line.
-    const cardFee = limited ? 0 : cardFeeCents(byMethod.get("CARD")?.totalCents ?? 0);
-    if (cardFee > 0) expensesByCategory.push({ category: CARD_FEE_LABEL, amountCents: cardFee });
+    // Operating expenses = the real expense categories only. The 3% card-
+    // processing fee is tracked on its own line, not lumped in here.
     expensesByCategory.sort((a, b) => b.amountCents - a.amountCents);
     const expensesCents = expensesByCategory.reduce((s, e) => s + e.amountCents, 0);
+    const cardSalesCents = byMethod.get("CARD")?.totalCents ?? 0;
+    const cardFeeCentsTotal = limited ? 0 : cardFeeCents(cardSalesCents);
 
     const toRows = (
       m: Map<string, { label: string; saleCount: number; net: number; cost: number; profit: number }>,
@@ -291,6 +291,8 @@ export async function GET(req: NextRequest) {
           itemsSold,
           averageSaleCents: 0,
           expensesCents: 0,
+          cardSalesCents: 0,
+          cardFeeCents: 0,
           netProfitCents: 0,
         },
         expensesByCategory: [],
@@ -325,7 +327,9 @@ export async function GET(req: NextRequest) {
         itemsSold,
         averageSaleCents: saleCount > 0 ? Math.round(grossCents / saleCount) : 0,
         expensesCents,
-        netProfitCents: profitCents - expensesCents,
+        cardSalesCents,
+        cardFeeCents: cardFeeCentsTotal,
+        netProfitCents: profitCents - expensesCents - cardFeeCentsTotal,
       },
       expensesByCategory,
       byStore: toRows(byStore),
