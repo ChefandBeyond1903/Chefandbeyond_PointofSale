@@ -187,9 +187,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 }
 
-// Permanently delete an invoice. Admin only. Puts the sold quantities back
-// into the sale's store inventory, and cascades to line items and any purchase
-// orders that were raised from this sale.
+// Permanently delete a sale or open invoice. Admin only. Puts the sold
+// quantities back into inventory, hands any store credit spent on it back to
+// the customer, and cascades to line items, payments, refunds and any purchase
+// orders raised from it.
 export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
     const actor = await requireScopedUser();
@@ -198,9 +199,27 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
 
     const sale = await prisma.sale.findUnique({
       where: { id },
-      select: { id: true, storeId: true, items: { select: { productId: true, quantity: true } } },
+      select: {
+        id: true,
+        number: true,
+        storeId: true,
+        customerId: true,
+        items: { select: { productId: true, quantity: true } },
+        payments: { select: { method: true, amountCents: true } },
+        refunds: { select: { method: true, amountCents: true } },
+      },
     });
     if (!sale) throw new HttpError(404, "Invoice not found");
+
+    // Net store credit this sale consumed: credit spent as payment, minus any
+    // credit handed back via a refund. Delete un-does both.
+    const creditSpent = sale.payments
+      .filter((p) => p.method === "CREDIT")
+      .reduce((s, p) => s + p.amountCents, 0);
+    const creditRefunded = sale.refunds
+      .filter((r) => r.method === "CREDIT")
+      .reduce((s, r) => s + r.amountCents, 0);
+    const creditToRestore = creditSpent - creditRefunded;
 
     await prisma.$transaction(async (tx) => {
       if (sale.storeId) {
@@ -222,6 +241,25 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
           });
         }
       }
+
+      if (sale.customerId && creditToRestore !== 0) {
+        await tx.customer.update({
+          where: { id: sale.customerId },
+          data: { storeCreditCents: { increment: creditToRestore } },
+        });
+        await tx.storeCreditEntry.create({
+          data: {
+            customerId: sale.customerId,
+            amountCents: creditToRestore,
+            kind: "ADJUST",
+            reason: `Deleted sale #${sale.number}`,
+            createdById: actor.id,
+          },
+        });
+      }
+      // Drop this sale's own credit-ledger rows (they'd dangle otherwise).
+      await tx.storeCreditEntry.deleteMany({ where: { saleId: id } });
+
       await tx.sale.delete({ where: { id } });
     });
 

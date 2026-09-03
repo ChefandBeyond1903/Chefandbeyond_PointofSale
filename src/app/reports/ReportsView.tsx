@@ -217,6 +217,20 @@ export function ReportsView({
                             </span>
                           )}
                         </td>
+                        {isAdmin && (
+                          <td className="px-2 py-2 text-right">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                del("invoice", `/api/sales/${i.id}`);
+                              }}
+                              className="btn-ghost px-2 py-0.5 text-xs text-red-500"
+                              title="Delete this invoice"
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -370,6 +384,7 @@ export function ReportsView({
           onClose={() => setOpenInvoiceId(null)}
           onChanged={reload}
           canManage={!limited}
+          isAdmin={isAdmin}
         />
       )}
 

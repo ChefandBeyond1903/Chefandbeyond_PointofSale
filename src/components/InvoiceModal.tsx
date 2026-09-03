@@ -30,11 +30,13 @@ export function InvoiceModal({
   onClose,
   onChanged,
   canManage = true,
+  isAdmin = false,
 }: {
   saleId: string;
   onClose: () => void;
   onChanged?: () => void;
   canManage?: boolean;
+  isAdmin?: boolean;
 }) {
   const [detail, setDetail] = useState<InvoiceDetail | null>(null);
   const [busyVendor, setBusyVendor] = useState<string | null>(null);
@@ -302,6 +304,29 @@ export function InvoiceModal({
                 >
                   Print receipt
                 </button>
+                {isAdmin && (
+                  <button
+                    onClick={async () => {
+                      if (
+                        !confirm(
+                          `Delete invoice #${sale.number}? This can't be undone — items go back ` +
+                            `into stock and any store credit used is returned.`,
+                        )
+                      )
+                        return;
+                      try {
+                        await api(`/api/sales/${saleId}`, { method: "DELETE" });
+                        onChanged?.();
+                        onClose();
+                      } catch (e) {
+                        setErr(e instanceof ApiError ? e.message : "Could not delete");
+                      }
+                    }}
+                    className="btn-ghost px-3 py-1 text-sm text-red-500"
+                  >
+                    Delete
+                  </button>
+                )}
                 <button onClick={onClose} className="btn-ghost px-2 py-1 text-sm">
                   ✕
                 </button>
