@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
+import { formatPhone } from "@/lib/phone";
 import { MoneyInput } from "@/components/MoneyInput";
+import { PhoneInput } from "@/components/PhoneInput";
 import type { Customer, StoreCreditEntry } from "@/lib/types";
 
 const TERMS = ["Net 15", "Net 30", "Net 45", "Net 60"] as const;
@@ -302,7 +304,7 @@ export function CustomersView({ canManage = true }: { canManage?: boolean }) {
                   </td>
                   <td className="px-4 py-2.5 text-zinc-500">{c.company || "—"}</td>
                   <td className="px-4 py-2.5 text-zinc-500">{c.email || "—"}</td>
-                  <td className="px-4 py-2.5 text-zinc-500">{c.phone || "—"}</td>
+                  <td className="px-4 py-2.5 text-zinc-500">{formatPhone(c.phone) || "—"}</td>
                   <td className="px-4 py-2.5 text-right text-zinc-500">{c._count?.sales ?? 0}</td>
                   <td className="px-4 py-2.5 text-right whitespace-nowrap">
                     {canManage ? (
@@ -313,7 +315,7 @@ export function CustomersView({ canManage = true }: { canManage?: boolean }) {
                               id: c.id,
                               name: c.name,
                               email: c.email,
-                              phone: c.phone,
+                              phone: formatPhone(c.phone),
                               company: c.company,
                               address: c.address,
                               notes: c.notes,
@@ -382,10 +384,9 @@ export function CustomersView({ canManage = true }: { canManage?: boolean }) {
                 </div>
                 <div>
                   <label className="label">Phone</label>
-                  <input
-                    className="input"
+                  <PhoneInput
                     value={draft.phone}
-                    onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
+                    onChange={(v) => setDraft({ ...draft, phone: v })}
                   />
                 </div>
               </div>

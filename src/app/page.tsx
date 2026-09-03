@@ -8,6 +8,8 @@ import { PercentInput } from "@/components/PercentInput";
 import { ReceiptModal } from "@/components/ReceiptModal";
 import { QuickAddProductModal } from "@/components/QuickAddProductModal";
 import { dueDateFromTerms } from "@/lib/terms";
+import { phoneDigits, formatPhone } from "@/lib/phone";
+import { PhoneInput } from "@/components/PhoneInput";
 import type {
   Category,
   Company,
@@ -325,7 +327,7 @@ export default function RegisterPage() {
     if (match) {
       setCustId(match.id);
       setCustEmail(match.email);
-      setCustPhone(match.phone);
+      setCustPhone(formatPhone(match.phone));
       setCustAddress(match.address);
       setCustCompany(match.company);
     } else {
@@ -337,11 +339,13 @@ export default function RegisterPage() {
   const custMatches = useMemo(() => {
     const q = custName.trim().toLowerCase();
     if (!q || custId) return [];
+    const qd = phoneDigits(q);
     return customers
-      .filter((c) =>
-        [c.name, c.company, c.phone, c.email, c.address].some((v) =>
-          (v ?? "").toLowerCase().includes(q),
-        ),
+      .filter(
+        (c) =>
+          [c.name, c.company, c.phone, c.email, c.address].some((v) =>
+            (v ?? "").toLowerCase().includes(q),
+          ) || (qd.length >= 2 && phoneDigits(c.phone).includes(qd)),
       )
       .slice(0, 8);
   }, [customers, custName, custId]);
@@ -350,7 +354,7 @@ export default function RegisterPage() {
     setCustName(c.name);
     setCustId(c.id);
     setCustEmail(c.email);
-    setCustPhone(c.phone);
+    setCustPhone(formatPhone(c.phone));
     setCustAddress(c.address);
     setCustCompany(c.company);
     setCustMenuOpen(false);
@@ -1081,7 +1085,9 @@ export default function RegisterPage() {
                           )}
                           {[c.phone, c.email, c.address].filter(Boolean).length > 0 && (
                             <span className="block truncate text-[11px] text-zinc-400">
-                              {[c.phone, c.email, c.address].filter(Boolean).join(" · ")}
+                              {[formatPhone(c.phone), c.email, c.address]
+                                .filter(Boolean)
+                                .join(" · ")}
                             </span>
                           )}
                         </button>
@@ -1137,11 +1143,10 @@ export default function RegisterPage() {
                   onChange={(e) => setCustEmail(e.target.value)}
                 />
                 <div className="grid grid-cols-2 gap-2">
-                  <input
+                  <PhoneInput
                     className="input h-8"
-                    placeholder="Phone"
                     value={custPhone}
-                    onChange={(e) => setCustPhone(e.target.value)}
+                    onChange={setCustPhone}
                   />
                   <input
                     className="input h-8"
