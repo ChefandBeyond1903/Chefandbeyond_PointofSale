@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { HttpError } from "@/lib/auth";
 import { requireScopedUser, requireScopedRole, scopeStoreId } from "@/lib/scope";
 import { billUpdateSchema } from "@/lib/validation";
+import { parseDateInput } from "@/lib/date";
 import { ok, toErrorResponse } from "@/lib/api";
 
 type Params = { params: Promise<{ id: string }> };
@@ -49,8 +50,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (body.vendor !== undefined) data.vendor = body.vendor;
     if (body.terms !== undefined) data.terms = body.terms;
     if (body.memo !== undefined) data.memo = body.memo;
-    if (body.billDate !== undefined) data.billDate = body.billDate ? new Date(body.billDate) : new Date();
-    if (body.dueDate !== undefined) data.dueDate = body.dueDate ? new Date(body.dueDate) : null;
+    if (body.billDate !== undefined) data.billDate = body.billDate ? parseDateInput(body.billDate) : new Date();
+    if (body.dueDate !== undefined) data.dueDate = body.dueDate ? parseDateInput(body.dueDate) : null;
     if (body.status !== undefined) {
       data.status = body.status;
       data.paidAt = body.status === "PAID" ? new Date() : null;

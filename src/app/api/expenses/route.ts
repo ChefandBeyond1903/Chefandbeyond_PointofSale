@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireScopedUser, requireScopedRole, scopeStoreId } from "@/lib/scope";
 import { expenseCreateSchema } from "@/lib/validation";
+import { parseDateInput } from "@/lib/date";
 import { ok, toErrorResponse } from "@/lib/api";
 
 const expenseSelect = {
@@ -66,7 +67,7 @@ export async function POST(req: NextRequest) {
         category: f.category,
         payee: f.payee,
         amountCents: f.amountCents,
-        expenseDate: f.expenseDate ? new Date(f.expenseDate) : new Date(),
+        expenseDate: f.expenseDate ? parseDateInput(f.expenseDate) : new Date(),
         memo: f.memo,
         status: f.status,
         storeId,

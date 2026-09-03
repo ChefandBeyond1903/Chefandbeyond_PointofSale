@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { HttpError } from "@/lib/auth";
 import { requireScopedUser, scopeStoreId } from "@/lib/scope";
 import { salePaymentSchema } from "@/lib/validation";
+import { parseDateInput } from "@/lib/date";
 import { ok, toErrorResponse } from "@/lib/api";
 
 type Params = { params: Promise<{ id: string }> };
@@ -76,7 +77,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       throw new HttpError(400, "This invoice has already been settled.");
     }
 
-    const paidAt = body.paidAt ? new Date(body.paidAt) : new Date();
+    const paidAt = body.paidAt ? parseDateInput(body.paidAt) : new Date();
     let tenderedCents = sale.totalCents;
     let changeCents = 0;
     if (body.paymentMethod === "CASH") {

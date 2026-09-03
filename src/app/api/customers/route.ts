@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser, requireRole } from "@/lib/auth";
 import { customerCreateSchema } from "@/lib/validation";
+import { parseDateInput } from "@/lib/date";
 import { ok, toErrorResponse } from "@/lib/api";
 
 export async function GET(req: NextRequest) {
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest) {
     await requireRole("MANAGER", "ADMIN");
     const { taxExemptExpiresAt, ...data } = customerCreateSchema.parse(await req.json());
     const customer = await prisma.customer.create({
-      data: { ...data, taxExemptExpiresAt: taxExemptExpiresAt ? new Date(taxExemptExpiresAt) : null },
+      data: { ...data, taxExemptExpiresAt: taxExemptExpiresAt ? parseDateInput(taxExemptExpiresAt) : null },
     });
     return ok({ customer }, 201);
   } catch (err) {

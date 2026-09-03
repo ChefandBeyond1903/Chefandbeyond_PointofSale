@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { HttpError } from "@/lib/auth";
 import { requireScopedUser, requireScopedRole, scopeStoreId } from "@/lib/scope";
 import { billCreateSchema } from "@/lib/validation";
+import { parseDateInput } from "@/lib/date";
 import { ok, toErrorResponse } from "@/lib/api";
 
 type Params = { params: Promise<{ id: string }> };
@@ -83,8 +84,8 @@ export async function POST(req: NextRequest, { params }: Params) {
       throw new HttpError(400, "Enter a quantity to receive on at least one line.");
     }
 
-    const billDate = body.billDate ? new Date(body.billDate) : new Date();
-    const dueDate = body.dueDate ? new Date(body.dueDate) : null;
+    const billDate = body.billDate ? parseDateInput(body.billDate) : new Date();
+    const dueDate = body.dueDate ? parseDateInput(body.dueDate) : null;
     const subtotalCents = lines.reduce((s, l) => s + l.receiveQty * l.unitCostCents, 0);
 
     const bill = await prisma.$transaction(async (tx) => {

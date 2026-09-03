@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/client";
 import { formatBps, formatMoney } from "@/lib/money";
+import { formatDateOnly } from "@/lib/date";
 import type { Company, Sale } from "@/lib/types";
 
 // Printed on every invoice/receipt.
@@ -115,7 +116,7 @@ export function ReceiptModal({
               {sale.dueDate ? (
                 <p className="text-center text-zinc-500">
                   {sale.termsSnapshot ? `${sale.termsSnapshot} — ` : ""}Due{" "}
-                  {new Date(sale.dueDate).toLocaleDateString()}
+                  {formatDateOnly(sale.dueDate)}
                 </p>
               ) : null}
               {sale.customerTaxExemptSnapshot ? (

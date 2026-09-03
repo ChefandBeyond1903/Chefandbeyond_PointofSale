@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireScopedUser, requireScopedRole, scopeStoreId } from "@/lib/scope";
 import { ok, toErrorResponse } from "@/lib/api";
 import { purchaseOrderFormSchema } from "@/lib/validation";
+import { parseDateInput } from "@/lib/date";
 import { computeSubtotalCents, lineCreateData, uniquePoNumber } from "@/lib/purchaseOrder";
 
 export async function GET(req: NextRequest) {
@@ -76,8 +77,8 @@ export async function POST(req: NextRequest) {
         mailingAddress: f.mailingAddress,
         shipTo: f.shipTo,
         shippingAddress: f.shippingAddress,
-        poDate: f.poDate ? new Date(f.poDate) : new Date(),
-        dueDate: f.dueDate ? new Date(f.dueDate) : null,
+        poDate: f.poDate ? parseDateInput(f.poDate) : new Date(),
+        dueDate: f.dueDate ? parseDateInput(f.dueDate) : null,
         shipVia: f.shipVia,
         storeName: f.storeName,
         permitNumber: f.permitNumber,

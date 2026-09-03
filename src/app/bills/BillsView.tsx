@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
+import { formatDateOnly } from "@/lib/date";
 import { MoneyInput } from "@/components/MoneyInput";
 import { BILL_TERMS } from "@/lib/terms";
 import { ExpensesPanel } from "./ExpensesPanel";
@@ -148,10 +149,10 @@ export function BillsView({
                     <td className="px-4 py-2.5 text-zinc-500">
                       {b.store?.name.replace(/^Chef and Beyond - /, "") ?? "—"}
                     </td>
-                    <td className="px-4 py-2.5 text-zinc-500">{fmtDate(b.billDate)}</td>
+                    <td className="px-4 py-2.5 text-zinc-500">{formatDateOnly(b.billDate)}</td>
                     <td className="px-4 py-2.5 text-zinc-500">{b.terms || "—"}</td>
                     <td className={`px-4 py-2.5 ${overdue ? "font-medium text-red-600" : "text-zinc-500"}`}>
-                      {fmtDate(b.dueDate)}
+                      {formatDateOnly(b.dueDate)}
                       {b.status === "OPEN" && d !== null && (
                         <span className="ml-1 text-xs">
                           ({d < 0 ? `${-d}d late` : d === 0 ? "today" : `${d}d`})

@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
+import { formatDateOnly } from "@/lib/date";
 import { InvoiceModal } from "@/components/InvoiceModal";
 import { ReceiptModal } from "@/components/ReceiptModal";
 import { DateRangePicker } from "@/components/DateRangePicker";
@@ -192,7 +193,7 @@ export function ReportsView({
                           {i.dueDate && (
                             <span className={i.overdue ? " text-red-600" : ""}>
                               {" "}
-                              · due {new Date(i.dueDate).toLocaleDateString()}
+                              · due {formatDateOnly(i.dueDate)}
                             </span>
                           )}
                         </td>

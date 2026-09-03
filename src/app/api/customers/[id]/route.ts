@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireRole, HttpError } from "@/lib/auth";
 import { customerUpdateSchema } from "@/lib/validation";
+import { parseDateInput } from "@/lib/date";
 import { ok, toErrorResponse } from "@/lib/api";
 
 type Params = { params: Promise<{ id: string }> };
@@ -37,7 +38,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     // "" / null clears the expiry; a string becomes a Date; undefined is left alone.
     if ("taxExemptExpiresAt" in parsed) {
       data.taxExemptExpiresAt = parsed.taxExemptExpiresAt
-        ? new Date(parsed.taxExemptExpiresAt)
+        ? parseDateInput(parsed.taxExemptExpiresAt)
         : null;
     }
     const customer = await prisma.customer.update({ where: { id }, data });

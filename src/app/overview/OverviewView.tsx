@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
+import { formatDateOnly } from "@/lib/date";
 import type { AdminOverview, OverviewWindow } from "@/lib/types";
 
 function fmtDateTime(s: string) {
@@ -145,7 +146,7 @@ export function OverviewView() {
                               p.overdue ? "font-medium text-red-600" : "text-zinc-500"
                             }`}
                           >
-                            {new Date(p.dueDate).toLocaleDateString()}
+                            {formatDateOnly(p.dueDate)}
                           </td>
                           <td className="py-1.5 text-right whitespace-nowrap tabular-nums">
                             {formatMoney(p.totalCents)}
@@ -297,7 +298,7 @@ export function OverviewView() {
                           {formatMoney(e.amountCents)}
                         </span>
                         <span className="text-xs text-zinc-400 whitespace-nowrap">
-                          {new Date(e.expenseDate).toLocaleDateString()}
+                          {formatDateOnly(e.expenseDate)}
                         </span>
                       </span>
                     </li>

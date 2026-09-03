@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney, formatBps } from "@/lib/money";
+import { formatDateOnly } from "@/lib/date";
 import { MoneyInput } from "@/components/MoneyInput";
 import { ReceiptModal } from "@/components/ReceiptModal";
 import type { InvoiceDetail, PurchaseOrder, Vendor } from "@/lib/types";
@@ -241,7 +242,7 @@ export function InvoiceModal({
                     ) : null}
                     {sale.dueDate ? (
                       <span className="font-medium">
-                        Due {new Date(sale.dueDate).toLocaleDateString()}
+                        Due {formatDateOnly(sale.dueDate)}
                       </span>
                     ) : null}
                     {sale.customerTaxExemptSnapshot ? (
@@ -272,7 +273,7 @@ export function InvoiceModal({
                 <p className="text-sm font-medium text-amber-800">
                   Unpaid invoice — {formatMoney(sale.totalCents)}
                   {sale.dueDate
-                    ? ` · due ${new Date(sale.dueDate).toLocaleDateString()}`
+                    ? ` · due ${formatDateOnly(sale.dueDate)}`
                     : ""}
                   {sale.termsSnapshot ? ` (${sale.termsSnapshot})` : ""}
                 </p>

@@ -13,7 +13,9 @@ function todayInput() {
 }
 
 function fmtDate(s: string) {
-  return new Date(s).toLocaleDateString();
+  // Expense dates are whole calendar days — read them in UTC so a date picked
+  // as 9/1 doesn't display as 8/31 west of UTC.
+  return new Date(s).toLocaleDateString(undefined, { timeZone: "UTC" });
 }
 
 export function ExpensesPanel({ isAdmin }: { isAdmin: boolean }) {

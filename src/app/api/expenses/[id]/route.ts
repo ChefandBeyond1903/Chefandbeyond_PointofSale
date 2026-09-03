@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { HttpError } from "@/lib/auth";
 import { requireScopedRole, scopeStoreId } from "@/lib/scope";
 import { expenseUpdateSchema } from "@/lib/validation";
+import { parseDateInput } from "@/lib/date";
 import { ok, toErrorResponse } from "@/lib/api";
 
 type Params = { params: Promise<{ id: string }> };
@@ -40,7 +41,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (f.category !== undefined) data.category = f.category;
     if (f.payee !== undefined) data.payee = f.payee;
     if (f.amountCents !== undefined) data.amountCents = f.amountCents;
-    if (f.expenseDate !== undefined) data.expenseDate = new Date(f.expenseDate);
+    if (f.expenseDate !== undefined) data.expenseDate = parseDateInput(f.expenseDate);
     if (f.memo !== undefined) data.memo = f.memo;
     if (f.status !== undefined) data.status = f.status;
     // Only an admin may move an expense between stores.

@@ -7,7 +7,8 @@ import { formatMoney } from "@/lib/money";
 import type { Bill, PurchaseOrder } from "@/lib/types";
 
 function fmtDate(s: string | null | undefined) {
-  return s ? new Date(s).toLocaleDateString() : "—";
+  // PO / bill / due dates are whole calendar days — format in UTC.
+  return s ? new Date(s).toLocaleDateString(undefined, { timeZone: "UTC" }) : "—";
 }
 
 /** Read-only history for one vendor: their purchase orders and vendor bills. */

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { HttpError } from "@/lib/auth";
 import { requireScopedUser, requireScopedRole, scopeStoreId } from "@/lib/scope";
 import { purchaseOrderPatchSchema } from "@/lib/validation";
+import { parseDateInput } from "@/lib/date";
 import { computeSubtotalCents, itemAmountCents } from "@/lib/purchaseOrder";
 import { ok, toErrorResponse } from "@/lib/api";
 
@@ -58,8 +59,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     }
     if (f.tags !== undefined) data.tags = JSON.stringify(f.tags);
     if (f.shippingCents !== undefined) data.shippingCents = f.shippingCents;
-    if (f.poDate !== undefined) data.poDate = f.poDate ? new Date(f.poDate) : new Date();
-    if (f.dueDate !== undefined) data.dueDate = f.dueDate ? new Date(f.dueDate) : null;
+    if (f.poDate !== undefined) data.poDate = f.poDate ? parseDateInput(f.poDate) : new Date();
+    if (f.dueDate !== undefined) data.dueDate = f.dueDate ? parseDateInput(f.dueDate) : null;
 
     const replacingLines = f.categoryLines !== undefined || f.itemLines !== undefined;
     // The subtotal folds in shipping, so a shipping-only change also recomputes.
