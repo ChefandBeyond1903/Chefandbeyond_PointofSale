@@ -403,7 +403,6 @@ export default function RegisterPage() {
   // register.
   const isAdmin = role === "ADMIN";
   const sellStore = isAdmin ? (stores.find((s) => s.id === sellStoreId) ?? null) : null;
-  const effectiveStoreName = isAdmin ? (sellStore?.name ?? null) : storeName;
   const baseTaxRateBps = isAdmin ? (sellStore?.taxRateBps ?? null) : storeTaxRateBps;
 
   useEffect(() => {
@@ -473,8 +472,8 @@ export default function RegisterPage() {
     const shipping = Math.max(0, shippingCents);
     const total = subtotal - discount + tax + shipping;
     // "Customer total saving" vs. catalog list — only when it's actually a saving.
+    // A ticket priced above list is never surfaced as such.
     const savedCents = Math.max(0, discount);
-    const overListCents = Math.max(0, -discount);
     const savedPct = subtotal > 0 ? (savedCents / subtotal) * 100 : 0;
     return {
       subtotal,
@@ -486,7 +485,6 @@ export default function RegisterPage() {
       sumAfterLine,
       orderDiscountResolved: 0,
       savedCents,
-      overListCents,
       savedPct,
     };
   }, [cart, effectiveTaxRateBps, shippingCents]);
@@ -1075,14 +1073,14 @@ export default function RegisterPage() {
                           {(priceChanged || lineDisc > 0) && (
                             <>
                               {" · "}
-                              <span
-                                className={lineSaved >= 0 ? "text-green-600" : "text-amber-600"}
-                              >
-                                now {formatMoney(unitNow)} ea ·{" "}
-                                {lineSaved >= 0
-                                  ? `save ${formatMoney(lineSaved)} (${changePct}%)`
-                                  : `+${formatMoney(-lineSaved)} over list (${changePct}%)`}
-                              </span>
+                              {/* Only ever surface a saving — a line priced above
+                                  list shows nothing about being over list. */}
+                              {lineSaved > 0 && (
+                                <span className="text-green-600">
+                                  now {formatMoney(unitNow)} ea · save {formatMoney(lineSaved)} (
+                                  {changePct}%)
+                                </span>
+                              )}
                               {priceChanged && (
                                 <button
                                   type="button"
@@ -1180,14 +1178,11 @@ export default function RegisterPage() {
 
           <div className="space-y-2 border-t border-zinc-100 px-4 py-3 text-sm">
             <Row label="Subtotal (list)" value={formatMoney(totals.subtotal)} />
-            <Row
-              label={totals.discount >= 0 ? "Discount" : "Price adjustment"}
-              value={
-                totals.discount >= 0
-                  ? `− ${formatMoney(totals.discount)}`
-                  : `+ ${formatMoney(-totals.discount)}`
-              }
-            />
+            {/* Show a discount line only when there's an actual discount — never
+                flag a ticket priced above list. */}
+            {totals.discount > 0 && (
+              <Row label="Discount" value={`− ${formatMoney(totals.discount)}`} />
+            )}
             <Row
               label={`Tax${
                 taxExemptActive
@@ -1218,13 +1213,6 @@ export default function RegisterPage() {
                 </span>
               </div>
             )}
-            {totals.overListCents > 0 && (
-              <div className="flex items-center justify-between rounded bg-amber-50 px-2 py-1.5 font-medium text-amber-700">
-                <span>Over list price</span>
-                <span>+ {formatMoney(totals.overListCents)}</span>
-              </div>
-            )}
-
             {error && <p className="rounded bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
 
             {totals.umrpViolations.length > 0 && (
