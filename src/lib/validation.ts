@@ -119,11 +119,23 @@ export const expenseCategoryCreateSchema = z.object({
 
 export const billUpdateSchema = z.object({
   billNumber: z.string().trim().max(120).optional(),
+  vendor: z.string().trim().min(1).max(160).optional(),
   billDate: dateInput.optional(),
   dueDate: dateInput.optional().nullable(),
   terms: z.string().trim().max(40).optional(),
   memo: z.string().trim().max(2000).optional(),
   status: z.enum(["OPEN", "PAID"]).optional(),
+  // Correct a mis-entered line: new quantity / unit cost per existing bill item.
+  // A quantity change also adjusts stock and the linked PO's received amount.
+  lines: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        quantity: z.number().int(),
+        unitCostCents: z.number().int().min(0),
+      }),
+    )
+    .optional(),
 });
 
 // Set the on-hand quantity of a product at a store (absolute value).

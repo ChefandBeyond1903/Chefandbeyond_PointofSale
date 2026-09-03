@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
+import { MoneyInput } from "@/components/MoneyInput";
 import { BILL_TERMS } from "@/lib/terms";
 import { ExpensesPanel } from "./ExpensesPanel";
 import type { Bill } from "@/lib/types";
@@ -208,7 +209,18 @@ function BillDetailModal({
   const [bill, setBill] = useState<Bill | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [edit, setEdit] = useState({ billNumber: "", terms: "", dueDate: "", memo: "" });
+  const [edit, setEdit] = useState({
+    billNumber: "",
+    vendor: "",
+    terms: "",
+    dueDate: "",
+    billDate: "",
+    memo: "",
+  });
+  // id -> { qty text, unit cost cents } for the line-item corrections.
+  const [lineEdits, setLineEdits] = useState<
+    Record<string, { quantity: string; unitCostCents: number }>
+  >({});
 
   const load = useCallback(async () => {
     try {
@@ -216,10 +228,20 @@ function BillDetailModal({
       setBill(res.bill);
       setEdit({
         billNumber: res.bill.billNumber,
+        vendor: res.bill.vendor,
         terms: res.bill.terms,
         dueDate: res.bill.dueDate ? res.bill.dueDate.slice(0, 10) : "",
+        billDate: res.bill.billDate ? res.bill.billDate.slice(0, 10) : "",
         memo: res.bill.memo,
       });
+      setLineEdits(
+        Object.fromEntries(
+          (res.bill.items ?? []).map((it) => [
+            it.id,
+            { quantity: String(it.quantity), unitCostCents: it.unitCostCents },
+          ]),
+        ),
+      );
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "Failed to load bill");
     }
@@ -283,7 +305,7 @@ function BillDetailModal({
 
             {err && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{err}</p>}
 
-            <div className="mb-4 grid gap-3 sm:grid-cols-4">
+            <div className="mb-4 grid gap-3 sm:grid-cols-3">
               <div>
                 <label className="label">Bill no.</label>
                 <input
@@ -291,6 +313,25 @@ function BillDetailModal({
                   value={edit.billNumber}
                   disabled={!canManage}
                   onChange={(e) => setEdit({ ...edit, billNumber: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="label">Vendor</label>
+                <input
+                  className="input"
+                  value={edit.vendor}
+                  disabled={!canManage}
+                  onChange={(e) => setEdit({ ...edit, vendor: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="label">Bill date</label>
+                <input
+                  type="date"
+                  className="input"
+                  value={edit.billDate}
+                  disabled={!canManage}
+                  onChange={(e) => setEdit({ ...edit, billDate: e.target.value })}
                 />
               </div>
               <div>
@@ -319,10 +360,6 @@ function BillDetailModal({
                   onChange={(e) => setEdit({ ...edit, dueDate: e.target.value })}
                 />
               </div>
-              <div>
-                <label className="label">Bill date</label>
-                <input className="input" value={fmtDate(bill.billDate)} disabled />
-              </div>
             </div>
 
             <div className="overflow-x-auto">
@@ -336,30 +373,87 @@ function BillDetailModal({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-100">
-                  {(bill.items ?? []).map((it) => (
-                    <tr key={it.id}>
-                      <td className="py-2">
-                        {it.nameSnapshot}
-                        <span className="ml-1 text-xs text-zinc-400">{it.skuSnapshot}</span>
-                      </td>
-                      <td className="py-2 text-right tabular-nums">{it.quantity}</td>
-                      <td className="py-2 text-right">{formatMoney(it.unitCostCents)}</td>
-                      <td className="py-2 text-right font-medium">{formatMoney(it.lineCostCents)}</td>
-                    </tr>
-                  ))}
+                  {(bill.items ?? []).map((it) => {
+                    const le = lineEdits[it.id] ?? {
+                      quantity: String(it.quantity),
+                      unitCostCents: it.unitCostCents,
+                    };
+                    const qty = parseInt(le.quantity, 10) || 0;
+                    const amount = qty * le.unitCostCents;
+                    return (
+                      <tr key={it.id}>
+                        <td className="py-2">
+                          {it.nameSnapshot}
+                          <span className="ml-1 text-xs text-zinc-400">{it.skuSnapshot}</span>
+                        </td>
+                        <td className="py-2 text-right">
+                          {canManage ? (
+                            <input
+                              className="input h-8 w-16 text-right tabular-nums"
+                              inputMode="numeric"
+                              value={le.quantity}
+                              onChange={(e) =>
+                                setLineEdits((cur) => ({
+                                  ...cur,
+                                  [it.id]: {
+                                    ...le,
+                                    quantity: e.target.value.replace(/[^0-9-]/g, ""),
+                                  },
+                                }))
+                              }
+                            />
+                          ) : (
+                            <span className="tabular-nums">{it.quantity}</span>
+                          )}
+                        </td>
+                        <td className="py-2 text-right">
+                          {canManage ? (
+                            <MoneyInput
+                              cents={le.unitCostCents}
+                              onCentsChange={(c) =>
+                                setLineEdits((cur) => ({
+                                  ...cur,
+                                  [it.id]: { ...le, unitCostCents: c },
+                                }))
+                              }
+                              className="input h-8 w-24 text-right"
+                            />
+                          ) : (
+                            formatMoney(it.unitCostCents)
+                          )}
+                        </td>
+                        <td className="py-2 text-right font-medium tabular-nums">
+                          {formatMoney(amount)}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
                 <tfoot>
                   <tr>
                     <td colSpan={3} className="py-2 text-right font-medium">
                       Total
                     </td>
-                    <td className="py-2 text-right text-base font-bold">
-                      {formatMoney(bill.subtotalCents)}
+                    <td className="py-2 text-right text-base font-bold tabular-nums">
+                      {formatMoney(
+                        (bill.items ?? []).reduce((s, it) => {
+                          const le = lineEdits[it.id];
+                          const qty = le ? parseInt(le.quantity, 10) || 0 : it.quantity;
+                          const unit = le ? le.unitCostCents : it.unitCostCents;
+                          return s + qty * unit;
+                        }, 0),
+                      )}
                     </td>
                   </tr>
                 </tfoot>
               </table>
             </div>
+            {canManage && (
+              <p className="mt-1 text-[11px] text-zinc-400">
+                Changing a quantity also adjusts this store&rsquo;s stock and the linked
+                purchase order&rsquo;s received amount. Unit-cost edits change the bill only.
+              </p>
+            )}
 
             <div className="mt-3">
               <label className="label">Memo</label>
@@ -378,9 +472,19 @@ function BillDetailModal({
                   onClick={() =>
                     patch({
                       billNumber: edit.billNumber.trim(),
+                      vendor: edit.vendor.trim() || bill.vendor,
                       terms: edit.terms,
+                      billDate: edit.billDate || undefined,
                       dueDate: edit.dueDate || null,
                       memo: edit.memo.trim(),
+                      lines: (bill.items ?? []).map((it) => {
+                        const le = lineEdits[it.id];
+                        return {
+                          id: it.id,
+                          quantity: le ? parseInt(le.quantity, 10) || 0 : it.quantity,
+                          unitCostCents: le ? le.unitCostCents : it.unitCostCents,
+                        };
+                      }),
                     })
                   }
                   disabled={busy}
