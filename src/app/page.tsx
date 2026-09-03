@@ -426,6 +426,13 @@ export default function RegisterPage() {
   // A selected tax-exempt customer (cert not past its expiry) zeroes the tax
   // and gives the invoice a due date from their payment terms.
   const selectedCustomer = custId ? (customers.find((c) => c.id === custId) ?? null) : null;
+  // A customer with payment terms is invoiced (billed later), not charged now.
+  const invoiceCustomer = !!selectedCustomer?.paymentTerms;
+  const invoiceDueLabel = (() => {
+    if (!invoiceCustomer) return "";
+    const d = dueDateFromTerms(new Date(), selectedCustomer!.paymentTerms);
+    return d ? d.toLocaleDateString() : "";
+  })();
   const taxExemptActive =
     !!selectedCustomer?.taxExempt &&
     (!selectedCustomer.taxExemptExpiresAt ||
@@ -710,6 +717,50 @@ export default function RegisterPage() {
     }
   }
 
+  function salePayloadBase() {
+    return {
+      items: cart.map((l) => ({
+        productId: l.product.id,
+        quantity: l.quantity,
+        discountCents: resolveLineDiscount(l),
+        unitPriceCents: l.unitPriceCents,
+      })),
+      orderDiscountCents: totals.orderDiscountResolved,
+      shippingCents: totals.shipping,
+      ...(isAdmin && sellStoreId ? { storeId: sellStoreId } : {}),
+      ...(salespersonId && salespersonId !== meId ? { salespersonId } : {}),
+      ...customerPayload(),
+    };
+  }
+
+  function afterSaleSaved(sale: Sale) {
+    setReceipt(sale);
+    setPayOpen(false);
+    clearCart();
+    loadCatalog();
+    if (allProducts) loadAllProducts();
+    loadShift();
+    loadCustomers();
+  }
+
+  // Terms customer: save the sale as an unpaid invoice — no payment taken now.
+  async function saveInvoice() {
+    setError(null);
+    if (isAdmin && !sellStoreId) {
+      setError("Choose a store to sell from.");
+      return;
+    }
+    try {
+      const res = await api<{ sale: Sale }>("/api/sales", {
+        method: "POST",
+        body: JSON.stringify(salePayloadBase()),
+      });
+      afterSaleSaved(res.sale);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not save the invoice");
+    }
+  }
+
   async function completeSale(paymentMethod: "CASH" | "CARD", tenderedCents: number) {
     setError(null);
     if (isAdmin && !sellStoreId) {
@@ -719,41 +770,9 @@ export default function RegisterPage() {
     try {
       const res = await api<{ sale: Sale }>("/api/sales", {
         method: "POST",
-        body: JSON.stringify({
-          items: cart.map((l) => ({
-            productId: l.product.id,
-            quantity: l.quantity,
-            discountCents: resolveLineDiscount(l),
-            unitPriceCents: l.unitPriceCents,
-          })),
-          orderDiscountCents: totals.orderDiscountResolved,
-          shippingCents: totals.shipping,
-          paymentMethod,
-          tenderedCents,
-          ...(isAdmin && sellStoreId ? { storeId: sellStoreId } : {}),
-          ...(salespersonId && salespersonId !== meId ? { salespersonId } : {}),
-          ...(custId
-            ? { customerId: custId }
-            : custName.trim()
-              ? {
-                  customer: {
-                    name: custName.trim(),
-                    email: custEmail.trim(),
-                    phone: custPhone.trim(),
-                    address: custAddress.trim(),
-                    company: custCompany.trim(),
-                  },
-                }
-              : {}),
-        }),
+        body: JSON.stringify({ ...salePayloadBase(), paymentMethod, tenderedCents }),
       });
-      setReceipt(res.sale);
-      setPayOpen(false);
-      clearCart();
-      loadCatalog();
-      if (allProducts) loadAllProducts();
-      loadShift();
-      loadCustomers();
+      afterSaleSaved(res.sale);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not complete the sale");
     }
@@ -1234,8 +1253,15 @@ export default function RegisterPage() {
             {isAdmin && !sellStoreId && cart.length > 0 && (
               <p className="text-xs text-amber-700">Choose a store to sell from (top of the ticket).</p>
             )}
+            {invoiceCustomer && cart.length > 0 && (
+              <p className="text-xs text-zinc-500">
+                {selectedCustomer!.name} is on {selectedCustomer!.paymentTerms} terms — this saves
+                as an unpaid invoice{invoiceDueLabel ? `, due ${invoiceDueLabel}` : ""}. Record the
+                payment from the invoice when the money comes in.
+              </p>
+            )}
             <button
-              onClick={() => setPayOpen(true)}
+              onClick={() => (invoiceCustomer ? saveInvoice() : setPayOpen(true))}
               disabled={
                 cart.length === 0 ||
                 totals.umrpViolations.length > 0 ||
@@ -1243,7 +1269,9 @@ export default function RegisterPage() {
               }
               className="btn-primary w-full py-3 text-base"
             >
-              Charge {formatMoney(totals.total)}
+              {invoiceCustomer
+                ? `Save invoice ${formatMoney(totals.total)}`
+                : `Charge ${formatMoney(totals.total)}`}
             </button>
           </div>
         </div>

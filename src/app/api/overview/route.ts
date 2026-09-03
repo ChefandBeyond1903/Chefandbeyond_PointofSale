@@ -37,6 +37,8 @@ export async function GET() {
       openPoCount,
       overduePoAgg,
       posDue,
+      unpaidInvoiceAgg,
+      overdueInvoiceAgg,
       heldCount,
       activeProducts,
       totalProducts,
@@ -50,10 +52,12 @@ export async function GET() {
       recentExpenses,
     ] = await Promise.all([
       prisma.sale.findMany({
-        where: { status: "COMPLETED", createdAt: { gte: startMonth, lte: now } },
-        orderBy: { createdAt: "desc" },
+        // A sale counts for the day it was paid, not rung.
+        where: { status: "COMPLETED", paidAt: { gte: startMonth, lte: now } },
+        orderBy: { paidAt: "desc" },
         select: {
           createdAt: true,
+          paidAt: true,
           storeId: true,
           storeNameSnapshot: true,
           totalCents: true,
@@ -91,6 +95,16 @@ export async function GET() {
         orderBy: { dueDate: "asc" },
         take: 6,
         select: { id: true, poNumber: true, vendor: true, dueDate: true, subtotalCents: true },
+      }),
+      prisma.sale.aggregate({
+        where: { status: "INVOICED" },
+        _sum: { totalCents: true },
+        _count: true,
+      }),
+      prisma.sale.aggregate({
+        where: { status: "INVOICED", dueDate: { lt: now } },
+        _sum: { totalCents: true },
+        _count: true,
       }),
       prisma.heldSale.count(),
       prisma.product.count({ where: { active: true } }),
@@ -166,9 +180,10 @@ export async function GET() {
         w.profitCents += profit;
         w.itemsSold += qty;
       };
+      const when = s.paidAt ?? s.createdAt;
       add(month);
-      if (s.createdAt >= startWeek) add(week);
-      if (s.createdAt >= startToday) add(today);
+      if (when >= startWeek) add(week);
+      if (when >= startToday) add(today);
       if (s.paymentMethod === "CARD") monthCardGrossCents += s.totalCents;
 
       const key = s.storeId ?? "unassigned";
@@ -210,6 +225,16 @@ export async function GET() {
         overduePurchaseOrders: {
           count: overduePoAgg._count,
           amountCents: overduePoAgg._sum.subtotalCents ?? 0,
+        },
+      },
+      receivables: {
+        unpaidInvoices: {
+          count: unpaidInvoiceAgg._count,
+          amountCents: unpaidInvoiceAgg._sum.totalCents ?? 0,
+        },
+        overdueInvoices: {
+          count: overdueInvoiceAgg._count,
+          amountCents: overdueInvoiceAgg._sum.totalCents ?? 0,
         },
       },
       purchaseOrdersDue: posDue.map((p) => ({

@@ -174,7 +174,8 @@ export const saleCreateSchema = z.object({
   items: z.array(saleItemSchema).min(1),
   orderDiscountCents: z.number().int().min(0).default(0),
   shippingCents: z.number().int().min(0).default(0),
-  paymentMethod: z.enum(["CASH", "CARD"]),
+  // Omitted when saving an unpaid invoice for a terms customer.
+  paymentMethod: z.enum(["CASH", "CARD"]).optional(),
   tenderedCents: z.number().int().min(0).default(0),
   // Staff credited with the sale. Omit to credit the signed-in operator.
   salespersonId: z.string().min(1).optional(),
@@ -186,6 +187,14 @@ export const saleCreateSchema = z.object({
   // match/auto-create by name.
   customerId: z.string().min(1).optional(),
   customer: saleCustomerSchema.optional(),
+});
+
+// Record a payment against an unpaid (INVOICED) sale, settling it.
+export const salePaymentSchema = z.object({
+  paymentMethod: z.enum(["CASH", "CARD"]),
+  // The day the money was received — this becomes the sale's revenue date.
+  paidAt: dateInput.optional(),
+  tenderedCents: z.number().int().min(0).default(0),
 });
 
 // A parked cart. Same shape as a sale minus payment; recalled later on another

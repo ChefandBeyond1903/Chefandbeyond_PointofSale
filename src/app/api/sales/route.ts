@@ -177,19 +177,32 @@ export async function POST(req: NextRequest) {
     );
 
     let tenderedCents = computed.totalCents;
+    // A customer with payment terms is invoiced, not charged: the goods go out
+    // now (inventory still draws down) but no money is collected and it isn't a
+    // sale for the day until a payment is recorded (PATCH /api/sales/[id]).
+    const isInvoice = customerTerms !== "";
+    if (!isInvoice && !body.paymentMethod) {
+      throw new HttpError(400, "Choose a payment method.");
+    }
+
     let changeCents = 0;
-    if (body.paymentMethod === "CASH") {
+    if (!isInvoice && body.paymentMethod === "CASH") {
       tenderedCents = body.tenderedCents;
       if (tenderedCents < computed.totalCents) {
         throw new HttpError(400, "Amount tendered is less than the total due");
       }
       changeCents = tenderedCents - computed.totalCents;
     }
+    if (isInvoice) {
+      tenderedCents = 0;
+    }
 
-    const openShift = await prisma.shift.findFirst({
-      where: { userId: user.id, status: "OPEN" },
-      orderBy: { openedAt: "desc" },
-    });
+    const openShift = isInvoice
+      ? null
+      : await prisma.shift.findFirst({
+          where: { userId: user.id, status: "OPEN" },
+          orderBy: { openedAt: "desc" },
+        });
 
     const sale = await prisma.$transaction(async (tx) => {
       const last = await tx.sale.findFirst({ orderBy: { number: "desc" }, select: { number: true } });
@@ -240,7 +253,8 @@ export async function POST(req: NextRequest) {
       const created = await tx.sale.create({
         data: {
           number,
-          status: "COMPLETED",
+          status: isInvoice ? "INVOICED" : "COMPLETED",
+          paidAt: isInvoice ? null : new Date(),
           subtotalCents: computed.subtotalCents,
           listSubtotalCents,
           discountCents: computed.discountCents,
@@ -248,7 +262,7 @@ export async function POST(req: NextRequest) {
           taxRateBps: computed.taxRateBps,
           shippingCents: computed.shippingCents,
           totalCents: computed.totalCents,
-          paymentMethod: body.paymentMethod,
+          paymentMethod: isInvoice ? "" : (body.paymentMethod ?? ""),
           tenderedCents,
           changeCents,
           note: body.note,

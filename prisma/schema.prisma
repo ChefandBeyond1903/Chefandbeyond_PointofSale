@@ -221,12 +221,20 @@ model StoreInventory {
   @@index([storeId])
 }
 
-/// A completed (or voided) transaction. status is "COMPLETED" or "VOIDED".
-/// paymentMethod is "CASH" or "CARD".
+/// A sale/invoice. status:
+///   "COMPLETED" — money collected; this is a real sale on `paidAt`.
+///   "INVOICED"  — goods went out to a terms customer, not yet paid. It's a
+///                 receivable, not revenue, until a payment is recorded (which
+///                 flips it to COMPLETED and stamps paidAt = the payment date).
+///   "VOIDED"    — reserved.
+/// paymentMethod is "CASH" or "CARD" (empty while INVOICED).
 model Sale {
-  id                String  @id @default(cuid())
-  number            Int     @unique
-  status            String  @default("COMPLETED")
+  id                String    @id @default(cuid())
+  number            Int       @unique
+  status            String    @default("COMPLETED")
+  // When the money was collected. Also the date the sale counts for in reports
+  // and the P&L. Null only while status is INVOICED.
+  paidAt            DateTime?
   subtotalCents     Int
   // Sum of catalog list price × qty, before any manual price change or
   // discount. Used to show the customer's saving vs. list. 0 on old rows.

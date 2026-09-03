@@ -165,6 +165,51 @@ export function ReportsView({
 
           {!limited && inv && <InventorySection inv={inv} />}
 
+          {!limited && data.receivables.count > 0 && (
+            <div className="card overflow-hidden">
+              <div className="flex flex-wrap items-baseline gap-x-3 border-b border-zinc-100 px-4 py-3">
+                <h2 className="font-semibold">Unpaid invoices</h2>
+                <span className="text-sm text-zinc-500">
+                  {data.receivables.count} · {formatMoney(data.receivables.amountCents)} outstanding
+                  {data.receivables.overdueCount > 0 && (
+                    <span className="text-red-600"> · {data.receivables.overdueCount} overdue</span>
+                  )}
+                </span>
+              </div>
+              <div className="max-h-96 overflow-y-auto">
+                <table className="w-full text-sm">
+                  <tbody className="divide-y divide-zinc-100">
+                    {data.unpaidInvoices.map((i) => (
+                      <tr
+                        key={i.id}
+                        onClick={() => setOpenInvoiceId(i.id)}
+                        className="cursor-pointer hover:bg-zinc-50"
+                      >
+                        <td className="px-4 py-2 font-medium">#{i.number}</td>
+                        <td className="px-4 py-2 text-zinc-500">{i.customer || "—"}</td>
+                        <td className="px-4 py-2 text-zinc-400">
+                          {i.terms || "—"}
+                          {i.dueDate && (
+                            <span className={i.overdue ? " text-red-600" : ""}>
+                              {" "}
+                              · due {new Date(i.dueDate).toLocaleDateString()}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2 text-right font-medium">
+                          {formatMoney(i.totalCents)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="px-4 py-2 text-xs text-zinc-400">
+                Open an invoice to record its payment — it then counts as a sale for that day.
+              </p>
+            </div>
+          )}
+
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="card p-4">
               <h2 className="mb-3 font-semibold">Top products</h2>
@@ -305,6 +350,7 @@ export function ReportsView({
         <InvoiceModal
           saleId={openInvoiceId}
           onClose={() => setOpenInvoiceId(null)}
+          onChanged={reload}
           canManage={!limited}
         />
       )}

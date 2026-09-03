@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { HttpError } from "@/lib/auth";
 import { requireScopedUser, scopeStoreId } from "@/lib/scope";
+import { salePaymentSchema } from "@/lib/validation";
 import { ok, toErrorResponse } from "@/lib/api";
 
 type Params = { params: Promise<{ id: string }> };
@@ -51,6 +52,66 @@ export async function GET(_req: NextRequest, { params }: Params) {
     const unassignedQty = vendorMap.get("")?.quantity ?? 0;
 
     return ok({ sale, vendors, unassignedQty });
+  } catch (err) {
+    return toErrorResponse(err);
+  }
+}
+
+// Record a payment against an unpaid invoice, settling it. The sale then
+// counts as revenue on the payment date.
+export async function PATCH(req: NextRequest, { params }: Params) {
+  try {
+    const actor = await requireScopedUser();
+    const { id } = await params;
+    const body = salePaymentSchema.parse(await req.json());
+
+    const sale = await prisma.sale.findUnique({
+      where: { id },
+      select: { id: true, status: true, storeId: true, totalCents: true },
+    });
+    if (!sale) throw new HttpError(404, "Invoice not found");
+    const scoped = scopeStoreId(actor);
+    if (scoped && sale.storeId !== scoped) throw new HttpError(404, "Invoice not found");
+    if (sale.status !== "INVOICED") {
+      throw new HttpError(400, "This invoice has already been settled.");
+    }
+
+    const paidAt = body.paidAt ? new Date(body.paidAt) : new Date();
+    let tenderedCents = sale.totalCents;
+    let changeCents = 0;
+    if (body.paymentMethod === "CASH") {
+      tenderedCents = body.tenderedCents || sale.totalCents;
+      if (tenderedCents < sale.totalCents) {
+        throw new HttpError(400, "Amount tendered is less than the invoice total");
+      }
+      changeCents = tenderedCents - sale.totalCents;
+    }
+
+    // Attach to whoever is recording the payment (their open till, if any) so a
+    // cash payment reconciles the drawer.
+    const openShift = await prisma.shift.findFirst({
+      where: { userId: actor.id, status: "OPEN" },
+      orderBy: { openedAt: "desc" },
+    });
+
+    const updated = await prisma.sale.update({
+      where: { id },
+      data: {
+        status: "COMPLETED",
+        paidAt,
+        paymentMethod: body.paymentMethod,
+        tenderedCents,
+        changeCents,
+        shiftId: openShift?.id ?? null,
+      },
+      include: {
+        items: true,
+        cashier: { select: { id: true, name: true } },
+        salesperson: { select: { id: true, name: true } },
+        customer: true,
+      },
+    });
+    return ok({ sale: updated });
   } catch (err) {
     return toErrorResponse(err);
   }

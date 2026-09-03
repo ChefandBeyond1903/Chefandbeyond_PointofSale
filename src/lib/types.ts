@@ -321,6 +321,7 @@ export interface Sale {
   note: string | null;
   termsSnapshot?: string;
   dueDate?: string | null;
+  paidAt?: string | null;
   customerTaxExemptSnapshot?: boolean;
   createdAt: string;
   storeId?: string | null;
@@ -388,6 +389,10 @@ export interface AdminOverview {
     overdueBills: { count: number; amountCents: number };
     openPurchaseOrders: number;
     overduePurchaseOrders: { count: number; amountCents: number };
+  };
+  receivables: {
+    unpaidInvoices: { count: number; amountCents: number };
+    overdueInvoices: { count: number; amountCents: number };
   };
   purchaseOrdersDue: {
     id: string;
@@ -474,6 +479,17 @@ export interface ReportSummary {
     itemCount: number;
     totalCents: number;
     profitCents: number;
+  }[];
+  receivables: { count: number; amountCents: number; overdueCount: number };
+  unpaidInvoices: {
+    id: string;
+    number: number;
+    invoicedAt: string;
+    dueDate: string | null;
+    terms: string;
+    customer: string;
+    totalCents: number;
+    overdue: boolean;
   }[];
 }
 

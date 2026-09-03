@@ -31,16 +31,18 @@ export async function GET(req: NextRequest) {
     const requestedStore = searchParams.get("storeId")?.trim() || null;
     const storeId = scoped ?? requestedStore;
 
+    // A sale counts for the period it was PAID in, not when it was rung — an
+    // unpaid invoice isn't revenue until the money comes in.
     const where: Prisma.SaleWhereInput = {
       status: "COMPLETED",
-      createdAt: { gte: from, lte: to },
+      paidAt: { gte: from, lte: to },
     };
     if (storeId) where.storeId = storeId;
 
     const [sales, stores] = await Promise.all([
       prisma.sale.findMany({
         where,
-        orderBy: { createdAt: "desc" },
+        orderBy: { paidAt: "desc" },
         select: {
           id: true,
           number: true,
@@ -72,6 +74,40 @@ export async function GET(req: NextRequest) {
       }),
       prisma.store.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     ]);
+
+    // Outstanding invoices (not paid yet) — a receivable, shown regardless of
+    // the date range. Cashiers don't see money figures, so skip it for them.
+    const unpaidRows = limited
+      ? []
+      : await prisma.sale.findMany({
+          where: { status: "INVOICED", ...(storeId ? { storeId } : {}) },
+          orderBy: { dueDate: "asc" },
+          select: {
+            id: true,
+            number: true,
+            createdAt: true,
+            dueDate: true,
+            totalCents: true,
+            termsSnapshot: true,
+            customerNameSnapshot: true,
+          },
+        });
+    const now2 = new Date();
+    const unpaidInvoices = unpaidRows.map((s) => ({
+      id: s.id,
+      number: s.number,
+      invoicedAt: s.createdAt.toISOString(),
+      dueDate: s.dueDate ? s.dueDate.toISOString() : null,
+      terms: s.termsSnapshot,
+      customer: s.customerNameSnapshot || "",
+      totalCents: s.totalCents,
+      overdue: !!s.dueDate && s.dueDate < now2,
+    }));
+    const receivables = {
+      count: unpaidInvoices.length,
+      amountCents: unpaidInvoices.reduce((s, i) => s + i.totalCents, 0),
+      overdueCount: unpaidInvoices.filter((i) => i.overdue).length,
+    };
 
     // Operating expenses in the same window and store scope, for the P&L.
     const expenseWhere: Prisma.ExpenseWhereInput = {
@@ -257,6 +293,8 @@ export async function GET(req: NextRequest) {
         byPaymentMethod: [],
         topProducts,
         recentSales: recentSales.map((s) => ({ ...s, profitCents: 0 })),
+        receivables: { count: 0, amountCents: 0, overdueCount: 0 },
+        unpaidInvoices: [],
       });
     }
 
@@ -293,6 +331,8 @@ export async function GET(req: NextRequest) {
       })),
       topProducts,
       recentSales,
+      receivables,
+      unpaidInvoices,
     });
   } catch (err) {
     return toErrorResponse(err);
