@@ -1467,18 +1467,31 @@ function PaymentModal({
   const [mode, setMode] = useState<"FULL" | "DEPOSIT">("FULL");
   const [deposit, setDeposit] = useState(total);
   const [tendered, setTendered] = useState(total);
+  // How much store credit to apply — defaults to whatever it can cover, editable
+  // down for a partial redemption.
+  const [creditApply, setCreditApply] = useState(Math.min(credit, total));
   const [busy, setBusy] = useState(false);
 
   const collectNow = mode === "DEPOSIT" ? deposit : total;
   const quick = [collectNow, 2000, 5000, 10000, 20000, 50000];
   const change = Math.max(0, tendered - collectNow);
-  const creditShort = tab === "CREDIT" && collectNow > credit;
   const depositValid = deposit >= 1 && deposit <= total;
+  // Amount of store credit that will actually be applied on submit.
+  const creditNow = Math.min(creditApply, credit, total);
+  const creditSettles = creditNow >= total;
 
   async function go() {
     setBusy(true);
     try {
-      if (mode === "DEPOSIT") {
+      if (tab === "CREDIT") {
+        // Store credit covering the whole order settles it; otherwise it goes
+        // in as a payment and the balance is billed as an invoice.
+        if (creditSettles) {
+          await onConfirm("CREDIT", creditNow);
+        } else {
+          await onDeposit("CREDIT", creditNow, creditNow);
+        }
+      } else if (mode === "DEPOSIT") {
         await onDeposit(tab, deposit, tab === "CASH" ? tendered : deposit);
       } else {
         await onConfirm(tab, tab === "CASH" ? tendered : total);
@@ -1496,7 +1509,7 @@ function PaymentModal({
           Order total <span className="font-semibold text-zinc-900">{formatMoney(total)}</span>
         </p>
 
-        {canDeposit && (
+        {canDeposit && tab !== "CREDIT" && (
           <div className="mb-4 flex gap-1 rounded-md bg-zinc-100 p-1 text-sm">
             {(["FULL", "DEPOSIT"] as const).map((m) => (
               <button
@@ -1512,7 +1525,7 @@ function PaymentModal({
           </div>
         )}
 
-        {mode === "DEPOSIT" && (
+        {mode === "DEPOSIT" && tab !== "CREDIT" && (
           <div className="mb-4 space-y-1">
             <label className="label">Deposit amount</label>
             <MoneyInput cents={deposit} onCentsChange={setDeposit} autoFocus />
@@ -1556,19 +1569,28 @@ function PaymentModal({
             </div>
           </div>
         ) : tab === "CREDIT" ? (
-          <div className="rounded-md bg-zinc-50 px-3 py-4 text-sm">
-            <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between rounded-md bg-zinc-50 px-3 py-2 text-sm">
               <span className="text-zinc-500">Store credit available</span>
               <span className="font-semibold">{formatMoney(credit)}</span>
             </div>
-            <div className="mt-1 flex items-center justify-between">
-              <span className="text-zinc-500">Applying now</span>
-              <span className="font-semibold">{formatMoney(Math.min(collectNow, credit))}</span>
+            <div>
+              <label className="label">Apply from store credit</label>
+              <div className="flex gap-2">
+                <MoneyInput cents={creditApply} onCentsChange={setCreditApply} />
+                <button
+                  type="button"
+                  onClick={() => setCreditApply(Math.min(credit, total))}
+                  className="btn-secondary shrink-0 text-xs"
+                >
+                  Max
+                </button>
+              </div>
             </div>
-            {creditShort && (
-              <p className="mt-2 text-xs text-amber-700">
-                Store credit only covers {formatMoney(credit)}. Switch to a deposit for that
-                amount, or use another method.
+            {creditNow < total && (
+              <p className="text-xs text-zinc-500">
+                {formatMoney(total - creditNow)} balance billed as an invoice — record the rest
+                later from the invoice.
               </p>
             )}
           </div>
@@ -1588,17 +1610,21 @@ function PaymentModal({
             onClick={go}
             disabled={
               busy ||
-              (mode === "DEPOSIT" && !depositValid) ||
-              (tab === "CASH" && tendered < collectNow) ||
-              creditShort
+              (tab === "CREDIT" && creditNow < 1) ||
+              (tab !== "CREDIT" && mode === "DEPOSIT" && !depositValid) ||
+              (tab === "CASH" && tendered < collectNow)
             }
             className="btn-primary flex-1"
           >
             {busy
               ? "Processing…"
-              : mode === "DEPOSIT"
-                ? `Take deposit ${formatMoney(deposit)}`
-                : "Complete sale"}
+              : tab === "CREDIT"
+                ? creditSettles
+                  ? `Pay ${formatMoney(creditNow)} with credit`
+                  : `Apply ${formatMoney(creditNow)} credit`
+                : mode === "DEPOSIT"
+                  ? `Take deposit ${formatMoney(deposit)}`
+                  : "Complete sale"}
           </button>
         </div>
 
