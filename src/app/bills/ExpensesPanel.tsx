@@ -28,7 +28,9 @@ export function ExpensesPanel({ isAdmin }: { isAdmin: boolean }) {
     category: "",
     payee: "",
     amountCents: 0,
-    expenseDate: todayInput(),
+    // Filled on mount (client-local date) — computing it during render would
+    // mismatch the server's UTC date and break hydration on this page.
+    expenseDate: "",
     memo: "",
     status: "PAID" as "PAID" | "UNPAID",
     storeId: "",
@@ -52,6 +54,7 @@ export function ExpensesPanel({ isAdmin }: { isAdmin: boolean }) {
   }, []);
 
   useEffect(() => {
+    setForm((f) => (f.expenseDate ? f : { ...f, expenseDate: todayInput() }));
     load();
     if (isAdmin) {
       api<{ stores: Store[] }>("/api/stores?all=1")
