@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
 import { InvoiceModal } from "@/components/InvoiceModal";
@@ -466,6 +466,14 @@ function ProfitLoss({ data }: { data: ReportSummary }) {
 
 function InventorySection({ inv }: { inv: InventoryValuation }) {
   const t = inv.totals;
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const toggle = (vendor: string) =>
+    setOpen((cur) => {
+      const next = new Set(cur);
+      if (next.has(vendor)) next.delete(vendor);
+      else next.add(vendor);
+      return next;
+    });
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -485,6 +493,7 @@ function InventorySection({ inv }: { inv: InventoryValuation }) {
           Inventory by vendor
           {!inv.scope.allStores && inv.scope.storeName ? ` — ${inv.scope.storeName}` : ""}
         </h2>
+        <p className="px-4 pt-2 text-xs text-zinc-400">Click a vendor to see its products.</p>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[560px] text-sm">
             <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
@@ -504,19 +513,53 @@ function InventorySection({ inv }: { inv: InventoryValuation }) {
                   </td>
                 </tr>
               ) : (
-                inv.byVendor.map((r) => (
-                  <tr key={r.vendor}>
-                    <td className="px-4 py-2 font-medium">{r.vendor}</td>
-                    <td className="px-4 py-2 text-right text-zinc-500">{r.productCount}</td>
-                    <td className="px-4 py-2 text-right text-zinc-500">
-                      {r.quantity.toLocaleString()}
-                    </td>
-                    <td className="px-4 py-2 text-right font-medium">{formatMoney(r.costCents)}</td>
-                    <td className="px-4 py-2 text-right text-zinc-500">
-                      {formatMoney(r.retailCents)}
-                    </td>
-                  </tr>
-                ))
+                inv.byVendor.map((r) => {
+                  const expanded = open.has(r.vendor);
+                  return (
+                    <Fragment key={r.vendor}>
+                      <tr
+                        onClick={() => toggle(r.vendor)}
+                        className="cursor-pointer hover:bg-zinc-50"
+                      >
+                        <td className="px-4 py-2 font-medium">
+                          <span className="mr-1 inline-block w-3 text-zinc-400">
+                            {expanded ? "▾" : "▸"}
+                          </span>
+                          {r.vendor}
+                        </td>
+                        <td className="px-4 py-2 text-right text-zinc-500">{r.productCount}</td>
+                        <td className="px-4 py-2 text-right text-zinc-500">
+                          {r.quantity.toLocaleString()}
+                        </td>
+                        <td className="px-4 py-2 text-right font-medium">
+                          {formatMoney(r.costCents)}
+                        </td>
+                        <td className="px-4 py-2 text-right text-zinc-500">
+                          {formatMoney(r.retailCents)}
+                        </td>
+                      </tr>
+                      {expanded &&
+                        r.items.map((p) => (
+                          <tr key={p.productId} className="bg-zinc-50/60 text-xs">
+                            <td className="py-1.5 pl-10 pr-4 text-zinc-600">
+                              {p.name}
+                              <span className="ml-2 text-zinc-400">{p.sku}</span>
+                            </td>
+                            <td className="px-4 py-1.5"></td>
+                            <td className="px-4 py-1.5 text-right text-zinc-500">
+                              {p.quantity.toLocaleString()}
+                            </td>
+                            <td className="px-4 py-1.5 text-right text-zinc-600">
+                              {formatMoney(p.costCents)}
+                            </td>
+                            <td className="px-4 py-1.5 text-right text-zinc-400">
+                              {formatMoney(p.retailCents)}
+                            </td>
+                          </tr>
+                        ))}
+                    </Fragment>
+                  );
+                })
               )}
             </tbody>
             {inv.byVendor.length > 0 && (

@@ -24,7 +24,9 @@ export async function GET(req: NextRequest) {
         select: {
           productId: true,
           quantity: true,
-          product: { select: { vendor: true, costCents: true, priceCents: true } },
+          product: {
+            select: { name: true, sku: true, vendor: true, costCents: true, priceCents: true },
+          },
         },
       }),
       user.role === "ADMIN"
@@ -32,33 +34,51 @@ export async function GET(req: NextRequest) {
         : Promise.resolve([] as { id: string; name: string }[]),
     ]);
 
-    type Agg = {
+    type ProdAgg = {
+      productId: string;
+      name: string;
+      sku: string;
       quantity: number;
       costCents: number;
       retailCents: number;
-      products: Set<string>;
     };
-    const byVendorMap = new Map<string, Agg>();
+    // vendor -> (productId -> aggregated line). Stock for one product can span
+    // several stores, so it's summed per product before grouping by vendor.
+    const byVendorMap = new Map<string, Map<string, ProdAgg>>();
     for (const r of rows) {
       const vendor = r.product.vendor?.trim() || "— No vendor —";
-      const a =
-        byVendorMap.get(vendor) ??
-        { quantity: 0, costCents: 0, retailCents: 0, products: new Set<string>() };
-      a.quantity += r.quantity;
-      a.costCents += r.quantity * r.product.costCents;
-      a.retailCents += r.quantity * r.product.priceCents;
-      a.products.add(r.productId);
-      byVendorMap.set(vendor, a);
+      const products = byVendorMap.get(vendor) ?? new Map<string, ProdAgg>();
+      const line =
+        products.get(r.productId) ??
+        {
+          productId: r.productId,
+          name: r.product.name,
+          sku: r.product.sku,
+          quantity: 0,
+          costCents: 0,
+          retailCents: 0,
+        };
+      line.quantity += r.quantity;
+      line.costCents += r.quantity * r.product.costCents;
+      line.retailCents += r.quantity * r.product.priceCents;
+      products.set(r.productId, line);
+      byVendorMap.set(vendor, products);
     }
 
     const byVendor = [...byVendorMap.entries()]
-      .map(([vendor, a]) => ({
-        vendor,
-        productCount: a.products.size,
-        quantity: a.quantity,
-        costCents: a.costCents,
-        retailCents: a.retailCents,
-      }))
+      .map(([vendor, products]) => {
+        const items = [...products.values()]
+          .filter((p) => p.quantity !== 0 || p.costCents !== 0)
+          .sort((a, b) => b.costCents - a.costCents);
+        return {
+          vendor,
+          productCount: items.length,
+          quantity: items.reduce((s, p) => s + p.quantity, 0),
+          costCents: items.reduce((s, p) => s + p.costCents, 0),
+          retailCents: items.reduce((s, p) => s + p.retailCents, 0),
+          items,
+        };
+      })
       // Skip vendors whose on-hand nets to nothing of value.
       .filter((v) => v.quantity !== 0 || v.costCents !== 0)
       .sort((x, y) => y.costCents - x.costCents);

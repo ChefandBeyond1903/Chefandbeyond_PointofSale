@@ -467,12 +467,22 @@ export interface ReportSummary {
   }[];
 }
 
+export interface InventoryValuationItem {
+  productId: string;
+  name: string;
+  sku: string;
+  quantity: number;
+  costCents: number;
+  retailCents: number;
+}
+
 export interface InventoryValuationRow {
   vendor: string;
   productCount: number;
   quantity: number;
   costCents: number;
   retailCents: number;
+  items: InventoryValuationItem[];
 }
 
 export interface InventoryValuation {
