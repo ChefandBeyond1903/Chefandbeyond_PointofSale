@@ -74,13 +74,20 @@ export async function POST(req: NextRequest) {
     // Their payment terms set the invoice due date.
     let customerTaxExempt = false;
     let customerTerms = "";
+    let customerStoreCreditCents = 0;
     if (body.customerId) {
       const c = await prisma.customer.findUnique({
         where: { id: body.customerId },
-        select: { taxExempt: true, taxExemptExpiresAt: true, paymentTerms: true },
+        select: {
+          taxExempt: true,
+          taxExemptExpiresAt: true,
+          paymentTerms: true,
+          storeCreditCents: true,
+        },
       });
       if (c) {
         customerTerms = c.paymentTerms ?? "";
+        customerStoreCreditCents = c.storeCreditCents;
         const notExpired = !c.taxExemptExpiresAt || c.taxExemptExpiresAt >= new Date();
         if (c.taxExempt && notExpired) {
           customerTaxExempt = true;
@@ -186,7 +193,7 @@ export async function POST(req: NextRequest) {
     //  - a terms customer, no deposit -> INVOICED, nothing collected;
     //  - otherwise the full total is charged now -> COMPLETED.
     let paidNowCents = 0;
-    let payMethod: "CASH" | "CARD" | null = null;
+    let payMethod: "CASH" | "CARD" | "CREDIT" | null = null;
     let tenderedCents = 0;
     let changeCents = 0;
 
@@ -218,6 +225,20 @@ export async function POST(req: NextRequest) {
       } else {
         tenderedCents = total;
       }
+    }
+
+    if (payMethod === "CREDIT") {
+      if (!body.customerId) {
+        throw new HttpError(400, "Store credit needs an existing customer.");
+      }
+      if (paidNowCents > customerStoreCreditCents) {
+        throw new HttpError(
+          400,
+          `Only ${(customerStoreCreditCents / 100).toFixed(2)} of store credit is available.`,
+        );
+      }
+      tenderedCents = paidNowCents;
+      changeCents = 0;
     }
 
     const settledNow = paidNowCents >= total;
@@ -344,6 +365,23 @@ export async function POST(req: NextRequest) {
             shiftId: openShift?.id ?? null,
           },
         });
+        // Paying with store credit draws the customer's balance down.
+        if (payMethod === "CREDIT" && customerId) {
+          await tx.customer.update({
+            where: { id: customerId },
+            data: { storeCreditCents: { decrement: paidNowCents } },
+          });
+          await tx.storeCreditEntry.create({
+            data: {
+              customerId,
+              amountCents: -paidNowCents,
+              kind: "SPEND",
+              reason: `Sale #${number}`,
+              saleId: created.id,
+              createdById: user.id,
+            },
+          });
+        }
       }
 
       // Draw stock down from the selling store's inventory (may go negative).

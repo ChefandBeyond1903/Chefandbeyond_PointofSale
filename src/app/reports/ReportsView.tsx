@@ -524,12 +524,32 @@ function ProfitLoss({ data }: { data: ReportSummary }) {
           negative
         />
 
+        {t.refundsCents > 0 && (
+          <>
+            <div className="mt-3 pt-1 text-xs font-medium uppercase tracking-wide text-zinc-400">
+              Refunds
+            </div>
+            <PLRow
+              label="Refunds issued this period"
+              value={`(${formatMoney(t.refundsCents)})`}
+              indent
+              negative
+            />
+          </>
+        )}
+
         <PLRow
           label="Net profit"
           value={formatMoney(t.netProfitCents)}
           strong
           border
         />
+        {t.storeCreditOutstandingCents > 0 && (
+          <p className="mt-2 text-xs text-zinc-400">
+            Customers hold {formatMoney(t.storeCreditOutstandingCents)} in store credit (a
+            liability, not counted above).
+          </p>
+        )}
       </div>
       <p className="mt-2 text-xs text-zinc-400">
         Sales tax collected ({formatMoney(t.taxCents)}) is excluded — it isn&apos;t revenue.

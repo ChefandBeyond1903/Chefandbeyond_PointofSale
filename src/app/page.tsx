@@ -763,7 +763,7 @@ export default function RegisterPage() {
 
   // Take a deposit / part-payment now; the rest is billed as an invoice.
   async function takeDeposit(
-    method: "CASH" | "CARD",
+    method: "CASH" | "CARD" | "CREDIT",
     depositCents: number,
     tenderedCents: number,
   ) {
@@ -788,7 +788,7 @@ export default function RegisterPage() {
     }
   }
 
-  async function completeSale(paymentMethod: "CASH" | "CARD", tenderedCents: number) {
+  async function completeSale(paymentMethod: "CASH" | "CARD" | "CREDIT", tenderedCents: number) {
     setError(null);
     if (isAdmin && !sellStoreId) {
       setError("Choose a store to sell from.");
@@ -1033,6 +1033,11 @@ export default function RegisterPage() {
             </div>
             {custId && (
               <p className="mt-1 text-[11px] text-green-600">Existing customer — details on file</p>
+            )}
+            {!!selectedCustomer && selectedCustomer.storeCreditCents > 0 && (
+              <p className="mt-1 text-[11px] text-indigo-600">
+                Store credit available: {formatMoney(selectedCustomer.storeCreditCents)}
+              </p>
             )}
             {selectedCustomer?.taxExempt && (
               <p
@@ -1317,6 +1322,7 @@ export default function RegisterPage() {
         <PaymentModal
           total={totals.total}
           canDeposit={!!custId || custName.trim().length > 0}
+          creditCents={selectedCustomer?.storeCreditCents ?? 0}
           onClose={() => setPayOpen(false)}
           onConfirm={completeSale}
           onDeposit={takeDeposit}
@@ -1435,6 +1441,7 @@ function ShiftWidget({
 function PaymentModal({
   total,
   canDeposit,
+  creditCents,
   onClose,
   onConfirm,
   onDeposit,
@@ -1443,13 +1450,20 @@ function PaymentModal({
 }: {
   total: number;
   canDeposit: boolean;
+  creditCents?: number;
   onClose: () => void;
-  onConfirm: (method: "CASH" | "CARD", tenderedCents: number) => Promise<void>;
-  onDeposit: (method: "CASH" | "CARD", depositCents: number, tenderedCents: number) => Promise<void>;
+  onConfirm: (method: "CASH" | "CARD" | "CREDIT", tenderedCents: number) => Promise<void>;
+  onDeposit: (
+    method: "CASH" | "CARD" | "CREDIT",
+    depositCents: number,
+    tenderedCents: number,
+  ) => Promise<void>;
   onSaveInvoice?: () => Promise<void>;
   error: string | null;
 }) {
-  const [tab, setTab] = useState<"CASH" | "CARD">("CASH");
+  const credit = creditCents ?? 0;
+  const methods: ("CASH" | "CARD" | "CREDIT")[] = credit > 0 ? ["CASH", "CARD", "CREDIT"] : ["CASH", "CARD"];
+  const [tab, setTab] = useState<"CASH" | "CARD" | "CREDIT">("CASH");
   const [mode, setMode] = useState<"FULL" | "DEPOSIT">("FULL");
   const [deposit, setDeposit] = useState(total);
   const [tendered, setTendered] = useState(total);
@@ -1458,6 +1472,7 @@ function PaymentModal({
   const collectNow = mode === "DEPOSIT" ? deposit : total;
   const quick = [collectNow, 2000, 5000, 10000, 20000, 50000];
   const change = Math.max(0, tendered - collectNow);
+  const creditShort = tab === "CREDIT" && collectNow > credit;
   const depositValid = deposit >= 1 && deposit <= total;
 
   async function go() {
@@ -1509,7 +1524,7 @@ function PaymentModal({
         )}
 
         <div className="mb-4 flex gap-1 rounded-md bg-zinc-100 p-1">
-          {(["CASH", "CARD"] as const).map((m) => (
+          {methods.map((m) => (
             <button
               key={m}
               onClick={() => setTab(m)}
@@ -1517,7 +1532,7 @@ function PaymentModal({
                 tab === m ? "bg-white shadow-sm" : "text-zinc-500"
               }`}
             >
-              {m === "CASH" ? "Cash" : "Card"}
+              {m === "CASH" ? "Cash" : m === "CARD" ? "Card" : "Store credit"}
             </button>
           ))}
         </div>
@@ -1540,6 +1555,23 @@ function PaymentModal({
               <span className="text-lg font-bold">{formatMoney(change)}</span>
             </div>
           </div>
+        ) : tab === "CREDIT" ? (
+          <div className="rounded-md bg-zinc-50 px-3 py-4 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-zinc-500">Store credit available</span>
+              <span className="font-semibold">{formatMoney(credit)}</span>
+            </div>
+            <div className="mt-1 flex items-center justify-between">
+              <span className="text-zinc-500">Applying now</span>
+              <span className="font-semibold">{formatMoney(Math.min(collectNow, credit))}</span>
+            </div>
+            {creditShort && (
+              <p className="mt-2 text-xs text-amber-700">
+                Store credit only covers {formatMoney(credit)}. Switch to a deposit for that
+                amount, or use another method.
+              </p>
+            )}
+          </div>
         ) : (
           <p className="rounded-md bg-zinc-50 px-3 py-6 text-center text-sm text-zinc-500">
             Run the card on your terminal, then confirm below.
@@ -1557,7 +1589,8 @@ function PaymentModal({
             disabled={
               busy ||
               (mode === "DEPOSIT" && !depositValid) ||
-              (tab === "CASH" && tendered < collectNow)
+              (tab === "CASH" && tendered < collectNow) ||
+              creditShort
             }
             className="btn-primary flex-1"
           >

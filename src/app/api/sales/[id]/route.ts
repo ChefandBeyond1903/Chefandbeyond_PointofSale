@@ -20,6 +20,10 @@ export async function GET(_req: NextRequest, { params }: Params) {
           orderBy: { paidAt: "asc" },
           include: { createdBy: { select: { id: true, name: true } } },
         },
+        refunds: {
+          orderBy: { refundedAt: "asc" },
+          include: { createdBy: { select: { id: true, name: true } } },
+        },
         cashier: { select: { id: true, name: true } },
         salesperson: { select: { id: true, name: true } },
         customer: true,
@@ -73,7 +77,16 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     const sale = await prisma.sale.findUnique({
       where: { id },
-      select: { id: true, status: true, storeId: true, totalCents: true, amountPaidCents: true },
+      select: {
+        id: true,
+        status: true,
+        storeId: true,
+        totalCents: true,
+        amountPaidCents: true,
+        customerId: true,
+        number: true,
+        customer: { select: { storeCreditCents: true } },
+      },
     });
     if (!sale) throw new HttpError(404, "Invoice not found");
     const scoped = scopeStoreId(actor);
@@ -87,6 +100,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (amountCents < 1) throw new HttpError(400, "Enter a payment amount.");
     if (amountCents > balanceCents) {
       throw new HttpError(400, `That's more than the balance due (${balanceCents / 100}).`);
+    }
+    if (body.paymentMethod === "CREDIT") {
+      const avail = sale.customer?.storeCreditCents ?? 0;
+      if (!sale.customerId) throw new HttpError(400, "This invoice has no customer for store credit.");
+      if (amountCents > avail) {
+        throw new HttpError(400, `Only ${(avail / 100).toFixed(2)} of store credit is available.`);
+      }
     }
 
     const paidAt = body.paidAt ? parseDateInput(body.paidAt) : new Date();
@@ -121,6 +141,22 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           shiftId: openShift?.id ?? null,
         },
       });
+      if (body.paymentMethod === "CREDIT" && sale.customerId) {
+        await tx.customer.update({
+          where: { id: sale.customerId },
+          data: { storeCreditCents: { decrement: amountCents } },
+        });
+        await tx.storeCreditEntry.create({
+          data: {
+            customerId: sale.customerId,
+            amountCents: -amountCents,
+            kind: "SPEND",
+            reason: `Invoice #${sale.number}`,
+            saleId: id,
+            createdById: actor.id,
+          },
+        });
+      }
       return tx.sale.update({
         where: { id },
         data: {

@@ -22,15 +22,20 @@ export async function GET() {
       where: { shiftId: shift.id, method: "CASH" },
       _sum: { amountCents: true },
     });
-    const cashCents = cashPay._sum.amountCents ?? 0;
+    const cashRefund = await prisma.saleRefund.aggregate({
+      where: { shiftId: shift.id, method: "CASH" },
+      _sum: { amountCents: true },
+    });
+    const cashInCents = cashPay._sum.amountCents ?? 0;
+    const cashOutCents = cashRefund._sum.amountCents ?? 0;
 
     return ok({
       shift,
       stats: {
         saleCount: allPay._count,
         totalCents: allPay._sum.amountCents ?? 0,
-        cashSalesCents: cashCents,
-        expectedDrawerCents: shift.openingFloatCents + cashCents,
+        cashSalesCents: cashInCents - cashOutCents,
+        expectedDrawerCents: shift.openingFloatCents + cashInCents - cashOutCents,
       },
     });
   } catch (err) {

@@ -71,9 +71,21 @@ export interface Customer {
   taxExemptDocPath: string;
   taxExemptDocName: string;
   paymentTerms: string;
+  storeCreditCents: number;
   createdAt?: string;
   _count?: { sales: number };
   sales?: { id: string; number: number; totalCents: number; createdAt: string }[];
+  storeCreditLedger?: StoreCreditEntry[];
+}
+
+export interface StoreCreditEntry {
+  id: string;
+  amountCents: number;
+  kind: "ISSUE" | "ADJUST" | "REFUND" | "SPEND";
+  reason: string;
+  saleId: string | null;
+  createdAt: string;
+  createdBy?: { id: string; name: string } | null;
 }
 
 export interface Product {
@@ -309,10 +321,21 @@ export interface InvoiceDetail {
 export interface SalePayment {
   id: string;
   amountCents: number;
-  method: "CASH" | "CARD";
+  method: "CASH" | "CARD" | "CREDIT";
   paidAt: string;
   isDeposit: boolean;
   note: string;
+  createdAt: string;
+  createdBy?: { id: string; name: string } | null;
+}
+
+export interface SaleRefund {
+  id: string;
+  amountCents: number;
+  method: "CASH" | "CARD" | "CREDIT";
+  restocked: boolean;
+  reason: string;
+  refundedAt: string;
   createdAt: string;
   createdBy?: { id: string; name: string } | null;
 }
@@ -337,6 +360,8 @@ export interface Sale {
   paidAt?: string | null;
   amountPaidCents?: number;
   payments?: SalePayment[];
+  refundedCents?: number;
+  refunds?: SaleRefund[];
   customerTaxExemptSnapshot?: boolean;
   createdAt: string;
   storeId?: string | null;
@@ -478,7 +503,11 @@ export interface ReportSummary {
     cardSalesCents: number;
     /** 3% card-processing fee on those card sales — tracked on its own. */
     cardFeeCents: number;
-    /** Gross profit minus operating expenses minus card fees. */
+    /** Refunds issued in the period (any method). */
+    refundsCents: number;
+    /** Store credit customers currently hold — a liability (not date-scoped). */
+    storeCreditOutstandingCents: number;
+    /** Gross profit minus operating expenses, card fees and refunds. */
     netProfitCents: number;
   };
   /** Operating expenses grouped by category, largest first. */

@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/client";
-import type { Customer } from "@/lib/types";
+import { formatMoney } from "@/lib/money";
+import { MoneyInput } from "@/components/MoneyInput";
+import type { Customer, StoreCreditEntry } from "@/lib/types";
 
 const TERMS = ["Net 15", "Net 30", "Net 45", "Net 60"] as const;
 
@@ -51,6 +53,53 @@ export function CustomersView({ canManage = true }: { canManage?: boolean }) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
   const [docBusy, setDocBusy] = useState(false);
+
+  // Store credit for the customer open in the drawer.
+  const [credit, setCredit] = useState<number | null>(null);
+  const [ledger, setLedger] = useState<StoreCreditEntry[]>([]);
+  const [creditAmt, setCreditAmt] = useState(0);
+  const [creditReason, setCreditReason] = useState("");
+  const [creditBusy, setCreditBusy] = useState(false);
+
+  useEffect(() => {
+    if (!draft?.id) {
+      setCredit(null);
+      setLedger([]);
+      return;
+    }
+    api<{ storeCreditCents: number; ledger: StoreCreditEntry[] }>(
+      `/api/customers/${draft.id}/store-credit`,
+    )
+      .then((r) => {
+        setCredit(r.storeCreditCents);
+        setLedger(r.ledger);
+      })
+      .catch(() => {});
+  }, [draft?.id]);
+
+  async function adjustCredit(sign: 1 | -1) {
+    if (!draft?.id || creditAmt <= 0) return;
+    setCreditBusy(true);
+    setError(null);
+    try {
+      const r = await api<{ storeCreditCents: number; ledger: StoreCreditEntry[] }>(
+        `/api/customers/${draft.id}/store-credit`,
+        {
+          method: "POST",
+          body: JSON.stringify({ amountCents: sign * creditAmt, reason: creditReason.trim() }),
+        },
+      );
+      setCredit(r.storeCreditCents);
+      setLedger(r.ledger);
+      setCreditAmt(0);
+      setCreditReason("");
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not adjust store credit");
+    } finally {
+      setCreditBusy(false);
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -243,6 +292,11 @@ export function CustomersView({ canManage = true }: { canManage?: boolean }) {
                     {c.paymentTerms && (
                       <span className="ml-2 text-[11px] font-normal text-zinc-400">
                         {c.paymentTerms}
+                      </span>
+                    )}
+                    {c.storeCreditCents > 0 && (
+                      <span className="ml-2 rounded-full bg-indigo-100 px-2 py-0.5 text-[11px] font-normal text-indigo-700">
+                        {formatMoney(c.storeCreditCents)} credit
                       </span>
                     )}
                   </td>
@@ -477,6 +531,60 @@ export function CustomersView({ canManage = true }: { canManage?: boolean }) {
                   </div>
                 )}
               </div>
+
+              {draft.id && (
+                <div className="rounded-md border border-zinc-200 p-3">
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-sm font-medium">Store credit</span>
+                    <span className="text-sm font-semibold">
+                      {credit === null ? "…" : formatMoney(credit)}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-end gap-2">
+                    <div>
+                      <label className="label">Amount</label>
+                      <MoneyInput
+                        cents={creditAmt}
+                        onCentsChange={setCreditAmt}
+                        className="input h-8 w-28 text-right"
+                      />
+                    </div>
+                    <input
+                      className="input h-8 flex-1"
+                      placeholder="Reason (e.g. goodwill, price match)"
+                      value={creditReason}
+                      onChange={(e) => setCreditReason(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => adjustCredit(1)}
+                      disabled={creditBusy || creditAmt <= 0}
+                      className="btn-primary h-8 text-xs"
+                    >
+                      Add
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => adjustCredit(-1)}
+                      disabled={creditBusy || creditAmt <= 0}
+                      className="btn-secondary h-8 text-xs"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  {ledger.length > 0 && (
+                    <ul className="mt-2 max-h-32 space-y-0.5 overflow-y-auto text-[11px] text-zinc-500">
+                      {ledger.map((e) => (
+                        <li key={e.id}>
+                          {e.amountCents >= 0 ? "+" : "−"}
+                          {formatMoney(Math.abs(e.amountCents))} · {e.kind}
+                          {e.reason ? ` · ${e.reason}` : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
             </div>
 
             {error && <p className="mt-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}

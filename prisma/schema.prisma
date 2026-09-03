@@ -69,10 +69,12 @@ model User {
   createdBy    User?   @relation("UserCreatedBy", fields: [createdById], references: [id])
   createdUsers User[]  @relation("UserCreatedBy")
 
-  sales          Sale[]          @relation("SaleCashier")
-  salesCredited  Sale[]          @relation("SaleSalesperson")
-  salePayments   SalePayment[]   @relation("SalePaymentCreatedBy")
-  shifts         Shift[]
+  sales             Sale[]             @relation("SaleCashier")
+  salesCredited      Sale[]             @relation("SaleSalesperson")
+  salePayments       SalePayment[]      @relation("SalePaymentCreatedBy")
+  saleRefunds        SaleRefund[]       @relation("SaleRefundCreatedBy")
+  storeCreditEntries StoreCreditEntry[] @relation("StoreCreditEntryCreatedBy")
+  shifts             Shift[]
   purchaseOrders PurchaseOrder[]
   bills          Bill[]
   heldSales      HeldSale[]
@@ -162,9 +164,35 @@ model Customer {
   // "" | "Due on receipt" | "Net 15" | "Net 30" | "Net 45" | "Net 60".
   paymentTerms String @default("")
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  sales     Sale[]
+  // Store credit the customer can spend like a payment method. Managers issue /
+  // adjust it and refunds can be paid into it; every change is a
+  // StoreCreditEntry so the balance is auditable.
+  storeCreditCents Int @default(0)
+
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  sales             Sale[]
+  storeCreditLedger StoreCreditEntry[]
+}
+
+/// One movement of a customer's store-credit balance.
+/// kind: "ISSUE" (manager grant) | "ADJUST" | "REFUND" (from a refunded sale) |
+///       "SPEND" (redeemed on a sale). amountCents is signed: + adds, - spends.
+model StoreCreditEntry {
+  id          String   @id @default(cuid())
+  customerId  String
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  amountCents Int
+  kind        String
+  reason      String   @default("")
+  saleId      String?
+  refundId    String?
+  createdById String
+  createdBy   User     @relation("StoreCreditEntryCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@index([customerId])
+  @@index([createdAt])
 }
 
 /// A sellable item. All money is stored as integer cents. Sales tax is not set
@@ -263,6 +291,11 @@ model Sale {
   // amountPaidCents reaches totalCents and status flips to COMPLETED.
   amountPaidCents Int           @default(0)
   payments        SalePayment[]
+
+  // Total refunded against this sale (SaleRefund rows). status becomes
+  // "REFUNDED" once refundedCents reaches totalCents.
+  refundedCents Int          @default(0)
+  refunds      SaleRefund[]
 
   // Store the sale was rung at (the cashier's assigned store). storeId may be
   // null for historic rows; the snapshots freeze the store's details onto the
@@ -527,6 +560,7 @@ model Shift {
   user     User          @relation(fields: [userId], references: [id])
   sales    Sale[]
   payments SalePayment[]
+  refunds  SaleRefund[]
 
   @@index([userId])
   @@index([status])
@@ -540,7 +574,7 @@ model SalePayment {
   saleId      String
   sale        Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
   amountCents Int
-  method      String // "CASH" | "CARD"
+  method      String // "CASH" | "CARD" | "CREDIT" (store credit)
   // The day the money was received — deposits and balance payments each land on
   // their own date.
   paidAt      DateTime
@@ -557,5 +591,32 @@ model SalePayment {
 
   @@index([saleId])
   @@index([paidAt])
+  @@index([shiftId])
+}
+
+/// A refund issued against a sale by a manager. method is where the money went:
+/// "CASH" / "CARD" (out of the drawer that day) or "CREDIT" (into the
+/// customer's store-credit balance). `restocked` = the order's item quantities
+/// were put back into the selling store's inventory.
+model SaleRefund {
+  id          String   @id @default(cuid())
+  saleId      String
+  sale        Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  amountCents Int
+  method      String
+  restocked   Boolean  @default(false)
+  reason      String   @default("")
+  // The day the refund was issued — the date it reduces revenue for.
+  refundedAt  DateTime
+
+  createdById String
+  createdBy   User    @relation("SaleRefundCreatedBy", fields: [createdById], references: [id])
+  shiftId     String?
+  shift       Shift?  @relation(fields: [shiftId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([saleId])
+  @@index([refundedAt])
   @@index([shiftId])
 }

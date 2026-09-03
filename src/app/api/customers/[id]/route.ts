@@ -20,6 +20,19 @@ export async function GET(_req: NextRequest, { params }: Params) {
           take: 50,
           select: { id: true, number: true, totalCents: true, createdAt: true },
         },
+        storeCreditLedger: {
+          orderBy: { createdAt: "desc" },
+          take: 100,
+          select: {
+            id: true,
+            amountCents: true,
+            kind: true,
+            reason: true,
+            saleId: true,
+            createdAt: true,
+            createdBy: { select: { id: true, name: true } },
+          },
+        },
       },
     });
     if (!customer) throw new HttpError(404, "Customer not found");

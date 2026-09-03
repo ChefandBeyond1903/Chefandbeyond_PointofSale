@@ -46,10 +46,46 @@ export function InvoiceModal({
   const [freightMins, setFreightMins] = useState<Record<string, number>>({});
 
   // Recording a payment (deposit / partial / final) against an open invoice.
-  const [payMethod, setPayMethod] = useState<"CASH" | "CARD">("CASH");
+  const [payMethod, setPayMethod] = useState<"CASH" | "CARD" | "CREDIT">("CASH");
   const [payDate, setPayDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [payAmount, setPayAmount] = useState(0);
   const [payBusy, setPayBusy] = useState(false);
+
+  // Refunding the sale (managers).
+  const [refundOpen, setRefundOpen] = useState(false);
+  const [refundMethod, setRefundMethod] = useState<"CASH" | "CARD" | "CREDIT">("CASH");
+  const [refundAmount, setRefundAmount] = useState(0);
+  const [refundRestock, setRefundRestock] = useState(true);
+  const [refundReason, setRefundReason] = useState("");
+  const [refundDate, setRefundDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [refundBusy, setRefundBusy] = useState(false);
+
+  async function doRefund() {
+    if (!detail) return;
+    setRefundBusy(true);
+    setErr(null);
+    try {
+      await api(`/api/sales/${saleId}/refund`, {
+        method: "POST",
+        body: JSON.stringify({
+          method: refundMethod,
+          restock: refundRestock,
+          reason: refundReason.trim(),
+          refundedAt: refundDate,
+          ...(refundAmount ? { amountCents: refundAmount } : {}),
+        }),
+      });
+      setRefundOpen(false);
+      setRefundAmount(0);
+      setRefundReason("");
+      await load();
+      onChanged?.();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Could not refund");
+    } finally {
+      setRefundBusy(false);
+    }
+  }
 
   const load = useCallback(async () => {
     try {
@@ -194,6 +230,12 @@ export function InvoiceModal({
   }
 
   const sale = detail?.sale;
+  const custCreditCents =
+    sale?.customer && "storeCreditCents" in sale.customer
+      ? sale.customer.storeCreditCents
+      : 0;
+  const refundedCents = sale?.refundedCents ?? 0;
+  const refundableCents = sale ? (sale.amountPaidCents ?? 0) - refundedCents : 0;
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
@@ -306,10 +348,17 @@ export function InvoiceModal({
                           <select
                             className="input h-8"
                             value={payMethod}
-                            onChange={(e) => setPayMethod(e.target.value as "CASH" | "CARD")}
+                            onChange={(e) =>
+                              setPayMethod(e.target.value as "CASH" | "CARD" | "CREDIT")
+                            }
                           >
                             <option value="CASH">Cash</option>
                             <option value="CARD">Card</option>
+                            {custCreditCents > 0 && (
+                              <option value="CREDIT">
+                                Store credit ({formatMoney(custCreditCents)})
+                              </option>
+                            )}
                           </select>
                         </div>
                         <div>
@@ -368,6 +417,119 @@ export function InvoiceModal({
               }
               return null;
             })()}
+
+            {/* Refunds */}
+            {(refundedCents > 0 || (canManage && refundableCents > 0)) && (
+              <div className="mb-4 rounded-md border border-zinc-200 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-sm font-medium">
+                    {refundedCents > 0
+                      ? `Refunded ${formatMoney(refundedCents)}`
+                      : "Refund"}
+                    {refundedCents >= sale.totalCents && refundedCents > 0
+                      ? " · fully refunded"
+                      : ""}
+                  </span>
+                  {canManage && refundableCents > 0 && !refundOpen && (
+                    <button
+                      onClick={() => {
+                        setRefundAmount(0);
+                        setRefundOpen(true);
+                      }}
+                      className="btn-secondary h-8 text-xs"
+                    >
+                      Issue refund
+                    </button>
+                  )}
+                </div>
+
+                {(sale.refunds ?? []).length > 0 && (
+                  <ul className="mt-2 space-y-0.5 text-xs text-zinc-500">
+                    {(sale.refunds ?? []).map((r) => (
+                      <li key={r.id}>
+                        {formatMoney(r.amountCents)} → {r.method} · {formatDateOnly(r.refundedAt)}
+                        {r.restocked ? " · items restocked" : ""}
+                        {r.reason ? ` · ${r.reason}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {canManage && refundOpen && (
+                  <div className="mt-3 space-y-2">
+                    <div className="flex flex-wrap items-end gap-3">
+                      <div>
+                        <label className="label">Amount</label>
+                        <MoneyInput
+                          cents={refundAmount}
+                          onCentsChange={setRefundAmount}
+                          className="input h-8 w-28 text-right"
+                          placeholder={(refundableCents / 100).toFixed(2)}
+                        />
+                      </div>
+                      <div>
+                        <label className="label">Refund to</label>
+                        <select
+                          className="input h-8"
+                          value={refundMethod}
+                          onChange={(e) =>
+                            setRefundMethod(e.target.value as "CASH" | "CARD" | "CREDIT")
+                          }
+                        >
+                          <option value="CASH">Cash</option>
+                          <option value="CARD">Card</option>
+                          <option value="CREDIT" disabled={!sale.customerId}>
+                            Store credit
+                          </option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="label">Date</label>
+                        <input
+                          type="date"
+                          className="input h-8"
+                          value={refundDate}
+                          onChange={(e) => setRefundDate(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={refundRestock}
+                        onChange={(e) => setRefundRestock(e.target.checked)}
+                      />
+                      Return the order&rsquo;s items to stock
+                    </label>
+                    <input
+                      className="input h-8"
+                      placeholder="Reason (optional)"
+                      value={refundReason}
+                      onChange={(e) => setRefundReason(e.target.value)}
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setRefundOpen(false)}
+                        className="btn-ghost h-8 text-xs"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={doRefund}
+                        disabled={refundBusy || (refundAmount > 0 && refundAmount > refundableCents)}
+                        className="btn-primary h-8 text-xs"
+                      >
+                        {refundBusy
+                          ? "Refunding…"
+                          : refundAmount > 0 && refundAmount < refundableCents
+                            ? `Refund ${formatMoney(refundAmount)}`
+                            : `Refund ${formatMoney(refundableCents)}`}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="overflow-x-auto">
             <table className="w-full min-w-[480px] text-sm">

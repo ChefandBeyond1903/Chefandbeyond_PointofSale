@@ -115,6 +115,25 @@ export async function GET(req: NextRequest) {
       overdueCount: unpaidInvoices.filter((i) => i.overdue).length,
     };
 
+    // Refunds issued in the window (any method) reduce net profit for the period.
+    const refundAgg = limited
+      ? null
+      : await prisma.saleRefund.aggregate({
+          where: {
+            refundedAt: { gte: from, lte: to },
+            ...(storeId ? { sale: { storeId } } : {}),
+          },
+          _sum: { amountCents: true },
+          _count: true,
+        });
+    const refundsCents = refundAgg?._sum.amountCents ?? 0;
+
+    // Store credit customers are holding — a liability. Not date-scoped.
+    const creditAgg = limited
+      ? null
+      : await prisma.customer.aggregate({ _sum: { storeCreditCents: true } });
+    const storeCreditOutstandingCents = creditAgg?._sum.storeCreditCents ?? 0;
+
     // Operating expenses in the same window and store scope, for the P&L.
     const expenseWhere: Prisma.ExpenseWhereInput = {
       expenseDate: { gte: from, lte: to },
@@ -293,6 +312,8 @@ export async function GET(req: NextRequest) {
           expensesCents: 0,
           cardSalesCents: 0,
           cardFeeCents: 0,
+          refundsCents: 0,
+          storeCreditOutstandingCents: 0,
           netProfitCents: 0,
         },
         expensesByCategory: [],
@@ -329,7 +350,9 @@ export async function GET(req: NextRequest) {
         expensesCents,
         cardSalesCents,
         cardFeeCents: cardFeeCentsTotal,
-        netProfitCents: profitCents - expensesCents - cardFeeCentsTotal,
+        refundsCents,
+        storeCreditOutstandingCents,
+        netProfitCents: profitCents - expensesCents - cardFeeCentsTotal - refundsCents,
       },
       expensesByCategory,
       byStore: toRows(byStore),
