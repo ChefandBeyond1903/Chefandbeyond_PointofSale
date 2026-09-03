@@ -375,6 +375,7 @@ export interface Sale {
   customer?: { id: string; name: string } | Customer | null;
   customerId?: string | null;
   customerNameSnapshot?: string;
+  customerCompanySnapshot?: string;
   customerEmailSnapshot?: string;
   customerPhoneSnapshot?: string;
   customerAddressSnapshot?: string;

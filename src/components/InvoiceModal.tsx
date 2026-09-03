@@ -53,6 +53,47 @@ export function InvoiceModal({
   const [payAmount, setPayAmount] = useState(0);
   const [payBusy, setPayBusy] = useState(false);
 
+  // Editing the invoice's note / bill-to details (managers).
+  const [editOpen, setEditOpen] = useState(false);
+  const [editBusy, setEditBusy] = useState(false);
+  const [edit, setEdit] = useState({
+    customerCompanySnapshot: "",
+    customerNameSnapshot: "",
+    customerEmailSnapshot: "",
+    customerPhoneSnapshot: "",
+    customerAddressSnapshot: "",
+    note: "",
+  });
+
+  function openEdit() {
+    if (!detail) return;
+    const s = detail.sale;
+    setEdit({
+      customerCompanySnapshot: s.customerCompanySnapshot ?? "",
+      customerNameSnapshot: s.customerNameSnapshot ?? "",
+      customerEmailSnapshot: s.customerEmailSnapshot ?? "",
+      customerPhoneSnapshot: s.customerPhoneSnapshot ?? "",
+      customerAddressSnapshot: s.customerAddressSnapshot ?? "",
+      note: s.note ?? "",
+    });
+    setEditOpen(true);
+  }
+
+  async function saveEdit() {
+    setEditBusy(true);
+    setErr(null);
+    try {
+      await api(`/api/sales/${saleId}`, { method: "PATCH", body: JSON.stringify(edit) });
+      setEditOpen(false);
+      await load();
+      onChanged?.();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Could not save the invoice");
+    } finally {
+      setEditBusy(false);
+    }
+  }
+
   // Refunding the sale (managers).
   const [refundOpen, setRefundOpen] = useState(false);
   const [refundMethod, setRefundMethod] = useState<"CASH" | "CARD" | "CREDIT">("CASH");
@@ -267,10 +308,15 @@ export function InvoiceModal({
                     {[sale.storeAddressSnapshot, sale.storePhoneSnapshot].filter(Boolean).join(" · ")}
                   </p>
                 )}
-                {sale.customerNameSnapshot ? (
+                {sale.customerCompanySnapshot || sale.customerNameSnapshot ? (
                   <p className="mt-1 text-sm">
                     <span className="text-zinc-400">Bill to </span>
-                    <span className="font-medium">{sale.customerNameSnapshot}</span>
+                    <span className="font-medium">
+                      {sale.customerCompanySnapshot || sale.customerNameSnapshot}
+                    </span>
+                    {sale.customerCompanySnapshot && sale.customerNameSnapshot ? (
+                      <span className="text-zinc-400"> · {sale.customerNameSnapshot}</span>
+                    ) : null}
                     {sale.customerEmailSnapshot ? (
                       <span className="text-zinc-400"> · {sale.customerEmailSnapshot}</span>
                     ) : null}
@@ -298,6 +344,11 @@ export function InvoiceModal({
                 )}
               </div>
               <div className="flex items-center gap-2">
+                {canManage && (
+                  <button onClick={openEdit} className="btn-ghost px-3 py-1 text-sm">
+                    Edit
+                  </button>
+                )}
                 <button
                   onClick={() => setPrinting(true)}
                   className="btn-secondary px-3 py-1 text-sm"
@@ -334,6 +385,73 @@ export function InvoiceModal({
             </div>
 
             {err && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{err}</p>}
+
+            {editOpen && (
+              <div className="mb-4 rounded-md border border-zinc-300 bg-zinc-50 p-3">
+                <p className="mb-2 text-sm font-medium">Edit invoice</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <input
+                    className="input h-8"
+                    placeholder="Company"
+                    value={edit.customerCompanySnapshot}
+                    onChange={(e) =>
+                      setEdit({ ...edit, customerCompanySnapshot: e.target.value })
+                    }
+                  />
+                  <input
+                    className="input h-8"
+                    placeholder="Contact name"
+                    value={edit.customerNameSnapshot}
+                    onChange={(e) => setEdit({ ...edit, customerNameSnapshot: e.target.value })}
+                  />
+                  <input
+                    className="input h-8"
+                    placeholder="Email"
+                    value={edit.customerEmailSnapshot}
+                    onChange={(e) => setEdit({ ...edit, customerEmailSnapshot: e.target.value })}
+                  />
+                  <input
+                    className="input h-8"
+                    placeholder="Phone"
+                    value={edit.customerPhoneSnapshot}
+                    onChange={(e) => setEdit({ ...edit, customerPhoneSnapshot: e.target.value })}
+                  />
+                  <input
+                    className="input h-8 sm:col-span-2"
+                    placeholder="Address"
+                    value={edit.customerAddressSnapshot}
+                    onChange={(e) =>
+                      setEdit({ ...edit, customerAddressSnapshot: e.target.value })
+                    }
+                  />
+                  <textarea
+                    className="input sm:col-span-2"
+                    rows={2}
+                    placeholder="Note (prints on the invoice)"
+                    value={edit.note}
+                    onChange={(e) => setEdit({ ...edit, note: e.target.value })}
+                  />
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <button onClick={() => setEditOpen(false)} className="btn-ghost h-8 text-xs">
+                    Cancel
+                  </button>
+                  <button
+                    onClick={saveEdit}
+                    disabled={editBusy}
+                    className="btn-primary h-8 text-xs"
+                  >
+                    {editBusy ? "Saving…" : "Save"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {sale.note ? (
+              <p className="mb-3 whitespace-pre-line rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                {sale.note}
+              </p>
+            ) : null}
 
             {(() => {
               const paid = sale.amountPaidCents ?? 0;

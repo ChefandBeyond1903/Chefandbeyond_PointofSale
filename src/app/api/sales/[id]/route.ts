@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { HttpError } from "@/lib/auth";
-import { requireScopedUser, scopeStoreId } from "@/lib/scope";
-import { salePaymentSchema } from "@/lib/validation";
+import { requireScopedUser, requireScopedRole, scopeStoreId } from "@/lib/scope";
+import { salePaymentSchema, saleEditSchema } from "@/lib/validation";
 import { parseDateInput } from "@/lib/date";
 import { ok, toErrorResponse } from "@/lib/api";
 
@@ -66,14 +66,43 @@ export async function GET(_req: NextRequest, { params }: Params) {
   }
 }
 
-// Record a payment (a deposit, a partial payment, or the one that clears the
-// balance) against an INVOICED sale. The sale only counts as revenue once the
-// balance reaches zero — on the date of that final payment.
+// PATCH does two jobs:
+//  - a body with `paymentMethod` records a payment against an INVOICED sale;
+//  - anything else edits the invoice's note / bill-to details (manager+).
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
-    const actor = await requireScopedUser();
+    const raw = await req.json();
     const { id } = await params;
-    const body = salePaymentSchema.parse(await req.json());
+
+    // --- edit the note / bill-to details ---
+    if (!raw || typeof raw !== "object" || !("paymentMethod" in raw)) {
+      const editor = await requireScopedRole("MANAGER", "ADMIN");
+      const scoped = scopeStoreId(editor);
+      const cur = await prisma.sale.findUnique({ where: { id }, select: { storeId: true } });
+      if (!cur || (scoped && cur.storeId !== scoped)) throw new HttpError(404, "Invoice not found");
+      const fields = saleEditSchema.parse(raw);
+      const data: Record<string, unknown> = {};
+      for (const k of Object.keys(fields) as (keyof typeof fields)[]) {
+        if (fields[k] !== undefined) data[k] = fields[k];
+      }
+      const sale = await prisma.sale.update({
+        where: { id },
+        data,
+        include: {
+          items: true,
+          payments: { orderBy: { paidAt: "asc" } },
+          refunds: { orderBy: { refundedAt: "asc" }, include: { createdBy: { select: { id: true, name: true } } } },
+          cashier: { select: { id: true, name: true } },
+          salesperson: { select: { id: true, name: true } },
+          customer: true,
+        },
+      });
+      return ok({ sale });
+    }
+
+    // --- record a payment ---
+    const actor = await requireScopedUser();
+    const body = salePaymentSchema.parse(raw);
 
     const sale = await prisma.sale.findUnique({
       where: { id },

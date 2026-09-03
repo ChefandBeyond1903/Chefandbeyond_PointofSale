@@ -312,6 +312,7 @@ model Sale {
   customerId              String?
   customer                Customer? @relation(fields: [customerId], references: [id])
   customerNameSnapshot    String    @default("")
+  customerCompanySnapshot String    @default("")
   customerEmailSnapshot   String    @default("")
   customerPhoneSnapshot   String    @default("")
   customerAddressSnapshot String    @default("")

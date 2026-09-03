@@ -110,8 +110,15 @@ export function ReceiptModal({
               {sale.salesperson?.name ? (
                 <p className="text-center text-zinc-500">Served by: {sale.salesperson.name}</p>
               ) : null}
-              {sale.customerNameSnapshot ? (
-                <p className="text-center text-zinc-500">Customer: {sale.customerNameSnapshot}</p>
+              {sale.customerCompanySnapshot || sale.customerNameSnapshot ? (
+                <p className="text-center text-zinc-500">
+                  Customer: {sale.customerCompanySnapshot || sale.customerNameSnapshot}
+                  {sale.customerCompanySnapshot &&
+                  sale.customerNameSnapshot &&
+                  sale.customerNameSnapshot !== sale.customerCompanySnapshot
+                    ? ` (${sale.customerNameSnapshot})`
+                    : ""}
+                </p>
               ) : null}
               {sale.dueDate ? (
                 <p className="text-center text-zinc-500">
@@ -121,6 +128,9 @@ export function ReceiptModal({
               ) : null}
               {sale.customerTaxExemptSnapshot ? (
                 <p className="text-center text-zinc-500">Tax-exempt sale</p>
+              ) : null}
+              {sale.note ? (
+                <p className="mt-1 whitespace-pre-line text-center text-zinc-600">{sale.note}</p>
               ) : null}
               <hr className="my-2 border-dashed" />
               {sale.items.map((it) => (

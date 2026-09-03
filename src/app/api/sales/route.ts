@@ -260,12 +260,12 @@ export async function POST(req: NextRequest) {
       // Resolve the customer: use the given id, else match by name/email, else
       // auto-create. Blank fields on an existing record get filled in.
       let customerId: string | null = null;
-      let cSnap = { name: "", email: "", phone: "", address: "" };
+      let cSnap = { name: "", company: "", email: "", phone: "", address: "" };
       if (body.customerId) {
         const c = await tx.customer.findUnique({ where: { id: body.customerId } });
         if (!c) throw new HttpError(400, "Customer not found");
         customerId = c.id;
-        cSnap = { name: c.name, email: c.email, phone: c.phone, address: c.address };
+        cSnap = { name: c.name, company: c.company, email: c.email, phone: c.phone, address: c.address };
       } else if (body.customer) {
         const inp = body.customer;
         const existing = await tx.customer.findFirst({
@@ -283,7 +283,7 @@ export async function POST(req: NextRequest) {
             ? await tx.customer.update({ where: { id: existing.id }, data: patch })
             : existing;
           customerId = c.id;
-          cSnap = { name: c.name, email: c.email, phone: c.phone, address: c.address };
+          cSnap = { name: c.name, company: c.company, email: c.email, phone: c.phone, address: c.address };
         } else {
           const c = await tx.customer.create({
             data: {
@@ -295,7 +295,7 @@ export async function POST(req: NextRequest) {
             },
           });
           customerId = c.id;
-          cSnap = { name: c.name, email: c.email, phone: c.phone, address: c.address };
+          cSnap = { name: c.name, company: c.company, email: c.email, phone: c.phone, address: c.address };
         }
       }
 
@@ -329,6 +329,7 @@ export async function POST(req: NextRequest) {
           shiftId: settledNow ? (openShift?.id ?? null) : null,
           customerId,
           customerNameSnapshot: cSnap.name,
+          customerCompanySnapshot: cSnap.company,
           customerEmailSnapshot: cSnap.email,
           customerPhoneSnapshot: cSnap.phone,
           customerAddressSnapshot: cSnap.address,

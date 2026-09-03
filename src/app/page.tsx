@@ -107,6 +107,7 @@ export default function RegisterPage() {
   const [custAddress, setCustAddress] = useState("");
   const [custCompany, setCustCompany] = useState("");
   const [custOpen, setCustOpen] = useState(false);
+  const [custMenuOpen, setCustMenuOpen] = useState(false);
 
   const [shift, setShift] = useState<Shift | null>(null);
   const [shiftStats, setShiftStats] = useState<ShiftStats | null>(null);
@@ -330,6 +331,29 @@ export default function RegisterPage() {
     } else {
       setCustId(null);
     }
+  }
+
+  // Register customer search — matches any field, not just the name.
+  const custMatches = useMemo(() => {
+    const q = custName.trim().toLowerCase();
+    if (!q || custId) return [];
+    return customers
+      .filter((c) =>
+        [c.name, c.company, c.phone, c.email, c.address].some((v) =>
+          (v ?? "").toLowerCase().includes(q),
+        ),
+      )
+      .slice(0, 8);
+  }, [customers, custName, custId]);
+
+  function selectCustomer(c: Customer) {
+    setCustName(c.name);
+    setCustId(c.id);
+    setCustEmail(c.email);
+    setCustPhone(c.phone);
+    setCustAddress(c.address);
+    setCustCompany(c.company);
+    setCustMenuOpen(false);
   }
 
   function clearCustomer() {
@@ -1027,18 +1051,45 @@ export default function RegisterPage() {
           {/* Customer */}
           <div className="border-b border-zinc-100 px-4 py-3">
             <div className="flex items-center gap-2">
-              <input
-                className="input h-8"
-                list="customer-list"
-                placeholder="Customer (optional)"
-                value={custName}
-                onChange={(e) => pickCustomer(e.target.value)}
-              />
-              <datalist id="customer-list">
-                {customers.map((c) => (
-                  <option key={c.id} value={c.name} />
-                ))}
-              </datalist>
+              <div className="relative flex-1">
+                <input
+                  className="input h-8 w-full"
+                  placeholder="Customer — name, company, phone, email…"
+                  value={custName}
+                  onChange={(e) => {
+                    pickCustomer(e.target.value);
+                    setCustMenuOpen(true);
+                  }}
+                  onFocus={() => setCustMenuOpen(true)}
+                  onBlur={() => setTimeout(() => setCustMenuOpen(false), 150)}
+                />
+                {custMenuOpen && custMatches.length > 0 && (
+                  <ul className="absolute z-40 mt-1 max-h-60 w-80 overflow-auto rounded-md border border-zinc-200 bg-white text-sm shadow-lg">
+                    {custMatches.map((c) => (
+                      <li key={c.id}>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            selectCustomer(c);
+                          }}
+                          className="block w-full px-3 py-1.5 text-left hover:bg-indigo-50"
+                        >
+                          <span className="font-medium">{c.company || c.name}</span>
+                          {c.company && c.name && (
+                            <span className="text-zinc-400"> · {c.name}</span>
+                          )}
+                          {[c.phone, c.email, c.address].filter(Boolean).length > 0 && (
+                            <span className="block truncate text-[11px] text-zinc-400">
+                              {[c.phone, c.email, c.address].filter(Boolean).join(" · ")}
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
               {custName ? (
                 <button onClick={clearCustomer} className="btn-ghost px-2 py-0.5 text-xs">
                   ✕
