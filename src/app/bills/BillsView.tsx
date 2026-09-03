@@ -116,18 +116,19 @@ export function BillsView({
               <th className="px-4 py-2.5">Due</th>
               <th className="px-4 py-2.5 text-right">Amount</th>
               <th className="px-4 py-2.5">Status</th>
+              <th className="px-4 py-2.5"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-100">
             {loading ? (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-zinc-400">
+                <td colSpan={10} className="px-4 py-8 text-center text-zinc-400">
                   Loading…
                 </td>
               </tr>
             ) : bills.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-zinc-400">
+                <td colSpan={10} className="px-4 py-8 text-center text-zinc-400">
                   No bills{filter === "ALL" ? "" : ` (${filter.toLowerCase()})`}.
                 </td>
               </tr>
@@ -172,6 +173,18 @@ export function BillsView({
                       >
                         {overdue ? "OVERDUE" : b.status}
                       </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenId(b.id);
+                        }}
+                        className="btn-ghost text-xs text-indigo-600"
+                      >
+                        {canManage ? "Edit" : "View"}
+                      </button>
                     </td>
                   </tr>
                 );
@@ -291,7 +304,8 @@ function BillDetailModal({
           <>
             <div className="mb-1 flex items-center justify-between">
               <h2 className="text-lg font-semibold">
-                Bill {bill.billNumber ? `#${bill.billNumber}` : ""} · {bill.vendor}
+                {canManage ? "Edit bill" : "Bill"}{" "}
+                {bill.billNumber ? `#${bill.billNumber}` : ""} · {bill.vendor}
               </h2>
               <button onClick={onClose} className="btn-ghost px-2 py-1 text-sm">
                 ✕
