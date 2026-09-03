@@ -194,6 +194,19 @@ export const saleCreateSchema = z.object({
   // full total, in which case it settles the sale).
   depositCents: z.number().int().min(0).default(0),
   depositMethod: z.enum(["CASH", "CARD", "CREDIT"]).optional(),
+  // Split tender — one or more payments taken at the register in a single
+  // transaction (e.g. store credit + card for the rest). Overrides
+  // paymentMethod / depositCents when present.
+  payments: z
+    .array(
+      z.object({
+        method: z.enum(["CASH", "CARD", "CREDIT"]),
+        amountCents: z.number().int().min(1),
+        tenderedCents: z.number().int().min(0).default(0),
+      }),
+    )
+    .max(4)
+    .optional(),
   // Staff credited with the sale. Omit to credit the signed-in operator.
   salespersonId: z.string().min(1).optional(),
   // ADMIN only: the store to ring the sale at (tax rate, snapshots, inventory).

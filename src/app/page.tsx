@@ -788,6 +788,26 @@ export default function RegisterPage() {
     }
   }
 
+  // Split tender — e.g. store credit + card for the rest — in one completed sale.
+  async function completeSaleSplit(
+    payments: { method: "CASH" | "CARD" | "CREDIT"; amountCents: number; tenderedCents: number }[],
+  ) {
+    setError(null);
+    if (isAdmin && !sellStoreId) {
+      setError("Choose a store to sell from.");
+      return;
+    }
+    try {
+      const res = await api<{ sale: Sale }>("/api/sales", {
+        method: "POST",
+        body: JSON.stringify({ ...salePayloadBase(), payments }),
+      });
+      afterSaleSaved(res.sale);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not complete the sale");
+    }
+  }
+
   async function completeSale(paymentMethod: "CASH" | "CARD" | "CREDIT", tenderedCents: number) {
     setError(null);
     if (isAdmin && !sellStoreId) {
@@ -1326,6 +1346,7 @@ export default function RegisterPage() {
           onClose={() => setPayOpen(false)}
           onConfirm={completeSale}
           onDeposit={takeDeposit}
+          onSplit={completeSaleSplit}
           onSaveInvoice={invoiceCustomer ? saveInvoice : undefined}
           error={error}
         />
@@ -1445,6 +1466,7 @@ function PaymentModal({
   onClose,
   onConfirm,
   onDeposit,
+  onSplit,
   onSaveInvoice,
   error,
 }: {
@@ -1458,6 +1480,9 @@ function PaymentModal({
     depositCents: number,
     tenderedCents: number,
   ) => Promise<void>;
+  onSplit: (
+    payments: { method: "CASH" | "CARD" | "CREDIT"; amountCents: number; tenderedCents: number }[],
+  ) => Promise<void>;
   onSaveInvoice?: () => Promise<void>;
   error: string | null;
 }) {
@@ -1470,6 +1495,9 @@ function PaymentModal({
   // How much store credit to apply — defaults to whatever it can cover, editable
   // down for a partial redemption.
   const [creditApply, setCreditApply] = useState(Math.min(credit, total));
+  // How the rest of a store-credit split is collected.
+  const [restTab, setRestTab] = useState<"CASH" | "CARD">("CARD");
+  const [restTendered, setRestTendered] = useState(0);
   const [busy, setBusy] = useState(false);
 
   const collectNow = mode === "DEPOSIT" ? deposit : total;
@@ -1478,19 +1506,25 @@ function PaymentModal({
   const depositValid = deposit >= 1 && deposit <= total;
   // Amount of store credit that will actually be applied on submit.
   const creditNow = Math.min(creditApply, credit, total);
-  const creditSettles = creditNow >= total;
+  const creditRemaining = Math.max(0, total - creditNow);
 
   async function go() {
     setBusy(true);
     try {
       if (tab === "CREDIT") {
-        // Store credit covering the whole order settles it; otherwise it goes
-        // in as a payment and the balance is billed as an invoice.
-        if (creditSettles) {
-          await onConfirm("CREDIT", creditNow);
-        } else {
-          await onDeposit("CREDIT", creditNow, creditNow);
+        // Store credit + (if it doesn't cover the order) another tender for the
+        // rest — all in one completed transaction.
+        const payments: { method: "CASH" | "CARD" | "CREDIT"; amountCents: number; tenderedCents: number }[] = [
+          { method: "CREDIT", amountCents: creditNow, tenderedCents: creditNow },
+        ];
+        if (creditRemaining > 0) {
+          payments.push({
+            method: restTab,
+            amountCents: creditRemaining,
+            tenderedCents: restTab === "CASH" ? Math.max(restTendered, creditRemaining) : creditRemaining,
+          });
         }
+        await onSplit(payments);
       } else if (mode === "DEPOSIT") {
         await onDeposit(tab, deposit, tab === "CASH" ? tendered : deposit);
       } else {
@@ -1569,7 +1603,7 @@ function PaymentModal({
             </div>
           </div>
         ) : tab === "CREDIT" ? (
-          <div className="space-y-2">
+          <div className="space-y-3">
             <div className="flex items-center justify-between rounded-md bg-zinc-50 px-3 py-2 text-sm">
               <span className="text-zinc-500">Store credit available</span>
               <span className="font-semibold">{formatMoney(credit)}</span>
@@ -1587,11 +1621,51 @@ function PaymentModal({
                 </button>
               </div>
             </div>
-            {creditNow < total && (
-              <p className="text-xs text-zinc-500">
-                {formatMoney(total - creditNow)} balance billed as an invoice — record the rest
-                later from the invoice.
-              </p>
+            {creditRemaining > 0 && (
+              <div className="rounded-md border border-zinc-200 p-3">
+                <p className="mb-2 text-sm">
+                  Remaining balance{" "}
+                  <span className="font-semibold">{formatMoney(creditRemaining)}</span> — pay it now
+                  with:
+                </p>
+                <div className="mb-2 flex gap-1 rounded-md bg-zinc-100 p-1 text-sm">
+                  {(["CASH", "CARD"] as const).map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setRestTab(m)}
+                      className={`flex-1 rounded px-3 py-1 font-medium ${
+                        restTab === m ? "bg-white shadow-sm" : "text-zinc-500"
+                      }`}
+                    >
+                      {m === "CASH" ? "Cash" : "Card"}
+                    </button>
+                  ))}
+                </div>
+                {restTab === "CASH" ? (
+                  <div className="space-y-2">
+                    <MoneyInput
+                      cents={restTendered}
+                      onCentsChange={setRestTendered}
+                      placeholder={(creditRemaining / 100).toFixed(2)}
+                    />
+                    <div className="flex justify-between text-xs text-zinc-500">
+                      <span>Change due</span>
+                      <span className="font-semibold">
+                        {formatMoney(Math.max(0, restTendered - creditRemaining))}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-zinc-500">Run the card, then confirm below.</p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => onDeposit("CREDIT", creditNow, creditNow)}
+                  className="btn-ghost mt-2 w-full text-[11px]"
+                >
+                  or bill the {formatMoney(creditRemaining)} balance as an invoice
+                </button>
+              </div>
             )}
           </div>
         ) : (
@@ -1610,7 +1684,9 @@ function PaymentModal({
             onClick={go}
             disabled={
               busy ||
-              (tab === "CREDIT" && creditNow < 1) ||
+              (tab === "CREDIT" &&
+                (creditNow < 1 ||
+                  (creditRemaining > 0 && restTab === "CASH" && restTendered < creditRemaining))) ||
               (tab !== "CREDIT" && mode === "DEPOSIT" && !depositValid) ||
               (tab === "CASH" && tendered < collectNow)
             }
@@ -1619,9 +1695,9 @@ function PaymentModal({
             {busy
               ? "Processing…"
               : tab === "CREDIT"
-                ? creditSettles
-                  ? `Pay ${formatMoney(creditNow)} with credit`
-                  : `Apply ${formatMoney(creditNow)} credit`
+                ? creditRemaining > 0
+                  ? `Complete sale — ${formatMoney(total)}`
+                  : `Pay ${formatMoney(creditNow)} with credit`
                 : mode === "DEPOSIT"
                   ? `Take deposit ${formatMoney(deposit)}`
                   : "Complete sale"}

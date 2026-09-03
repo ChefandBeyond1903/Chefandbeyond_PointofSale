@@ -185,64 +185,68 @@ export async function POST(req: NextRequest) {
 
     const total = computed.totalCents;
     const isTermsInvoice = customerTerms !== "";
-    const deposit = Math.max(0, body.depositCents);
 
-    // What is collected at the register right now:
-    //  - a deposit / part-payment  -> INVOICED with a balance still due
-    //    (or COMPLETED if the deposit covers the whole total);
-    //  - a terms customer, no deposit -> INVOICED, nothing collected;
-    //  - otherwise the full total is charged now -> COMPLETED.
-    let paidNowCents = 0;
-    let payMethod: "CASH" | "CARD" | "CREDIT" | null = null;
-    let tenderedCents = 0;
-    let changeCents = 0;
-
-    if (deposit > 0) {
+    // Normalise every way the client can send money into one list of payments.
+    type Pay = { method: "CASH" | "CARD" | "CREDIT"; amountCents: number; tenderedCents: number };
+    let paymentList: Pay[] = [];
+    if (body.payments && body.payments.length > 0) {
+      paymentList = body.payments.map((p) => ({
+        method: p.method,
+        amountCents: p.amountCents,
+        tenderedCents: p.tenderedCents,
+      }));
+    } else if (body.depositCents > 0) {
       if (!body.depositMethod) throw new HttpError(400, "Choose how the deposit was paid.");
-      if (deposit < total && !body.customerId && !body.customer) {
-        throw new HttpError(400, "Add a customer before taking a deposit.");
-      }
-      payMethod = body.depositMethod;
-      paidNowCents = Math.min(deposit, total);
-      if (payMethod === "CASH") {
-        tenderedCents = Math.max(body.tenderedCents, deposit);
-        changeCents = Math.max(0, tenderedCents - deposit);
-      } else {
-        tenderedCents = deposit;
-      }
-    } else if (isTermsInvoice) {
-      // nothing collected now
-    } else {
+      paymentList = [
+        {
+          method: body.depositMethod,
+          amountCents: Math.min(body.depositCents, total),
+          tenderedCents: body.tenderedCents,
+        },
+      ];
+    } else if (!isTermsInvoice) {
       if (!body.paymentMethod) throw new HttpError(400, "Choose a payment method.");
-      payMethod = body.paymentMethod;
-      paidNowCents = total;
-      if (payMethod === "CASH") {
-        tenderedCents = body.tenderedCents;
-        if (tenderedCents < total) {
-          throw new HttpError(400, "Amount tendered is less than the total due");
-        }
-        changeCents = tenderedCents - total;
-      } else {
-        tenderedCents = total;
-      }
+      paymentList = [
+        { method: body.paymentMethod, amountCents: total, tenderedCents: body.tenderedCents },
+      ];
     }
 
-    if (payMethod === "CREDIT") {
-      if (!body.customerId) {
-        throw new HttpError(400, "Store credit needs an existing customer.");
+    let paidNowCents = 0;
+    let tenderedCents = 0;
+    let changeCents = 0;
+    let creditToSpend = 0;
+    for (const p of paymentList) {
+      paidNowCents += p.amountCents;
+      if (p.method === "CREDIT") creditToSpend += p.amountCents;
+      if (p.method === "CASH") {
+        const tend = Math.max(p.tenderedCents, p.amountCents);
+        tenderedCents += tend;
+        changeCents += Math.max(0, tend - p.amountCents);
+      } else {
+        tenderedCents += p.amountCents;
       }
-      if (paidNowCents > customerStoreCreditCents) {
+    }
+    if (paidNowCents > total) {
+      throw new HttpError(400, "Payments add up to more than the order total.");
+    }
+    if (paidNowCents < total && !isTermsInvoice && !body.customerId && !body.customer) {
+      throw new HttpError(400, "Add a customer to leave a balance on the sale.");
+    }
+    if (creditToSpend > 0) {
+      if (!body.customerId) throw new HttpError(400, "Store credit needs an existing customer.");
+      if (creditToSpend > customerStoreCreditCents) {
         throw new HttpError(
           400,
           `Only ${(customerStoreCreditCents / 100).toFixed(2)} of store credit is available.`,
         );
       }
-      tenderedCents = paidNowCents;
-      changeCents = 0;
     }
 
     const settledNow = paidNowCents >= total;
-    const openShift = payMethod
+    // "Method" recorded on the sale header — SPLIT when more than one was used.
+    const methodsUsed = [...new Set(paymentList.map((p) => p.method))];
+    const payMethod = methodsUsed.length === 1 ? methodsUsed[0] : methodsUsed.length > 1 ? "SPLIT" : "";
+    const openShift = paymentList.some((p) => p.method !== "CREDIT")
       ? await prisma.shift.findFirst({
           where: { userId: user.id, status: "OPEN" },
           orderBy: { openedAt: "desc" },
@@ -307,7 +311,7 @@ export async function POST(req: NextRequest) {
           taxRateBps: computed.taxRateBps,
           shippingCents: computed.shippingCents,
           totalCents: computed.totalCents,
-          paymentMethod: payMethod ?? "",
+          paymentMethod: payMethod,
           tenderedCents,
           changeCents,
           amountPaidCents: paidNowCents,
@@ -351,37 +355,37 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      // Record the money taken now (a deposit, or the full payment) as its own
-      // row so the till and the customer-deposit liability reconcile.
-      if (payMethod && paidNowCents > 0) {
+      // One SalePayment row per tender so the till and the customer-deposit /
+      // store-credit balances reconcile precisely.
+      for (const p of paymentList) {
         await tx.salePayment.create({
           data: {
             saleId: created.id,
-            amountCents: paidNowCents,
-            method: payMethod,
+            amountCents: p.amountCents,
+            method: p.method,
             paidAt: new Date(),
             isDeposit: !settledNow,
             createdById: user.id,
-            shiftId: openShift?.id ?? null,
+            shiftId: p.method === "CREDIT" ? null : (openShift?.id ?? null),
           },
         });
-        // Paying with store credit draws the customer's balance down.
-        if (payMethod === "CREDIT" && customerId) {
-          await tx.customer.update({
-            where: { id: customerId },
-            data: { storeCreditCents: { decrement: paidNowCents } },
-          });
-          await tx.storeCreditEntry.create({
-            data: {
-              customerId,
-              amountCents: -paidNowCents,
-              kind: "SPEND",
-              reason: `Sale #${number}`,
-              saleId: created.id,
-              createdById: user.id,
-            },
-          });
-        }
+      }
+      // Store credit spent draws the customer's balance down.
+      if (creditToSpend > 0 && customerId) {
+        await tx.customer.update({
+          where: { id: customerId },
+          data: { storeCreditCents: { decrement: creditToSpend } },
+        });
+        await tx.storeCreditEntry.create({
+          data: {
+            customerId,
+            amountCents: -creditToSpend,
+            kind: "SPEND",
+            reason: `Sale #${number}`,
+            saleId: created.id,
+            createdById: user.id,
+          },
+        });
       }
 
       // Draw stock down from the selling store's inventory (may go negative).

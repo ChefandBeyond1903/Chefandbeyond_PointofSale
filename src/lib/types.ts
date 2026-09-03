@@ -351,7 +351,7 @@ export interface Sale {
   taxRateBps: number;
   shippingCents: number;
   totalCents: number;
-  paymentMethod: "CASH" | "CARD";
+  paymentMethod: "CASH" | "CARD" | "CREDIT" | "SPLIT" | "";
   tenderedCents: number;
   changeCents: number;
   note: string | null;
