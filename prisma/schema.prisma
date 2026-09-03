@@ -71,6 +71,7 @@ model User {
 
   sales          Sale[]          @relation("SaleCashier")
   salesCredited  Sale[]          @relation("SaleSalesperson")
+  salePayments   SalePayment[]   @relation("SalePaymentCreatedBy")
   shifts         Shift[]
   purchaseOrders PurchaseOrder[]
   bills          Bill[]
@@ -255,6 +256,13 @@ model Sale {
   termsSnapshot             String    @default("")
   dueDate                   DateTime?
   customerTaxExemptSnapshot Boolean   @default(false)
+
+  // Running total of everything collected against this sale (deposits +
+  // balance payments), from the SalePayment rows. A deposit is a customer
+  // liability, not revenue — the sale only counts as revenue on `paidAt`, once
+  // amountPaidCents reaches totalCents and status flips to COMPLETED.
+  amountPaidCents Int           @default(0)
+  payments        SalePayment[]
 
   // Store the sale was rung at (the cashier's assigned store). storeId may be
   // null for historic rows; the snapshots freeze the store's details onto the
@@ -515,10 +523,39 @@ model Shift {
   openedAt          DateTime  @default(now())
   closedAt          DateTime?
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id])
-  sales  Sale[]
+  userId   String
+  user     User          @relation(fields: [userId], references: [id])
+  sales    Sale[]
+  payments SalePayment[]
 
   @@index([userId])
   @@index([status])
+}
+
+/// One payment collected against a sale — a deposit, a partial payment, or a
+/// full settlement. Every cash/card movement is a row here so the till and the
+/// customer-deposit liability can be reconciled precisely.
+model SalePayment {
+  id          String   @id @default(cuid())
+  saleId      String
+  sale        Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  amountCents Int
+  method      String // "CASH" | "CARD"
+  // The day the money was received — deposits and balance payments each land on
+  // their own date.
+  paidAt      DateTime
+  // True for a payment taken before the sale was settled (a deposit / partial).
+  isDeposit   Boolean  @default(false)
+  note        String   @default("")
+
+  createdById String
+  createdBy   User    @relation("SalePaymentCreatedBy", fields: [createdById], references: [id])
+  shiftId     String?
+  shift       Shift?  @relation(fields: [shiftId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([saleId])
+  @@index([paidAt])
+  @@index([shiftId])
 }

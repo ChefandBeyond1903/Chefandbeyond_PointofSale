@@ -16,6 +16,10 @@ export async function GET(_req: NextRequest, { params }: Params) {
       where: { id },
       include: {
         items: true,
+        payments: {
+          orderBy: { paidAt: "asc" },
+          include: { createdBy: { select: { id: true, name: true } } },
+        },
         cashier: { select: { id: true, name: true } },
         salesperson: { select: { id: true, name: true } },
         customer: true,
@@ -58,8 +62,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
   }
 }
 
-// Record a payment against an unpaid invoice, settling it. The sale then
-// counts as revenue on the payment date.
+// Record a payment (a deposit, a partial payment, or the one that clears the
+// balance) against an INVOICED sale. The sale only counts as revenue once the
+// balance reaches zero — on the date of that final payment.
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const actor = await requireScopedUser();
@@ -68,7 +73,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     const sale = await prisma.sale.findUnique({
       where: { id },
-      select: { id: true, status: true, storeId: true, totalCents: true },
+      select: { id: true, status: true, storeId: true, totalCents: true, amountPaidCents: true },
     });
     if (!sale) throw new HttpError(404, "Invoice not found");
     const scoped = scopeStoreId(actor);
@@ -77,40 +82,68 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       throw new HttpError(400, "This invoice has already been settled.");
     }
 
-    const paidAt = body.paidAt ? parseDateInput(body.paidAt) : new Date();
-    let tenderedCents = sale.totalCents;
-    let changeCents = 0;
-    if (body.paymentMethod === "CASH") {
-      tenderedCents = body.tenderedCents || sale.totalCents;
-      if (tenderedCents < sale.totalCents) {
-        throw new HttpError(400, "Amount tendered is less than the invoice total");
-      }
-      changeCents = tenderedCents - sale.totalCents;
+    const balanceCents = sale.totalCents - sale.amountPaidCents;
+    const amountCents = body.amountCents ?? balanceCents;
+    if (amountCents < 1) throw new HttpError(400, "Enter a payment amount.");
+    if (amountCents > balanceCents) {
+      throw new HttpError(400, `That's more than the balance due (${balanceCents / 100}).`);
     }
 
-    // Attach to whoever is recording the payment (their open till, if any) so a
-    // cash payment reconciles the drawer.
+    const paidAt = body.paidAt ? parseDateInput(body.paidAt) : new Date();
+    const newPaidCents = sale.amountPaidCents + amountCents;
+    const settled = newPaidCents >= sale.totalCents;
+
+    let tenderedCents = amountCents;
+    let changeCents = 0;
+    if (body.paymentMethod === "CASH" && body.tenderedCents) {
+      tenderedCents = body.tenderedCents;
+      if (tenderedCents < amountCents) {
+        throw new HttpError(400, "Amount tendered is less than the payment amount");
+      }
+      changeCents = tenderedCents - amountCents;
+    }
+
+    // Attach to whoever is recording it (their open till), so cash reconciles.
     const openShift = await prisma.shift.findFirst({
       where: { userId: actor.id, status: "OPEN" },
       orderBy: { openedAt: "desc" },
     });
 
-    const updated = await prisma.sale.update({
-      where: { id },
-      data: {
-        status: "COMPLETED",
-        paidAt,
-        paymentMethod: body.paymentMethod,
-        tenderedCents,
-        changeCents,
-        shiftId: openShift?.id ?? null,
-      },
-      include: {
-        items: true,
-        cashier: { select: { id: true, name: true } },
-        salesperson: { select: { id: true, name: true } },
-        customer: true,
-      },
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.salePayment.create({
+        data: {
+          saleId: id,
+          amountCents,
+          method: body.paymentMethod,
+          paidAt,
+          isDeposit: !settled,
+          createdById: actor.id,
+          shiftId: openShift?.id ?? null,
+        },
+      });
+      return tx.sale.update({
+        where: { id },
+        data: {
+          amountPaidCents: newPaidCents,
+          ...(settled
+            ? {
+                status: "COMPLETED",
+                paidAt,
+                paymentMethod: body.paymentMethod,
+                tenderedCents,
+                changeCents,
+                shiftId: openShift?.id ?? null,
+              }
+            : {}),
+        },
+        include: {
+          items: true,
+          payments: { orderBy: { paidAt: "asc" } },
+          cashier: { select: { id: true, name: true } },
+          salesperson: { select: { id: true, name: true } },
+          customer: true,
+        },
+      });
     });
     return ok({ sale: updated });
   } catch (err) {

@@ -156,10 +156,29 @@ export function ReceiptModal({
                 <span>Total</span>
                 <span>{formatMoney(sale.totalCents)}</span>
               </div>
-              <div className="flex justify-between">
-                <span>{sale.paymentMethod}</span>
-                <span>{formatMoney(sale.tenderedCents)}</span>
-              </div>
+              {sale.status === "INVOICED" && (sale.amountPaidCents ?? 0) < sale.totalCents ? (
+                <>
+                  <div className="flex justify-between">
+                    <span>{(sale.amountPaidCents ?? 0) > 0 ? "Deposit paid" : "Paid"}</span>
+                    <span>{formatMoney(sale.amountPaidCents ?? 0)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold">
+                    <span>Balance due</span>
+                    <span>{formatMoney(sale.totalCents - (sale.amountPaidCents ?? 0))}</span>
+                  </div>
+                  {sale.dueDate ? (
+                    <div className="flex justify-between">
+                      <span>Due by</span>
+                      <span>{formatDateOnly(sale.dueDate)}</span>
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <div className="flex justify-between">
+                  <span>{sale.paymentMethod}</span>
+                  <span>{formatMoney(sale.tenderedCents)}</span>
+                </div>
+              )}
               {sale.changeCents > 0 && (
                 <div className="flex justify-between">
                   <span>Change</span>

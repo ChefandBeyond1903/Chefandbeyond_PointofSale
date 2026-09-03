@@ -45,10 +45,10 @@ export function InvoiceModal({
   // vendor name -> free-freight minimum (cents); 0 / missing means none.
   const [freightMins, setFreightMins] = useState<Record<string, number>>({});
 
-  // Recording a payment against an unpaid invoice.
+  // Recording a payment (deposit / partial / final) against an open invoice.
   const [payMethod, setPayMethod] = useState<"CASH" | "CARD">("CASH");
   const [payDate, setPayDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [payTendered, setPayTendered] = useState(0);
+  const [payAmount, setPayAmount] = useState(0);
   const [payBusy, setPayBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -59,7 +59,7 @@ export function InvoiceModal({
     }
   }, [saleId]);
 
-  async function recordPayment() {
+  async function recordPayment(amountCents?: number) {
     if (!detail) return;
     setPayBusy(true);
     setErr(null);
@@ -69,10 +69,10 @@ export function InvoiceModal({
         body: JSON.stringify({
           paymentMethod: payMethod,
           paidAt: payDate,
-          tenderedCents:
-            payMethod === "CASH" ? payTendered || detail.sale.totalCents : 0,
+          ...(amountCents ? { amountCents } : {}),
         }),
       });
+      setPayAmount(0);
       await load();
       onChanged?.();
     } catch (e) {
@@ -268,66 +268,106 @@ export function InvoiceModal({
 
             {err && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{err}</p>}
 
-            {sale.status === "INVOICED" ? (
-              <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-3">
-                <p className="text-sm font-medium text-amber-800">
-                  Unpaid invoice — {formatMoney(sale.totalCents)}
-                  {sale.dueDate
-                    ? ` · due ${formatDateOnly(sale.dueDate)}`
-                    : ""}
-                  {sale.termsSnapshot ? ` (${sale.termsSnapshot})` : ""}
-                </p>
-                {canManage && (
-                  <div className="mt-2 flex flex-wrap items-end gap-3">
-                    <div>
-                      <label className="label">Payment method</label>
-                      <select
-                        className="input h-8"
-                        value={payMethod}
-                        onChange={(e) => setPayMethod(e.target.value as "CASH" | "CARD")}
-                      >
-                        <option value="CASH">Cash</option>
-                        <option value="CARD">Card</option>
-                      </select>
+            {(() => {
+              const paid = sale.amountPaidCents ?? 0;
+              const balance = sale.totalCents - paid;
+              const payments = sale.payments ?? [];
+              if (sale.status === "INVOICED") {
+                return (
+                  <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-3">
+                    <div className="flex flex-wrap items-baseline gap-x-4 text-sm">
+                      <span className="font-medium text-amber-800">
+                        {paid > 0 ? "Open invoice" : "Unpaid invoice"} —{" "}
+                        {formatMoney(balance)} balance
+                      </span>
+                      <span className="text-amber-700">
+                        of {formatMoney(sale.totalCents)}
+                        {paid > 0 ? ` · ${formatMoney(paid)} paid` : ""}
+                        {sale.dueDate ? ` · due ${formatDateOnly(sale.dueDate)}` : ""}
+                        {sale.termsSnapshot ? ` (${sale.termsSnapshot})` : ""}
+                      </span>
                     </div>
-                    <div>
-                      <label className="label">Received on</label>
-                      <input
-                        type="date"
-                        className="input h-8"
-                        value={payDate}
-                        onChange={(e) => setPayDate(e.target.value)}
-                      />
-                    </div>
-                    {payMethod === "CASH" && (
-                      <div>
-                        <label className="label">Cash tendered</label>
-                        <MoneyInput
-                          cents={payTendered}
-                          onCentsChange={setPayTendered}
-                          className="input h-8 w-28 text-right"
-                        />
+
+                    {payments.length > 0 && (
+                      <ul className="mt-2 space-y-0.5 text-xs text-amber-800">
+                        {payments.map((p) => (
+                          <li key={p.id}>
+                            {p.isDeposit ? "Deposit" : "Payment"} {formatMoney(p.amountCents)} ·{" "}
+                            {p.method} · {formatDateOnly(p.paidAt)}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    {canManage && (
+                      <div className="mt-3 flex flex-wrap items-end gap-3">
+                        <div>
+                          <label className="label">Method</label>
+                          <select
+                            className="input h-8"
+                            value={payMethod}
+                            onChange={(e) => setPayMethod(e.target.value as "CASH" | "CARD")}
+                          >
+                            <option value="CASH">Cash</option>
+                            <option value="CARD">Card</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="label">Received on</label>
+                          <input
+                            type="date"
+                            className="input h-8"
+                            value={payDate}
+                            onChange={(e) => setPayDate(e.target.value)}
+                          />
+                        </div>
+                        <div>
+                          <label className="label">Amount</label>
+                          <MoneyInput
+                            cents={payAmount}
+                            onCentsChange={setPayAmount}
+                            className="input h-8 w-28 text-right"
+                            placeholder={(balance / 100).toFixed(2)}
+                          />
+                        </div>
+                        <button
+                          onClick={() => recordPayment(payAmount || undefined)}
+                          disabled={payBusy || (payAmount > 0 && payAmount > balance)}
+                          className="btn-primary h-8"
+                        >
+                          {payBusy
+                            ? "Saving…"
+                            : payAmount > 0 && payAmount < balance
+                              ? `Record ${formatMoney(payAmount)}`
+                              : "Pay balance"}
+                        </button>
                       </div>
                     )}
-                    <button
-                      onClick={recordPayment}
-                      disabled={payBusy}
-                      className="btn-primary h-8"
-                    >
-                      {payBusy ? "Saving…" : "Record payment"}
-                    </button>
+                    <p className="mt-1 text-[11px] text-amber-700">
+                      Deposits are held; the sale counts as revenue on the day the balance is
+                      cleared. Leave Amount blank to pay the whole balance.
+                    </p>
                   </div>
-                )}
-                <p className="mt-1 text-[11px] text-amber-700">
-                  It becomes a sale for the day the money is received.
-                </p>
-              </div>
-            ) : sale.paidAt && sale.termsSnapshot ? (
-              <p className="mb-3 text-sm text-green-700">
-                Paid {new Date(sale.paidAt).toLocaleDateString()}
-                {sale.paymentMethod ? ` · ${sale.paymentMethod}` : ""}
-              </p>
-            ) : null}
+                );
+              }
+              if (sale.paidAt && (payments.length > 0 || sale.termsSnapshot)) {
+                return (
+                  <div className="mb-3 text-sm text-green-700">
+                    Paid in full {formatDateOnly(sale.paidAt)}
+                    {payments.length > 0 && (
+                      <span className="ml-2 text-xs text-zinc-500">
+                        (
+                        {payments
+                          .map((p) => `${formatMoney(p.amountCents)} ${p.method}`)
+                          .join(", ")}
+                        )
+                      </span>
+                    )}
+                  </div>
+                );
+              }
+              return null;
+            })()}
 
             <div className="overflow-x-auto">
             <table className="w-full min-w-[480px] text-sm">

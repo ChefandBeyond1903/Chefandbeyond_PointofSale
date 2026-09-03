@@ -176,33 +176,57 @@ export async function POST(req: NextRequest) {
       products.map((p) => [p.id, { sku: p.sku, vendor: p.vendor, costCents: p.costCents }]),
     );
 
-    let tenderedCents = computed.totalCents;
-    // A customer with payment terms is invoiced, not charged: the goods go out
-    // now (inventory still draws down) but no money is collected and it isn't a
-    // sale for the day until a payment is recorded (PATCH /api/sales/[id]).
-    const isInvoice = customerTerms !== "";
-    if (!isInvoice && !body.paymentMethod) {
-      throw new HttpError(400, "Choose a payment method.");
-    }
+    const total = computed.totalCents;
+    const isTermsInvoice = customerTerms !== "";
+    const deposit = Math.max(0, body.depositCents);
 
+    // What is collected at the register right now:
+    //  - a deposit / part-payment  -> INVOICED with a balance still due
+    //    (or COMPLETED if the deposit covers the whole total);
+    //  - a terms customer, no deposit -> INVOICED, nothing collected;
+    //  - otherwise the full total is charged now -> COMPLETED.
+    let paidNowCents = 0;
+    let payMethod: "CASH" | "CARD" | null = null;
+    let tenderedCents = 0;
     let changeCents = 0;
-    if (!isInvoice && body.paymentMethod === "CASH") {
-      tenderedCents = body.tenderedCents;
-      if (tenderedCents < computed.totalCents) {
-        throw new HttpError(400, "Amount tendered is less than the total due");
+
+    if (deposit > 0) {
+      if (!body.depositMethod) throw new HttpError(400, "Choose how the deposit was paid.");
+      if (deposit < total && !body.customerId && !body.customer) {
+        throw new HttpError(400, "Add a customer before taking a deposit.");
       }
-      changeCents = tenderedCents - computed.totalCents;
-    }
-    if (isInvoice) {
-      tenderedCents = 0;
+      payMethod = body.depositMethod;
+      paidNowCents = Math.min(deposit, total);
+      if (payMethod === "CASH") {
+        tenderedCents = Math.max(body.tenderedCents, deposit);
+        changeCents = Math.max(0, tenderedCents - deposit);
+      } else {
+        tenderedCents = deposit;
+      }
+    } else if (isTermsInvoice) {
+      // nothing collected now
+    } else {
+      if (!body.paymentMethod) throw new HttpError(400, "Choose a payment method.");
+      payMethod = body.paymentMethod;
+      paidNowCents = total;
+      if (payMethod === "CASH") {
+        tenderedCents = body.tenderedCents;
+        if (tenderedCents < total) {
+          throw new HttpError(400, "Amount tendered is less than the total due");
+        }
+        changeCents = tenderedCents - total;
+      } else {
+        tenderedCents = total;
+      }
     }
 
-    const openShift = isInvoice
-      ? null
-      : await prisma.shift.findFirst({
+    const settledNow = paidNowCents >= total;
+    const openShift = payMethod
+      ? await prisma.shift.findFirst({
           where: { userId: user.id, status: "OPEN" },
           orderBy: { openedAt: "desc" },
-        });
+        })
+      : null;
 
     const sale = await prisma.$transaction(async (tx) => {
       const last = await tx.sale.findFirst({ orderBy: { number: "desc" }, select: { number: true } });
@@ -253,8 +277,8 @@ export async function POST(req: NextRequest) {
       const created = await tx.sale.create({
         data: {
           number,
-          status: isInvoice ? "INVOICED" : "COMPLETED",
-          paidAt: isInvoice ? null : new Date(),
+          status: settledNow ? "COMPLETED" : "INVOICED",
+          paidAt: settledNow ? new Date() : null,
           subtotalCents: computed.subtotalCents,
           listSubtotalCents,
           discountCents: computed.discountCents,
@@ -262,9 +286,10 @@ export async function POST(req: NextRequest) {
           taxRateBps: computed.taxRateBps,
           shippingCents: computed.shippingCents,
           totalCents: computed.totalCents,
-          paymentMethod: isInvoice ? "" : (body.paymentMethod ?? ""),
+          paymentMethod: payMethod ?? "",
           tenderedCents,
           changeCents,
+          amountPaidCents: paidNowCents,
           note: body.note,
           termsSnapshot: customerTerms,
           dueDate: invoiceDueDate,
@@ -276,7 +301,7 @@ export async function POST(req: NextRequest) {
           storeAddressSnapshot,
           storePhoneSnapshot,
           storeEmailSnapshot,
-          shiftId: openShift?.id ?? null,
+          shiftId: settledNow ? (openShift?.id ?? null) : null,
           customerId,
           customerNameSnapshot: cSnap.name,
           customerEmailSnapshot: cSnap.email,
@@ -304,6 +329,22 @@ export async function POST(req: NextRequest) {
           customer: true,
         },
       });
+
+      // Record the money taken now (a deposit, or the full payment) as its own
+      // row so the till and the customer-deposit liability reconcile.
+      if (payMethod && paidNowCents > 0) {
+        await tx.salePayment.create({
+          data: {
+            saleId: created.id,
+            amountCents: paidNowCents,
+            method: payMethod,
+            paidAt: new Date(),
+            isDeposit: !settledNow,
+            createdById: user.id,
+            shiftId: openShift?.id ?? null,
+          },
+        });
+      }
 
       // Draw stock down from the selling store's inventory (may go negative).
       if (storeId) {

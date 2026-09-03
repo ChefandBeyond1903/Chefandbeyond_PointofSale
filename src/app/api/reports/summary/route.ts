@@ -88,6 +88,7 @@ export async function GET(req: NextRequest) {
             createdAt: true,
             dueDate: true,
             totalCents: true,
+            amountPaidCents: true,
             termsSnapshot: true,
             customerNameSnapshot: true,
           },
@@ -101,11 +102,16 @@ export async function GET(req: NextRequest) {
       terms: s.termsSnapshot,
       customer: s.customerNameSnapshot || "",
       totalCents: s.totalCents,
+      paidCents: s.amountPaidCents,
+      balanceCents: s.totalCents - s.amountPaidCents,
       overdue: !!s.dueDate && s.dueDate < now2,
     }));
     const receivables = {
       count: unpaidInvoices.length,
-      amountCents: unpaidInvoices.reduce((s, i) => s + i.totalCents, 0),
+      // Money still owed to us (balance, net of deposits already taken).
+      amountCents: unpaidInvoices.reduce((s, i) => s + i.balanceCents, 0),
+      // Customer deposits held against open orders — a liability, not revenue.
+      depositsHeldCents: unpaidInvoices.reduce((s, i) => s + i.paidCents, 0),
       overdueCount: unpaidInvoices.filter((i) => i.overdue).length,
     };
 
@@ -293,7 +299,7 @@ export async function GET(req: NextRequest) {
         byPaymentMethod: [],
         topProducts,
         recentSales: recentSales.map((s) => ({ ...s, profitCents: 0 })),
-        receivables: { count: 0, amountCents: 0, overdueCount: 0 },
+        receivables: { count: 0, amountCents: 0, depositsHeldCents: 0, overdueCount: 0 },
         unpaidInvoices: [],
       });
     }

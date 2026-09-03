@@ -189,6 +189,11 @@ export const saleCreateSchema = z.object({
   // Omitted when saving an unpaid invoice for a terms customer.
   paymentMethod: z.enum(["CASH", "CARD"]).optional(),
   tenderedCents: z.number().int().min(0).default(0),
+  // A deposit / part-payment taken at the register. The sale is saved as an
+  // invoice with this recorded and a balance still due (unless it covers the
+  // full total, in which case it settles the sale).
+  depositCents: z.number().int().min(0).default(0),
+  depositMethod: z.enum(["CASH", "CARD"]).optional(),
   // Staff credited with the sale. Omit to credit the signed-in operator.
   salespersonId: z.string().min(1).optional(),
   // ADMIN only: the store to ring the sale at (tax rate, snapshots, inventory).
@@ -201,10 +206,13 @@ export const saleCreateSchema = z.object({
   customer: saleCustomerSchema.optional(),
 });
 
-// Record a payment against an unpaid (INVOICED) sale, settling it.
+// Record a payment (deposit, partial, or final) against an INVOICED sale.
 export const salePaymentSchema = z.object({
   paymentMethod: z.enum(["CASH", "CARD"]),
-  // The day the money was received — this becomes the sale's revenue date.
+  // Amount to apply. Omit to pay the whole remaining balance.
+  amountCents: z.number().int().min(1).optional(),
+  // The day the money was received. The sale only counts as revenue once it is
+  // fully paid — on the date of the payment that clears the balance.
   paidAt: dateInput.optional(),
   tenderedCents: z.number().int().min(0).default(0),
 });

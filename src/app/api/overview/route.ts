@@ -98,12 +98,12 @@ export async function GET() {
       }),
       prisma.sale.aggregate({
         where: { status: "INVOICED" },
-        _sum: { totalCents: true },
+        _sum: { totalCents: true, amountPaidCents: true },
         _count: true,
       }),
       prisma.sale.aggregate({
         where: { status: "INVOICED", dueDate: { lt: now } },
-        _sum: { totalCents: true },
+        _sum: { totalCents: true, amountPaidCents: true },
         _count: true,
       }),
       prisma.heldSale.count(),
@@ -230,12 +230,18 @@ export async function GET() {
       receivables: {
         unpaidInvoices: {
           count: unpaidInvoiceAgg._count,
-          amountCents: unpaidInvoiceAgg._sum.totalCents ?? 0,
+          // Balance still owed, net of deposits already taken.
+          amountCents:
+            (unpaidInvoiceAgg._sum.totalCents ?? 0) -
+            (unpaidInvoiceAgg._sum.amountPaidCents ?? 0),
         },
         overdueInvoices: {
           count: overdueInvoiceAgg._count,
-          amountCents: overdueInvoiceAgg._sum.totalCents ?? 0,
+          amountCents:
+            (overdueInvoiceAgg._sum.totalCents ?? 0) -
+            (overdueInvoiceAgg._sum.amountPaidCents ?? 0),
         },
+        depositsHeldCents: unpaidInvoiceAgg._sum.amountPaidCents ?? 0,
       },
       purchaseOrdersDue: posDue.map((p) => ({
         id: p.id,

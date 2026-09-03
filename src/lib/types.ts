@@ -306,6 +306,17 @@ export interface InvoiceDetail {
   unassignedQty: number;
 }
 
+export interface SalePayment {
+  id: string;
+  amountCents: number;
+  method: "CASH" | "CARD";
+  paidAt: string;
+  isDeposit: boolean;
+  note: string;
+  createdAt: string;
+  createdBy?: { id: string; name: string } | null;
+}
+
 export interface Sale {
   id: string;
   number: number;
@@ -324,6 +335,8 @@ export interface Sale {
   termsSnapshot?: string;
   dueDate?: string | null;
   paidAt?: string | null;
+  amountPaidCents?: number;
+  payments?: SalePayment[];
   customerTaxExemptSnapshot?: boolean;
   createdAt: string;
   storeId?: string | null;
@@ -395,6 +408,7 @@ export interface AdminOverview {
   receivables: {
     unpaidInvoices: { count: number; amountCents: number };
     overdueInvoices: { count: number; amountCents: number };
+    depositsHeldCents: number;
   };
   purchaseOrdersDue: {
     id: string;
@@ -482,7 +496,12 @@ export interface ReportSummary {
     totalCents: number;
     profitCents: number;
   }[];
-  receivables: { count: number; amountCents: number; overdueCount: number };
+  receivables: {
+    count: number;
+    amountCents: number;
+    depositsHeldCents: number;
+    overdueCount: number;
+  };
   unpaidInvoices: {
     id: string;
     number: number;
@@ -491,6 +510,8 @@ export interface ReportSummary {
     terms: string;
     customer: string;
     totalCents: number;
+    paidCents: number;
+    balanceCents: number;
     overdue: boolean;
   }[];
 }

@@ -169,9 +169,12 @@ export function ReportsView({
           {!limited && data.receivables.count > 0 && (
             <div className="card overflow-hidden">
               <div className="flex flex-wrap items-baseline gap-x-3 border-b border-zinc-100 px-4 py-3">
-                <h2 className="font-semibold">Unpaid invoices</h2>
+                <h2 className="font-semibold">Open invoices</h2>
                 <span className="text-sm text-zinc-500">
-                  {data.receivables.count} · {formatMoney(data.receivables.amountCents)} outstanding
+                  {data.receivables.count} · {formatMoney(data.receivables.amountCents)} balance due
+                  {data.receivables.depositsHeldCents > 0 && (
+                    <> · {formatMoney(data.receivables.depositsHeldCents)} deposits held</>
+                  )}
                   {data.receivables.overdueCount > 0 && (
                     <span className="text-red-600"> · {data.receivables.overdueCount} overdue</span>
                   )}
@@ -197,8 +200,13 @@ export function ReportsView({
                             </span>
                           )}
                         </td>
-                        <td className="px-4 py-2 text-right font-medium">
-                          {formatMoney(i.totalCents)}
+                        <td className="px-4 py-2 text-right">
+                          <span className="font-medium">{formatMoney(i.balanceCents)}</span>
+                          {i.paidCents > 0 && (
+                            <span className="block text-[11px] text-zinc-400">
+                              {formatMoney(i.paidCents)} paid of {formatMoney(i.totalCents)}
+                            </span>
+                          )}
                         </td>
                       </tr>
                     ))}

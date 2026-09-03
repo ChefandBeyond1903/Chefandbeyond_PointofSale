@@ -11,23 +11,26 @@ export async function GET() {
     });
     if (!shift) return ok({ shift: null });
 
-    const agg = await prisma.sale.aggregate({
-      where: { shiftId: shift.id, status: "COMPLETED" },
-      _sum: { totalCents: true, tenderedCents: true, changeCents: true },
+    // Drawer math is driven by the actual payments taken this shift (deposits,
+    // partials and full settlements alike), not by sale totals.
+    const allPay = await prisma.salePayment.aggregate({
+      where: { shiftId: shift.id },
+      _sum: { amountCents: true },
       _count: true,
     });
-    const cashAgg = await prisma.sale.aggregate({
-      where: { shiftId: shift.id, status: "COMPLETED", paymentMethod: "CASH" },
-      _sum: { totalCents: true },
+    const cashPay = await prisma.salePayment.aggregate({
+      where: { shiftId: shift.id, method: "CASH" },
+      _sum: { amountCents: true },
     });
+    const cashCents = cashPay._sum.amountCents ?? 0;
 
     return ok({
       shift,
       stats: {
-        saleCount: agg._count,
-        totalCents: agg._sum.totalCents ?? 0,
-        cashSalesCents: cashAgg._sum.totalCents ?? 0,
-        expectedDrawerCents: shift.openingFloatCents + (cashAgg._sum.totalCents ?? 0),
+        saleCount: allPay._count,
+        totalCents: allPay._sum.amountCents ?? 0,
+        cashSalesCents: cashCents,
+        expectedDrawerCents: shift.openingFloatCents + cashCents,
       },
     });
   } catch (err) {

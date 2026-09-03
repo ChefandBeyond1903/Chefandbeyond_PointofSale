@@ -761,6 +761,33 @@ export default function RegisterPage() {
     }
   }
 
+  // Take a deposit / part-payment now; the rest is billed as an invoice.
+  async function takeDeposit(
+    method: "CASH" | "CARD",
+    depositCents: number,
+    tenderedCents: number,
+  ) {
+    setError(null);
+    if (isAdmin && !sellStoreId) {
+      setError("Choose a store to sell from.");
+      return;
+    }
+    try {
+      const res = await api<{ sale: Sale }>("/api/sales", {
+        method: "POST",
+        body: JSON.stringify({
+          ...salePayloadBase(),
+          depositCents,
+          depositMethod: method,
+          tenderedCents,
+        }),
+      });
+      afterSaleSaved(res.sale);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not take the deposit");
+    }
+  }
+
   async function completeSale(paymentMethod: "CASH" | "CARD", tenderedCents: number) {
     setError(null);
     if (isAdmin && !sellStoreId) {
@@ -1261,7 +1288,7 @@ export default function RegisterPage() {
               </p>
             )}
             <button
-              onClick={() => (invoiceCustomer ? saveInvoice() : setPayOpen(true))}
+              onClick={() => setPayOpen(true)}
               disabled={
                 cart.length === 0 ||
                 totals.umrpViolations.length > 0 ||
@@ -1270,7 +1297,7 @@ export default function RegisterPage() {
               className="btn-primary w-full py-3 text-base"
             >
               {invoiceCustomer
-                ? `Save invoice ${formatMoney(totals.total)}`
+                ? `Invoice / deposit — ${formatMoney(totals.total)}`
                 : `Charge ${formatMoney(totals.total)}`}
             </button>
           </div>
@@ -1289,8 +1316,11 @@ export default function RegisterPage() {
       {payOpen && (
         <PaymentModal
           total={totals.total}
+          canDeposit={!!custId || custName.trim().length > 0}
           onClose={() => setPayOpen(false)}
           onConfirm={completeSale}
+          onDeposit={takeDeposit}
+          onSaveInvoice={invoiceCustomer ? saveInvoice : undefined}
           error={error}
         />
       )}
@@ -1404,26 +1434,40 @@ function ShiftWidget({
 
 function PaymentModal({
   total,
+  canDeposit,
   onClose,
   onConfirm,
+  onDeposit,
+  onSaveInvoice,
   error,
 }: {
   total: number;
+  canDeposit: boolean;
   onClose: () => void;
   onConfirm: (method: "CASH" | "CARD", tenderedCents: number) => Promise<void>;
+  onDeposit: (method: "CASH" | "CARD", depositCents: number, tenderedCents: number) => Promise<void>;
+  onSaveInvoice?: () => Promise<void>;
   error: string | null;
 }) {
   const [tab, setTab] = useState<"CASH" | "CARD">("CASH");
+  const [mode, setMode] = useState<"FULL" | "DEPOSIT">("FULL");
+  const [deposit, setDeposit] = useState(total);
   const [tendered, setTendered] = useState(total);
   const [busy, setBusy] = useState(false);
 
-  const quick = [total, 500, 1000, 2000, 5000, 10000];
-  const change = Math.max(0, tendered - total);
+  const collectNow = mode === "DEPOSIT" ? deposit : total;
+  const quick = [collectNow, 2000, 5000, 10000, 20000, 50000];
+  const change = Math.max(0, tendered - collectNow);
+  const depositValid = deposit >= 1 && deposit <= total;
 
   async function go() {
     setBusy(true);
     try {
-      await onConfirm(tab, tab === "CASH" ? tendered : total);
+      if (mode === "DEPOSIT") {
+        await onDeposit(tab, deposit, tab === "CASH" ? tendered : deposit);
+      } else {
+        await onConfirm(tab, tab === "CASH" ? tendered : total);
+      }
     } finally {
       setBusy(false);
     }
@@ -1433,9 +1477,36 @@ function PaymentModal({
     <Overlay onClose={onClose}>
       <div className="w-full max-w-md">
         <h3 className="mb-1 text-lg font-semibold">Take payment</h3>
-        <p className="mb-4 text-sm text-zinc-500">
-          Amount due <span className="font-semibold text-zinc-900">{formatMoney(total)}</span>
+        <p className="mb-3 text-sm text-zinc-500">
+          Order total <span className="font-semibold text-zinc-900">{formatMoney(total)}</span>
         </p>
+
+        {canDeposit && (
+          <div className="mb-4 flex gap-1 rounded-md bg-zinc-100 p-1 text-sm">
+            {(["FULL", "DEPOSIT"] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setMode(m)}
+                className={`flex-1 rounded px-3 py-1.5 font-medium ${
+                  mode === m ? "bg-white shadow-sm" : "text-zinc-500"
+                }`}
+              >
+                {m === "FULL" ? "Pay in full" : "Take a deposit"}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {mode === "DEPOSIT" && (
+          <div className="mb-4 space-y-1">
+            <label className="label">Deposit amount</label>
+            <MoneyInput cents={deposit} onCentsChange={setDeposit} autoFocus />
+            <p className="text-xs text-zinc-500">
+              Balance billed as an invoice:{" "}
+              <span className="font-medium">{formatMoney(Math.max(0, total - deposit))}</span>
+            </p>
+          </div>
+        )}
 
         <div className="mb-4 flex gap-1 rounded-md bg-zinc-100 p-1">
           {(["CASH", "CARD"] as const).map((m) => (
@@ -1455,18 +1526,14 @@ function PaymentModal({
           <div className="space-y-3">
             <div className="grid grid-cols-3 gap-2">
               {quick.map((c, i) => (
-                <button
-                  key={i}
-                  onClick={() => setTendered(c)}
-                  className="btn-secondary"
-                >
+                <button key={i} onClick={() => setTendered(c)} className="btn-secondary">
                   {i === 0 ? "Exact" : formatMoney(c)}
                 </button>
               ))}
             </div>
             <div>
               <label className="label">Cash received</label>
-              <MoneyInput cents={tendered} onCentsChange={setTendered} autoFocus />
+              <MoneyInput cents={tendered} onCentsChange={setTendered} />
             </div>
             <div className="flex items-center justify-between rounded-md bg-zinc-50 px-3 py-2 text-sm">
               <span className="text-zinc-500">Change due</span>
@@ -1487,12 +1554,37 @@ function PaymentModal({
           </button>
           <button
             onClick={go}
-            disabled={busy || (tab === "CASH" && tendered < total)}
+            disabled={
+              busy ||
+              (mode === "DEPOSIT" && !depositValid) ||
+              (tab === "CASH" && tendered < collectNow)
+            }
             className="btn-primary flex-1"
           >
-            {busy ? "Processing…" : "Complete sale"}
+            {busy
+              ? "Processing…"
+              : mode === "DEPOSIT"
+                ? `Take deposit ${formatMoney(deposit)}`
+                : "Complete sale"}
           </button>
         </div>
+
+        {onSaveInvoice && (
+          <button
+            onClick={async () => {
+              setBusy(true);
+              try {
+                await onSaveInvoice();
+              } finally {
+                setBusy(false);
+              }
+            }}
+            disabled={busy}
+            className="btn-ghost mt-2 w-full text-xs"
+          >
+            Save as invoice — bill later, no payment now
+          </button>
+        )}
       </div>
     </Overlay>
   );
