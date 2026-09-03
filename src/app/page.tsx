@@ -295,28 +295,28 @@ export default function RegisterPage() {
     salespersonId,
   ]);
 
-  // A line may never be priced below its minimum (UMRP). If an edit takes it
-  // there — a low line total, too big a discount — snap the unit price back up
-  // to the UMRP and clear the line discount so the ticket shows the minimum.
-  useEffect(() => {
-    /* eslint-disable react-hooks/set-state-in-effect */
-    let changed = false;
-    const next = cart.map((l) => {
-      const umrp = l.product.umrpCents ?? 0;
-      if (umrp <= 0 || l.quantity <= 0) return l;
-      if (lineNetCents(l) >= umrp * l.quantity) return l;
-      changed = true;
-      return {
-        ...l,
-        unitPriceCents: umrp,
-        discountCents: 0,
-        discPercent: 0,
-        discMode: "AMOUNT" as const,
-      };
-    });
-    if (changed) setCart(next);
-    /* eslint-enable react-hooks/set-state-in-effect */
-  }, [cart]);
+  // A line may never be priced below its minimum (UMRP). Rather than snapping
+  // on every keystroke (which makes the field impossible to edit), this runs
+  // only when the user commits an edit — see snapLineToUmrp, wired to the
+  // price/discount inputs' onCommit.
+  function snapLineToUmrp(productId: string) {
+    setCart((cur) =>
+      cur.map((l) => {
+        if (l.product.id !== productId) return l;
+        const umrp = l.product.umrpCents ?? 0;
+        if (umrp <= 0 || l.quantity <= 0) return l;
+        if (lineNetCents(l) >= umrp * l.quantity) return l;
+        // Below the floor — pin the unit price to the minimum, drop the discount.
+        return {
+          ...l,
+          unitPriceCents: umrp,
+          discountCents: 0,
+          discPercent: 0,
+          discMode: "AMOUNT" as const,
+        };
+      }),
+    );
+  }
 
   function pickCustomer(name: string) {
     setCustName(name);
@@ -1145,6 +1145,7 @@ export default function RegisterPage() {
                         <PercentInput
                           value={line.discPercent}
                           onValueChange={(n) => setLineDiscPercent(line.product.id, n)}
+                          onCommit={() => snapLineToUmrp(line.product.id)}
                           className="input h-7 w-14 shrink-0 px-2 text-right text-xs"
                           aria-label="Discount percent"
                         />
@@ -1152,6 +1153,7 @@ export default function RegisterPage() {
                         <MoneyInput
                           cents={lineDisc}
                           onCentsChange={(c) => setLineDiscAmount(line.product.id, c)}
+                          onCommit={() => snapLineToUmrp(line.product.id)}
                           className="input h-7 w-20 shrink-0 px-2 text-right text-xs"
                         />
                       )}
@@ -1159,6 +1161,7 @@ export default function RegisterPage() {
                       <MoneyInput
                         cents={lineTotal}
                         onCentsChange={(c) => setLineTotal(line.product.id, c)}
+                        onCommit={() => snapLineToUmrp(line.product.id)}
                         className="input h-7 w-24 ml-auto shrink-0 px-2 text-right text-sm font-semibold"
                       />
                     </div>

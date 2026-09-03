@@ -7,6 +7,7 @@ import { parseMoney } from "@/lib/money";
 export function MoneyInput({
   cents,
   onCentsChange,
+  onCommit,
   className = "input",
   placeholder = "0.00",
   autoFocus,
@@ -15,6 +16,8 @@ export function MoneyInput({
 }: {
   cents: number;
   onCentsChange: (cents: number) => void;
+  /** Fired once the value is committed — on blur or Enter. */
+  onCommit?: (cents: number) => void;
   className?: string;
   placeholder?: string;
   autoFocus?: boolean;
@@ -44,9 +47,13 @@ export function MoneyInput({
         setText(raw);
         onCentsChange(parseMoney(raw));
       }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+      }}
       onBlur={() => {
         const c = parseMoney(text);
         setText(c ? (c / 100).toFixed(2) : "");
+        onCommit?.(c);
       }}
     />
   );

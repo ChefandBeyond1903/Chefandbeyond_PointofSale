@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 export function PercentInput({
   value,
   onValueChange,
+  onCommit,
   className = "input",
   placeholder = "0",
   max = 100,
@@ -13,6 +14,8 @@ export function PercentInput({
 }: {
   value: number;
   onValueChange: (n: number) => void;
+  /** Fired once the value is committed — on blur or Enter. */
+  onCommit?: () => void;
   className?: string;
   placeholder?: string;
   max?: number;
@@ -43,9 +46,13 @@ export function PercentInput({
         const n = parseFloat(raw);
         onValueChange(Number.isFinite(n) ? clamp(n) : 0);
       }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+      }}
       onBlur={() => {
         const n = parseFloat(text.replace(/[^0-9.]/g, ""));
         setText(Number.isFinite(n) ? fmt(clamp(n)) : "");
+        onCommit?.();
       }}
     />
   );
