@@ -52,6 +52,8 @@ export interface Vendor {
   freightMinimumCents: number;
   createdAt?: string;
   productCount?: number;
+  /** Distinct products from this vendor with on-hand stock > 0 (caller's store scope). */
+  inStockProductCount?: number;
 }
 
 export interface Customer {

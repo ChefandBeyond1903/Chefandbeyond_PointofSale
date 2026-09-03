@@ -137,6 +137,7 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
               <th className="px-4 py-2.5">Email</th>
               <th className="px-4 py-2.5">Phone</th>
               <th className="px-4 py-2.5 text-right">Free-freight min.</th>
+              <th className="px-4 py-2.5 text-right">In stock</th>
               <th className="px-4 py-2.5 text-right">Products</th>
               <th className="px-4 py-2.5"></th>
             </tr>
@@ -144,13 +145,13 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
           <tbody className="divide-y divide-zinc-100">
             {loading ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-zinc-400">
+                <td colSpan={8} className="px-4 py-8 text-center text-zinc-400">
                   Loading…
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-zinc-400">
+                <td colSpan={8} className="px-4 py-8 text-center text-zinc-400">
                   {vendors.length === 0
                     ? "No vendors yet. Add one to start."
                     : "No vendors match your search."}
@@ -166,7 +167,10 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
                   <td className="px-4 py-2.5 text-right text-zinc-500">
                     {v.freightMinimumCents > 0 ? formatMoney(v.freightMinimumCents) : "—"}
                   </td>
-                  <td className="px-4 py-2.5 text-right text-zinc-500">{v.productCount ?? 0}</td>
+                  <td className="px-4 py-2.5 text-right font-medium">
+                    {v.inStockProductCount ?? 0}
+                  </td>
+                  <td className="px-4 py-2.5 text-right text-zinc-400">{v.productCount ?? 0}</td>
                   <td className="px-4 py-2.5 text-right whitespace-nowrap">
                     <button
                       onClick={() => setHistoryVendor(v)}
