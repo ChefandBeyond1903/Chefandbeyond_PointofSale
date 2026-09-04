@@ -116,18 +116,57 @@ export async function GET(req: NextRequest) {
       overdueCount: unpaidInvoices.filter((i) => i.overdue).length,
     };
 
-    // Refunds issued in the window (any method) reduce net profit for the period.
-    const refundAgg = limited
-      ? null
-      : await prisma.saleRefund.aggregate({
+    // Refunds issued in the window. A refund is a reversal of (part of) its
+    // sale, so its hit to profit is the margin given back — not the gross
+    // cash — and restocked goods claw the cost back. `refundsCents` is the
+    // total cash refunded (informational); `refundImpactCents` is what net
+    // profit actually loses.
+    const refundRows = limited
+      ? []
+      : await prisma.saleRefund.findMany({
           where: {
             refundedAt: { gte: from, lte: to },
             ...(storeId ? { sale: { storeId } } : {}),
           },
-          _sum: { amountCents: true },
-          _count: true,
+          select: {
+            amountCents: true,
+            restocked: true,
+            sale: {
+              select: {
+                status: true,
+                subtotalCents: true,
+                discountCents: true,
+                totalCents: true,
+                items: { select: { unitCostCents: true, quantity: true } },
+              },
+            },
+          },
         });
-    const refundsCents = refundAgg?._sum.amountCents ?? 0;
+    let refundsCents = 0;
+    let refundImpactCents = 0;
+    for (const r of refundRows) {
+      refundsCents += r.amountCents;
+      const s = r.sale;
+      if (!s || s.totalCents <= 0) {
+        refundImpactCents -= r.amountCents; // no sale to net against — treat as a loss
+        continue;
+      }
+      const frac = Math.min(1, r.amountCents / s.totalCents);
+      const exTaxNet = s.subtotalCents - s.discountCents; // revenue before tax, after discount
+      const cogs = s.items.reduce((a, it) => a + it.unitCostCents * it.quantity, 0);
+      const refundExTax = frac * exTaxNet;
+      const refundCogs = frac * cogs;
+      // A still-COMPLETED sale's full profit is already in `profitCents`, so the
+      // refunded margin is removed here. A REFUNDED / VOIDED sale never made it
+      // into `profitCents`, so only unrecovered cost of goods is a loss.
+      const inBase = s.status === "COMPLETED";
+      const impact = inBase
+        ? -refundExTax + (r.restocked ? refundCogs : 0)
+        : r.restocked
+          ? 0
+          : -refundCogs;
+      refundImpactCents += Math.round(impact);
+    }
 
     // Store credit customers are holding — a liability. Not date-scoped.
     const creditAgg = limited
@@ -319,6 +358,7 @@ export async function GET(req: NextRequest) {
           cardSalesCents: 0,
           cardFeeCents: 0,
           refundsCents: 0,
+          refundImpactCents: 0,
           storeCreditOutstandingCents: 0,
           netProfitCents: 0,
         },
@@ -357,8 +397,10 @@ export async function GET(req: NextRequest) {
         cardSalesCents,
         cardFeeCents: cardFeeCentsTotal,
         refundsCents,
+        refundImpactCents,
         storeCreditOutstandingCents,
-        netProfitCents: profitCents - expensesCents - cardFeeCentsTotal - refundsCents,
+        netProfitCents:
+          profitCents - expensesCents - cardFeeCentsTotal + refundImpactCents,
       },
       expensesByCategory,
       byStore: toRows(byStore),

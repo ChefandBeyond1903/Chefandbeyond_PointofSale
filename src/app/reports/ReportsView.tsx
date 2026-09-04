@@ -507,10 +507,19 @@ function ProfitLoss({ data }: { data: ReportSummary }) {
               Refunds
             </div>
             <PLRow
-              label="Refunds issued this period"
-              value={`(${formatMoney(t.refundsCents)})`}
+              label="Cash refunded this period"
+              value={formatMoney(t.refundsCents)}
               indent
-              negative
+            />
+            <PLRow
+              label="Effect on profit (margin given back, less restocked cost)"
+              value={
+                t.refundImpactCents === 0
+                  ? formatMoney(0)
+                  : `(${formatMoney(-t.refundImpactCents)})`
+              }
+              indent
+              negative={t.refundImpactCents !== 0}
             />
           </>
         )}

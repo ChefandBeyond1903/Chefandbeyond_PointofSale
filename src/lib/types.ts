@@ -438,7 +438,12 @@ export interface OverviewWindow {
 export interface AdminOverview {
   generatedAt: string;
   sales: { today: OverviewWindow; week: OverviewWindow; month: OverviewWindow };
-  month: { expensesCents: number; cardFeeCents: number; netProfitCents: number };
+  month: {
+    expensesCents: number;
+    cardFeeCents: number;
+    refundImpactCents: number;
+    netProfitCents: number;
+  };
   payables: {
     openBills: { count: number; amountCents: number };
     overdueBills: { count: number; amountCents: number };
@@ -518,11 +523,16 @@ export interface ReportSummary {
     cardSalesCents: number;
     /** 3% card-processing fee on those card sales — tracked on its own. */
     cardFeeCents: number;
-    /** Refunds issued in the period (any method). */
+    /** Total cash refunded in the period (any method) — informational. */
     refundsCents: number;
+    /**
+     * What those refunds actually cost profit: the margin given back, net of the
+     * cost of any restocked goods. ≤ 0. This is the figure netted into net profit.
+     */
+    refundImpactCents: number;
     /** Store credit customers currently hold — a liability (not date-scoped). */
     storeCreditOutstandingCents: number;
-    /** Gross profit minus operating expenses, card fees and refunds. */
+    /** Gross profit minus operating expenses and card fees, plus refundImpactCents. */
     netProfitCents: number;
   };
   /** Operating expenses grouped by category, largest first. */

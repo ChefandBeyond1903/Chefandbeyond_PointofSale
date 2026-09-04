@@ -50,6 +50,7 @@ export async function GET() {
       storeCount,
       recentSales,
       recentExpenses,
+      monthRefunds,
     ] = await Promise.all([
       prisma.sale.findMany({
         // A sale counts for the day it was paid, not rung.
@@ -146,6 +147,22 @@ export async function GET() {
           store: { select: { name: true } },
         },
       }),
+      prisma.saleRefund.findMany({
+        where: { refundedAt: { gte: startMonth, lte: now } },
+        select: {
+          amountCents: true,
+          restocked: true,
+          sale: {
+            select: {
+              status: true,
+              subtotalCents: true,
+              discountCents: true,
+              totalCents: true,
+              items: { select: { unitCostCents: true, quantity: true } },
+            },
+          },
+        },
+      }),
     ]);
 
     // Roll the month's sales into today / week / month windows.
@@ -209,13 +226,36 @@ export async function GET() {
     const monthExpensesCents = monthExpenseAgg._sum.amountCents ?? 0;
     const monthCardFeeCents = cardFeeCents(monthCardGrossCents);
 
+    // A refund reverses (part of) its sale: net profit loses the margin given
+    // back, less the cost of anything restocked. ≤ 0.
+    let monthRefundImpactCents = 0;
+    for (const r of monthRefunds) {
+      const s = r.sale;
+      if (!s || s.totalCents <= 0) {
+        monthRefundImpactCents -= r.amountCents;
+        continue;
+      }
+      const frac = Math.min(1, r.amountCents / s.totalCents);
+      const exTaxNet = s.subtotalCents - s.discountCents;
+      const cogs = s.items.reduce((a, it) => a + it.unitCostCents * it.quantity, 0);
+      const impact =
+        s.status === "COMPLETED"
+          ? -frac * exTaxNet + (r.restocked ? frac * cogs : 0)
+          : r.restocked
+            ? 0
+            : -frac * cogs;
+      monthRefundImpactCents += Math.round(impact);
+    }
+
     return ok({
       generatedAt: now.toISOString(),
       sales: { today, week, month },
       month: {
         expensesCents: monthExpensesCents,
         cardFeeCents: monthCardFeeCents,
-        netProfitCents: month.profitCents - monthExpensesCents - monthCardFeeCents,
+        refundImpactCents: monthRefundImpactCents,
+        netProfitCents:
+          month.profitCents - monthExpensesCents - monthCardFeeCents + monthRefundImpactCents,
       },
       payables: {
         openBills: {
