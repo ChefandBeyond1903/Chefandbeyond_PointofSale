@@ -169,6 +169,15 @@ export async function POST(req: NextRequest) {
       throw new HttpError(400, "One or more products no longer exist");
     }
 
+    // A product with no cost can't be sold — the margin would be unknowable.
+    const noCost = products.filter((p) => p.costCents <= 0).map((p) => p.name);
+    if (noCost.length > 0) {
+      throw new HttpError(
+        400,
+        `Cost needs to be entered for: ${noCost.join(", ")}. Set a cost on the product before selling it.`,
+      );
+    }
+
     const priced: PricedInput[] = [];
     let listSubtotalCents = 0;
     for (const p of products) {

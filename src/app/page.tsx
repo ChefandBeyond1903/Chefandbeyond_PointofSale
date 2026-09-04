@@ -505,6 +505,12 @@ export default function RegisterPage() {
       }
     });
 
+    // Products with no cost set can't be sold — surfaced here and blocked on
+    // the server.
+    const noCostItems = cart
+      .filter((l) => (l.product.costCents ?? 0) <= 0)
+      .map((l) => ({ productId: l.product.id, name: l.product.name }));
+
     const discount = lineAdjust;
     const shipping = Math.max(0, shippingCents);
     const total = subtotal - discount + tax + shipping;
@@ -519,6 +525,7 @@ export default function RegisterPage() {
       shipping,
       total,
       umrpViolations,
+      noCostItems,
       sumAfterLine,
       orderDiscountResolved: 0,
       savedCents,
@@ -1322,6 +1329,11 @@ export default function RegisterPage() {
                         )} each (now ${formatMoney(violation.eachCents)})`}
                       </p>
                     )}
+                    {(line.product.costCents ?? 0) <= 0 && (
+                      <p className="mt-2 rounded bg-red-50 px-2 py-1.5 text-xs text-red-700">
+                        No cost set — enter a cost for this product before it can be sold.
+                      </p>
+                    )}
                     <input
                       className="input mt-1.5 h-7 w-full text-xs"
                       placeholder="Serial # (optional)"
@@ -1380,6 +1392,14 @@ export default function RegisterPage() {
               </p>
             )}
 
+            {totals.noCostItems.length > 0 && (
+              <p className="rounded bg-red-50 px-3 py-2 text-xs text-red-700">
+                Cost needs to be entered for{" "}
+                {totals.noCostItems.map((i) => i.name).join(", ")}. These can&apos;t be sold
+                until a cost is set on the product.
+              </p>
+            )}
+
             <button
               onClick={holdSale}
               disabled={cart.length === 0 || holding}
@@ -1402,6 +1422,7 @@ export default function RegisterPage() {
               disabled={
                 cart.length === 0 ||
                 totals.umrpViolations.length > 0 ||
+                totals.noCostItems.length > 0 ||
                 (isAdmin && !sellStoreId)
               }
               className="btn-primary w-full py-3 text-base"
