@@ -11,9 +11,10 @@ export async function GET(req: NextRequest) {
     const user = await requireScopedRole("MANAGER", "ADMIN");
     const { searchParams } = new URL(req.url);
 
+    // Only an admin may pick a store; a manager is pinned to their own.
     const scoped = scopeStoreId(user);
     const requestedStore = searchParams.get("storeId")?.trim() || null;
-    const storeId = scoped ?? requestedStore;
+    const storeId = user.role === "ADMIN" ? requestedStore : scoped;
 
     const [rows, stores] = await Promise.all([
       prisma.storeInventory.findMany({
@@ -101,7 +102,11 @@ export async function GET(req: NextRequest) {
 
     return ok({
       generatedAt: new Date().toISOString(),
-      scope: { allStores: !storeId, storeId: storeId ?? null, storeName },
+      scope: {
+        allStores: user.role === "ADMIN" && !storeId,
+        storeId: storeId ?? null,
+        storeName,
+      },
       stores: user.role === "ADMIN" ? stores : [],
       byVendor,
       totals,

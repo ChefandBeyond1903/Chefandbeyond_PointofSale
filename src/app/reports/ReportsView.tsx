@@ -154,8 +154,19 @@ export function ReportsView({
       {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       {loading || !data ? (
         <p className="text-sm text-zinc-500">Loading…</p>
+      ) : data.scope.noStoreAssigned ? (
+        <p className="rounded bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          You&apos;re not assigned to a store yet. Reports are limited to your own
+          store — ask an admin to assign you.
+        </p>
       ) : (
         <div className="space-y-4">
+          {!isAdmin && data.scope.storeName && (
+            <p className="text-sm text-zinc-500">
+              Showing <span className="font-medium text-zinc-700">{data.scope.storeName}</span>
+              {" only — your assigned store."}
+            </p>
+          )}
           {!limited && (
             <>
               <div className="grid grid-cols-2 gap-3 md:grid-cols-4">

@@ -507,7 +507,13 @@ export interface ProfitRow {
 
 export interface ReportSummary {
   range: { from: string; to: string };
-  scope: { allStores: boolean; storeId: string | null; storeName: string | null };
+  scope: {
+    allStores: boolean;
+    storeId: string | null;
+    storeName: string | null;
+    /** Non-admin caller isn't assigned to a store — nothing to report. */
+    noStoreAssigned?: boolean;
+  };
   stores: { id: string; name: string }[];
   /** Cashier view: money figures stripped, only top products + invoices. */
   limited: boolean;

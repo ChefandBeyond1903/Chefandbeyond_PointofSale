@@ -25,11 +25,14 @@ export async function GET(req: NextRequest) {
     const from = searchParams.get("from") ? new Date(searchParams.get("from")!) : startOfDay(now);
     const to = searchParams.get("to") ? new Date(searchParams.get("to")!) : now;
 
-    // Store scope: a manager is pinned to their store; an admin sees every store
-    // unless they pick one with ?storeId=.
+    // Store scope: only an admin may choose a store (or see all); a manager or
+    // cashier is always pinned to their own assigned store — the ?storeId= param
+    // is ignored for them.
     const scoped = scopeStoreId(user);
     const requestedStore = searchParams.get("storeId")?.trim() || null;
-    const storeId = scoped ?? requestedStore;
+    const storeId = user.role === "ADMIN" ? requestedStore : scoped;
+    // Non-admin with no store assigned — nothing to report.
+    const noStoreAssigned = scoped === "__none__";
 
     // A sale counts for the period it was PAID in, not when it was rung — an
     // unpaid invoice isn't revenue until the money comes in.
@@ -345,6 +348,7 @@ export async function GET(req: NextRequest) {
           allStores: false,
           storeId: storeId ?? null,
           storeName: storeId ? (storeNameById.get(storeId) ?? null) : null,
+          noStoreAssigned,
         },
         stores: [],
         limited: true,
@@ -381,9 +385,10 @@ export async function GET(req: NextRequest) {
     return ok({
       range: { from: from.toISOString(), to: to.toISOString() },
       scope: {
-        allStores: !storeId,
+        allStores: user.role === "ADMIN" && !storeId,
         storeId: storeId ?? null,
         storeName: storeId ? (storeNameById.get(storeId) ?? null) : null,
+        noStoreAssigned,
       },
       stores: user.role === "ADMIN" ? stores : [],
       limited: false,
