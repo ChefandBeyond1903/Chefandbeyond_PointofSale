@@ -66,6 +66,7 @@ export async function GET() {
             select: {
               productId: true,
               nameSnapshot: true,
+              skuSnapshot: true,
               quantity: true,
               unitPriceCents: true,
               unitCostCents: true,
@@ -153,7 +154,10 @@ export async function GET() {
     const month = emptyWin();
     let monthCardGrossCents = 0;
     const byStoreMap = new Map<string, { label: string; grossCents: number; profitCents: number }>();
-    const byProductMap = new Map<string, { name: string; quantity: number; revenueCents: number }>();
+    const byProductMap = new Map<
+      string,
+      { name: string; sku: string; quantity: number; revenueCents: number }
+    >();
 
     for (const s of monthSales) {
       let net = 0;
@@ -165,6 +169,7 @@ export async function GET() {
         qty += it.quantity;
         const p = byProductMap.get(it.productId) ?? {
           name: it.nameSnapshot,
+          sku: it.skuSnapshot,
           quantity: 0,
           revenueCents: 0,
         };

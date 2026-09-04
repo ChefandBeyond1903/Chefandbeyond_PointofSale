@@ -197,7 +197,7 @@ export function ReportsView({
                   <tbody className="divide-y divide-zinc-100">
                     {data.topProducts.map((p) => (
                       <tr key={p.productId}>
-                        <td className="py-2">{p.name}</td>
+                        <td className="py-2 font-mono">{p.sku || p.name}</td>
                         <td className="py-2 text-right text-zinc-500">{p.quantity} sold</td>
                         <td className="py-2 text-right font-medium">{formatMoney(p.revenueCents)}</td>
                       </tr>

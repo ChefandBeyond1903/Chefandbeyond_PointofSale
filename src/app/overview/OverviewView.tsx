@@ -244,7 +244,7 @@ export function OverviewView() {
                   <tbody className="divide-y divide-zinc-100">
                     {data.topProducts.map((p) => (
                       <tr key={p.productId}>
-                        <td className="py-1.5 pr-2">{p.name}</td>
+                        <td className="py-1.5 pr-2 font-mono">{p.sku || p.name}</td>
                         <td className="py-1.5 pr-2 text-right whitespace-nowrap text-zinc-500">
                           {p.quantity} sold
                         </td>

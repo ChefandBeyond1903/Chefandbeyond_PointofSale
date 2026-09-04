@@ -63,6 +63,7 @@ export async function GET(req: NextRequest) {
             select: {
               productId: true,
               nameSnapshot: true,
+              skuSnapshot: true,
               quantity: true,
               unitPriceCents: true,
               unitCostCents: true,
@@ -172,7 +173,10 @@ export async function GET(req: NextRequest) {
       { label: string; saleCount: number; net: number; cost: number; profit: number }
     >();
     const byMethod = new Map<string, { count: number; totalCents: number }>();
-    const byProduct = new Map<string, { name: string; quantity: number; revenueCents: number }>();
+    const byProduct = new Map<
+      string,
+      { name: string; sku: string; quantity: number; revenueCents: number }
+    >();
 
     const recentSales = [];
 
@@ -193,6 +197,7 @@ export async function GET(req: NextRequest) {
 
         const p = byProduct.get(it.productId) ?? {
           name: it.nameSnapshot,
+          sku: it.skuSnapshot,
           quantity: 0,
           revenueCents: 0,
         };

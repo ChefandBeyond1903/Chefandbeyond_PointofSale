@@ -466,7 +466,7 @@ export interface AdminOverview {
   };
   directory: { vendors: number; customers: number; staff: number; stores: number };
   byStore: { label: string; grossCents: number; profitCents: number }[];
-  topProducts: { productId: string; name: string; quantity: number; revenueCents: number }[];
+  topProducts: { productId: string; name: string; sku: string; quantity: number; revenueCents: number }[];
   recentSales: {
     id: string;
     number: number;
@@ -530,7 +530,7 @@ export interface ReportSummary {
   byStore: ProfitRow[];
   byStaff: ProfitRow[];
   byPaymentMethod: { method: string; count: number; totalCents: number }[];
-  topProducts: { productId: string; name: string; quantity: number; revenueCents: number }[];
+  topProducts: { productId: string; name: string; sku: string; quantity: number; revenueCents: number }[];
   recentSales: {
     id: string;
     number: number;
