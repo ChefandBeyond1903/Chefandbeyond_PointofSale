@@ -56,6 +56,9 @@ model User {
   // Supabase Auth user id (auth.users.id). Identity and passwords live in
   // Supabase; this row carries the POS role/store assignment.
   authId    String?  @unique
+  // Rotated on every login. Only the device holding the matching cookie stays
+  // signed in — a new login elsewhere logs the others out.
+  sessionToken String?
   role      String   @default("CASHIER")
   active    Boolean  @default(true)
   createdAt DateTime @default(now())

@@ -35,6 +35,17 @@ export async function api<T = unknown>(path: string, init?: RequestInit): Promis
     if (body && typeof body === "object" && "error" in body) {
       msg = String((body as { error: unknown }).error);
     }
+    // Session ended (signed out elsewhere, deactivated, expired) — bounce to
+    // the login page instead of surfacing a raw error on every widget.
+    if (
+      res.status === 401 &&
+      typeof window !== "undefined" &&
+      window.location.pathname !== "/login" &&
+      !path.startsWith("/api/auth/login")
+    ) {
+      const next = encodeURIComponent(window.location.pathname + window.location.search);
+      window.location.replace(`/login?next=${next}`);
+    }
     throw new ApiError(res.status, msg, body);
   }
   return body as T;
