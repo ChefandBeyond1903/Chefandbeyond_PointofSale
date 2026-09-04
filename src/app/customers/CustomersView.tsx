@@ -4,8 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
 import { formatPhone } from "@/lib/phone";
+import { formatDateOnly } from "@/lib/date";
 import { MoneyInput } from "@/components/MoneyInput";
 import { PhoneInput } from "@/components/PhoneInput";
+import { InvoiceModal } from "@/components/InvoiceModal";
 import type { Customer, StoreCreditEntry } from "@/lib/types";
 
 const TERMS = ["Net 15", "Net 30", "Net 45", "Net 60"] as const;
@@ -47,7 +49,13 @@ function certExpired(iso: string | null | undefined): boolean {
   return !Number.isNaN(d.getTime()) && d < new Date(new Date().toDateString());
 }
 
-export function CustomersView({ canManage = true }: { canManage?: boolean }) {
+export function CustomersView({
+  canManage = true,
+  isAdmin = false,
+}: {
+  canManage?: boolean;
+  isAdmin?: boolean;
+}) {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
@@ -55,6 +63,7 @@ export function CustomersView({ canManage = true }: { canManage?: boolean }) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
   const [docBusy, setDocBusy] = useState(false);
+  const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
 
   // Store credit for the customer open in the drawer.
   const [credit, setCredit] = useState<number | null>(null);
@@ -63,10 +72,23 @@ export function CustomersView({ canManage = true }: { canManage?: boolean }) {
   const [creditReason, setCreditReason] = useState("");
   const [creditBusy, setCreditBusy] = useState(false);
 
+  // The open customer's sales / invoice history.
+  const [custSales, setCustSales] = useState<NonNullable<Customer["sales"]>>([]);
+
+  const loadCustSales = useCallback(async (id: string) => {
+    try {
+      const r = await api<{ customer: Customer }>(`/api/customers/${id}`);
+      setCustSales(r.customer.sales ?? []);
+    } catch {
+      setCustSales([]);
+    }
+  }, []);
+
   useEffect(() => {
-    if (!draft?.id) {
+    if (!draft?.id || !canManage) {
       setCredit(null);
       setLedger([]);
+      setCustSales([]);
       return;
     }
     api<{ storeCreditCents: number; ledger: StoreCreditEntry[] }>(
@@ -77,7 +99,8 @@ export function CustomersView({ canManage = true }: { canManage?: boolean }) {
         setLedger(r.ledger);
       })
       .catch(() => {});
-  }, [draft?.id]);
+    loadCustSales(draft.id);
+  }, [draft?.id, canManage, loadCustSales]);
 
   async function adjustCredit(sign: 1 | -1) {
     if (!draft?.id || creditAmt <= 0) return;
@@ -586,6 +609,58 @@ export function CustomersView({ canManage = true }: { canManage?: boolean }) {
                   )}
                 </div>
               )}
+
+              {draft.id && (
+                <div className="rounded-md border border-zinc-200 p-3">
+                  <p className="mb-2 text-sm font-medium">
+                    Sales &amp; invoices
+                    <span className="ml-2 font-normal text-zinc-400">{custSales.length}</span>
+                  </p>
+                  {custSales.length === 0 ? (
+                    <p className="text-xs text-zinc-400">No sales yet.</p>
+                  ) : (
+                    <ul className="max-h-56 divide-y divide-zinc-100 overflow-y-auto text-sm">
+                      {custSales.map((s) => {
+                        const balance = (s.totalCents ?? 0) - (s.amountPaidCents ?? 0);
+                        const badge =
+                          s.status === "REFUNDED"
+                            ? { t: "Refunded", c: "bg-zinc-200 text-zinc-600" }
+                            : s.status === "INVOICED"
+                              ? { t: `Owes ${formatMoney(balance)}`, c: "bg-amber-100 text-amber-700" }
+                              : (s.refundedCents ?? 0) > 0
+                                ? { t: "Part-refunded", c: "bg-orange-100 text-orange-700" }
+                                : { t: "Paid", c: "bg-green-100 text-green-700" };
+                        return (
+                          <li key={s.id}>
+                            <button
+                              type="button"
+                              onClick={() => setOpenInvoiceId(s.id)}
+                              className="flex w-full items-center justify-between gap-2 py-1.5 text-left hover:bg-zinc-50"
+                            >
+                              <span>
+                                <span className="font-medium">#{s.number}</span>
+                                <span className="ml-2 text-xs text-zinc-400">
+                                  {formatDateOnly(s.createdAt)}
+                                </span>
+                              </span>
+                              <span className="flex items-center gap-2">
+                                <span
+                                  className={`rounded-full px-2 py-0.5 text-[11px] ${badge.c}`}
+                                >
+                                  {badge.t}
+                                </span>
+                                <span className="font-medium tabular-nums">
+                                  {formatMoney(s.totalCents)}
+                                </span>
+                              </span>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+              )}
             </div>
 
             {error && <p className="mt-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
@@ -604,6 +679,19 @@ export function CustomersView({ canManage = true }: { canManage?: boolean }) {
             </div>
           </div>
         </div>
+      )}
+
+      {openInvoiceId && (
+        <InvoiceModal
+          saleId={openInvoiceId}
+          onClose={() => setOpenInvoiceId(null)}
+          onChanged={() => {
+            if (draft?.id) loadCustSales(draft.id);
+            load();
+          }}
+          canManage={canManage}
+          isAdmin={isAdmin}
+        />
       )}
     </div>
   );

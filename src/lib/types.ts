@@ -74,7 +74,17 @@ export interface Customer {
   storeCreditCents: number;
   createdAt?: string;
   _count?: { sales: number };
-  sales?: { id: string; number: number; totalCents: number; createdAt: string }[];
+  sales?: {
+    id: string;
+    number: number;
+    totalCents: number;
+    amountPaidCents?: number;
+    refundedCents?: number;
+    status?: string;
+    paidAt?: string | null;
+    dueDate?: string | null;
+    createdAt: string;
+  }[];
   storeCreditLedger?: StoreCreditEntry[];
 }
 

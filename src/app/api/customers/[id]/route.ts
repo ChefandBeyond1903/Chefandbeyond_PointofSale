@@ -17,8 +17,18 @@ export async function GET(_req: NextRequest, { params }: Params) {
         _count: { select: { sales: true } },
         sales: {
           orderBy: { createdAt: "desc" },
-          take: 50,
-          select: { id: true, number: true, totalCents: true, createdAt: true },
+          take: 200,
+          select: {
+            id: true,
+            number: true,
+            totalCents: true,
+            amountPaidCents: true,
+            refundedCents: true,
+            status: true,
+            paidAt: true,
+            dueDate: true,
+            createdAt: true,
+          },
         },
         storeCreditLedger: {
           orderBy: { createdAt: "desc" },

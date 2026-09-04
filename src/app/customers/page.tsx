@@ -5,5 +5,10 @@ import { CustomersView } from "./CustomersView";
 export default async function CustomersPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/customers");
-  return <CustomersView canManage={user.role !== "CASHIER"} />;
+  return (
+    <CustomersView
+      canManage={user.role !== "CASHIER"}
+      isAdmin={user.role === "ADMIN"}
+    />
+  );
 }
