@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { HttpError } from "@/lib/auth";
 import { requireScopedUser, requireScopedRole, scopeStoreId } from "@/lib/scope";
 import { salePaymentSchema, saleEditSchema } from "@/lib/validation";
-import { parseDateInput } from "@/lib/date";
+import { parseEventDate } from "@/lib/date";
 import { ok, toErrorResponse } from "@/lib/api";
 
 type Params = { params: Promise<{ id: string }> };
@@ -138,7 +138,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       }
     }
 
-    const paidAt = body.paidAt ? parseDateInput(body.paidAt) : new Date();
+    // Never stamp a payment in the future — that would drop the sale out of
+    // "up to now" report ranges (a "today" date anchors at noon UTC).
+    const paidAt = parseEventDate(body.paidAt);
     const newPaidCents = sale.amountPaidCents + amountCents;
     const settled = newPaidCents >= sale.totalCents;
 

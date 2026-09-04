@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney, formatBps } from "@/lib/money";
-import { formatDateOnly } from "@/lib/date";
+import { formatDateOnly, todayInputValue } from "@/lib/date";
 import { MoneyInput } from "@/components/MoneyInput";
 import { ReceiptModal } from "@/components/ReceiptModal";
 import type { InvoiceDetail, PurchaseOrder, Vendor } from "@/lib/types";
@@ -49,7 +49,7 @@ export function InvoiceModal({
 
   // Recording a payment (deposit / partial / final) against an open invoice.
   const [payMethod, setPayMethod] = useState<"CASH" | "CARD" | "CREDIT">("CASH");
-  const [payDate, setPayDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [payDate, setPayDate] = useState(todayInputValue);
   const [payAmount, setPayAmount] = useState(0);
   const [payBusy, setPayBusy] = useState(false);
 
@@ -100,7 +100,7 @@ export function InvoiceModal({
   const [refundAmount, setRefundAmount] = useState(0);
   const [refundRestock, setRefundRestock] = useState(true);
   const [refundReason, setRefundReason] = useState("");
-  const [refundDate, setRefundDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [refundDate, setRefundDate] = useState(todayInputValue);
   const [refundBusy, setRefundBusy] = useState(false);
 
   async function doRefund() {

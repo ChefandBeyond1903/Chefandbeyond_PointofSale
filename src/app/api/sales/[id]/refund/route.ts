@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { HttpError } from "@/lib/auth";
 import { requireScopedRole, scopeStoreId } from "@/lib/scope";
 import { saleRefundSchema } from "@/lib/validation";
-import { parseDateInput } from "@/lib/date";
+import { parseEventDate } from "@/lib/date";
 import { ok, toErrorResponse } from "@/lib/api";
 
 type Params = { params: Promise<{ id: string }> };
@@ -38,7 +38,8 @@ export async function POST(req: NextRequest, { params }: Params) {
     const alreadyRestocked = sale.refunds.some((r) => r.restocked);
     const doRestock = body.restock && !alreadyRestocked && !!sale.storeId;
 
-    const refundedAt = body.refundedAt ? parseDateInput(body.refundedAt) : new Date();
+    // Never stamp a refund in the future (a "today" date anchors at noon UTC).
+    const refundedAt = parseEventDate(body.refundedAt);
     const openShift = await prisma.shift.findFirst({
       where: { userId: actor.id, status: "OPEN" },
       orderBy: { openedAt: "desc" },
