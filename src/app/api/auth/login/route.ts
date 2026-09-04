@@ -27,6 +27,13 @@ export async function POST(req: NextRequest) {
       return genericError();
     }
 
+    // Single active session per user: revoke every other session's refresh
+    // token, keeping only the one just created. Other devices stay usable until
+    // their current access token expires (~1h), then can't refresh.
+    await supabase.auth.signOut({ scope: "others" }).catch((e) => {
+      console.warn("Could not sign out other sessions:", e);
+    });
+
     return ok({
       user: { id: row.id, email: row.email, name: row.name, role: toRole(row.role) },
     });
