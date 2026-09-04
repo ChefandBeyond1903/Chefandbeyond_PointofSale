@@ -23,15 +23,17 @@
 
 html {
   /* Nothing may push the viewport sideways on any screen. Wide content
-     (tables, wide grids) scrolls inside its own overflow-x-auto container. */
-  overflow-x: hidden;
+     (tables, wide grids) scrolls inside its own overflow-x-auto container.
+     `clip` (not `hidden`) so it doesn't become a scroll container — that
+     would stop `position: sticky` on the header from working. */
+  overflow-x: clip;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, Arial, sans-serif;
-  overflow-x: hidden;
+  overflow-x: clip;
   /* Long unbroken tokens (SKUs, URLs, emails) wrap instead of forcing width. */
   overflow-wrap: break-word;
 }

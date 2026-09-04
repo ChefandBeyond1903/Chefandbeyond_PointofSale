@@ -26,7 +26,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
 
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="flex min-h-full flex-col overflow-x-hidden">
+      <body className="flex min-h-full flex-col overflow-x-clip">
         <PullToRefresh />
         {user && <Nav user={user} />}
         <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col">{children}</main>
