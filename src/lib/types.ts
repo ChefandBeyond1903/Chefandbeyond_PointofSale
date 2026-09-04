@@ -398,6 +398,55 @@ export interface Sale {
   items: SaleItem[];
 }
 
+export interface QuoteItem {
+  id: string;
+  productId: string;
+  nameSnapshot: string;
+  skuSnapshot: string;
+  unitPriceCents: number;
+  quantity: number;
+  discountCents: number;
+  taxRateBps: number;
+  lineTotalCents: number;
+}
+
+export type QuoteStatus = "OPEN" | "APPROVED" | "REJECTED" | "CONVERTED";
+
+export interface Quote {
+  id: string;
+  number: number;
+  status: QuoteStatus;
+  subtotalCents: number;
+  listSubtotalCents: number;
+  discountCents: number;
+  taxCents: number;
+  taxRateBps: number;
+  shippingCents: number;
+  totalCents: number;
+  note: string;
+  storeId?: string | null;
+  storeNameSnapshot?: string;
+  customerId?: string | null;
+  customer?: { id: string; name: string } | null;
+  customerNameSnapshot?: string;
+  customerCompanySnapshot?: string;
+  customerEmailSnapshot?: string;
+  customerPhoneSnapshot?: string;
+  customerAddressSnapshot?: string;
+  createdById?: string;
+  createdBy?: { id: string; name: string };
+  convertedSaleId?: string | null;
+  convertedSale?: { id: string; number: number; status: string } | null;
+  convertedAt?: string | null;
+  createdAt: string;
+  items: QuoteItem[];
+}
+
+export interface QuoteDetail {
+  quote: Quote;
+  products: Product[];
+}
+
 export interface Shift {
   id: string;
   openingFloatCents: number;

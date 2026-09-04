@@ -224,6 +224,25 @@ export const saleCreateSchema = z.object({
 });
 
 // Record a payment (deposit, partial, or final) against an INVOICED sale.
+// A price quote — same line-item shape as a sale, minus payment. items reuse
+// saleItemSchema; serialNumber is simply ignored server-side for a quote.
+export const quoteCreateSchema = z.object({
+  items: z.array(saleItemSchema).min(1),
+  orderDiscountCents: z.number().int().min(0).default(0),
+  shippingCents: z.number().int().min(0).default(0),
+  note: z.string().trim().max(2000).default(""),
+  storeId: z.string().min(1).optional(),
+  customerId: z.string().min(1).optional(),
+  customer: saleCustomerSchema.partial().optional(),
+});
+
+// Approve / reject / reopen a quote, or (set internally once the register
+// finishes the resulting sale) mark it converted.
+export const quoteStatusSchema = z.object({
+  status: z.enum(["OPEN", "APPROVED", "REJECTED", "CONVERTED"]),
+  convertedSaleId: z.string().min(1).optional(),
+});
+
 export const salePaymentSchema = z.object({
   paymentMethod: z.enum(["CASH", "CARD", "CHECK", "CREDIT"]),
   // The customer's check number, when paymentMethod is CHECK.

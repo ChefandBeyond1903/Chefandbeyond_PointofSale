@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney, formatBps, taxOn } from "@/lib/money";
 import { MoneyInput } from "@/components/MoneyInput";
@@ -17,6 +18,7 @@ import type {
   HeldSaleDetail,
   HeldSaleSummary,
   Product,
+  Quote,
   Role,
   Sale,
   Shift,
@@ -82,6 +84,7 @@ function lineNetCents(l: CartLine): number {
 }
 
 export default function RegisterPage() {
+  const router = useRouter();
   const [favorites, setFavorites] = useState<Product[]>([]);
   const [allProducts, setAllProducts] = useState<Product[] | null>(null);
   const [searchHits, setSearchHits] = useState<Product[] | null>(null);
@@ -120,6 +123,10 @@ export default function RegisterPage() {
   const [held, setHeld] = useState<HeldSaleSummary[]>([]);
   const [heldOpen, setHeldOpen] = useState(false);
   const [holding, setHolding] = useState(false);
+  const [savingQuote, setSavingQuote] = useState(false);
+  // Set while converting an approved quote — the cart came from it, so once
+  // the resulting sale saves, the quote gets marked CONVERTED and linked to it.
+  const [fromQuoteId, setFromQuoteId] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<Sale | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [role, setRole] = useState<Role | null>(null);
@@ -241,6 +248,17 @@ export default function RegisterPage() {
 
   useEffect(() => () => {
     if (flashTimer.current) clearTimeout(flashTimer.current);
+  }, []);
+
+  // Arriving from "Convert to invoice" on an approved quote (/?fromQuote=id):
+  // load its items into the cart, then drop the param from the URL.
+  useEffect(() => {
+    const qid = new URLSearchParams(window.location.search).get("fromQuote");
+    if (qid) {
+      loadQuoteIntoCart(qid);
+      window.history.replaceState(null, "", "/");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Rehydrate the in-progress ticket from the last visit.
@@ -751,6 +769,51 @@ export default function RegisterPage() {
     }
   }
 
+  // Load an approved quote's items into the cart to finish it as an invoice.
+  // The quote itself isn't touched yet — it's marked CONVERTED (and linked to
+  // the resulting sale) once that sale actually saves, in afterSaleSaved.
+  async function loadQuoteIntoCart(id: string) {
+    if (cart.length > 0 && !confirm("Replace the current sale with this quote?")) return;
+    setError(null);
+    try {
+      const res = await api<{ quote: Quote; products: Product[] }>(`/api/quotes/${id}`);
+      if (res.quote.status !== "APPROVED") {
+        setError("Approve the quote before converting it to an invoice.");
+        return;
+      }
+      const byId = new Map(res.products.map((p) => [p.id, p]));
+      const lines: CartLine[] = [];
+      for (const l of res.quote.items) {
+        const product = byId.get(l.productId);
+        if (!product) continue; // product was removed since the quote was made
+        lines.push({
+          product,
+          quantity: l.quantity,
+          unitPriceCents: l.unitPriceCents,
+          discountCents: l.discountCents,
+          discPercent: 0,
+          discMode: "AMOUNT",
+        });
+      }
+      if (lines.length === 0) {
+        setError("None of the quoted items are still available.");
+        return;
+      }
+      setCart(lines);
+      setShippingCents(res.quote.shippingCents);
+      setCustId(res.quote.customerId ?? null);
+      setCustName(res.quote.customerNameSnapshot ?? "");
+      setCustEmail(res.quote.customerEmailSnapshot ?? "");
+      setCustPhone(res.quote.customerPhoneSnapshot ?? "");
+      setCustAddress(res.quote.customerAddressSnapshot ?? "");
+      setCustCompany(res.quote.customerCompanySnapshot ?? "");
+      setCustOpen(false);
+      setFromQuoteId(id);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not load the quote");
+    }
+  }
+
   function onSearchKeyDown(e: React.KeyboardEvent) {
     if (e.key !== "Enter") return;
     if (filtered.length === 1) {
@@ -796,6 +859,36 @@ export default function RegisterPage() {
     if (allProducts) loadAllProducts();
     loadShift();
     loadCustomers();
+    // This sale came from converting a quote — mark it converted and linked.
+    if (fromQuoteId) {
+      const qid = fromQuoteId;
+      setFromQuoteId(null);
+      api(`/api/quotes/${qid}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "CONVERTED", convertedSaleId: sale.id }),
+      }).catch(() => {});
+    }
+  }
+
+  // Save the current cart as a quote instead of a sale — no payment, no
+  // inventory movement. Same UMRP / cost rules as a sale apply server-side.
+  async function saveQuote() {
+    if (cart.length === 0 || savingQuote) return;
+    setError(null);
+    if (isAdmin && !sellStoreId) {
+      setError("Choose a store to sell from.");
+      return;
+    }
+    setSavingQuote(true);
+    try {
+      await api("/api/quotes", { method: "POST", body: JSON.stringify(salePayloadBase()) });
+      clearCart();
+      router.push("/quotes");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not save the quote");
+    } finally {
+      setSavingQuote(false);
+    }
   }
 
   // Terms customer: save the sale as an unpaid invoice — no payment taken now.
@@ -1413,13 +1506,29 @@ export default function RegisterPage() {
               </p>
             )}
 
-            <button
-              onClick={holdSale}
-              disabled={cart.length === 0 || holding}
-              className="btn-secondary mt-1 w-full"
-            >
-              {holding ? "Holding…" : "Hold sale for later"}
-            </button>
+            <div className="mt-1 flex gap-2">
+              <button
+                onClick={holdSale}
+                disabled={cart.length === 0 || holding}
+                className="btn-secondary flex-1"
+              >
+                {holding ? "Holding…" : "Hold sale"}
+              </button>
+              <button
+                onClick={saveQuote}
+                disabled={
+                  cart.length === 0 ||
+                  savingQuote ||
+                  totals.umrpViolations.length > 0 ||
+                  totals.noCostItems.length > 0 ||
+                  (isAdmin && !sellStoreId)
+                }
+                className="btn-secondary flex-1"
+                title="Save this cart as a quote for the customer to approve later"
+              >
+                {savingQuote ? "Saving…" : "Save as quote"}
+              </button>
+            </div>
             {isAdmin && !sellStoreId && cart.length > 0 && (
               <p className="text-xs text-amber-700">Choose a store to sell from (top of the ticket).</p>
             )}
