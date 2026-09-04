@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireUser, requireRole, HttpError } from "@/lib/auth";
+import { HttpError } from "@/lib/auth";
+import { requireScopedUser, requireScopedRole, assertCustomerInScope } from "@/lib/scope";
 import { supabaseAdmin } from "@/lib/supabase";
 import {
   TAX_EXEMPT_BUCKET,
@@ -16,8 +17,9 @@ type Params = { params: Promise<{ id: string }> };
 // A time-limited download link for the customer's exemption certificate.
 export async function GET(_req: NextRequest, { params }: Params) {
   try {
-    await requireUser();
+    const actor = await requireScopedUser();
     const { id } = await params;
+    await assertCustomerInScope(id, actor);
     const customer = await prisma.customer.findUnique({
       where: { id },
       select: { taxExemptDocPath: true, taxExemptDocName: true },
@@ -38,8 +40,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
 // Upload (or replace) the exemption certificate. multipart/form-data, field "file".
 export async function POST(req: NextRequest, { params }: Params) {
   try {
-    await requireRole("MANAGER", "ADMIN");
+    const actor = await requireScopedRole("MANAGER", "ADMIN");
     const { id } = await params;
+    await assertCustomerInScope(id, actor);
     const customer = await prisma.customer.findUnique({
       where: { id },
       select: { id: true, taxExemptDocPath: true },
@@ -86,8 +89,9 @@ export async function POST(req: NextRequest, { params }: Params) {
 // Remove the certificate from storage and clear it off the customer.
 export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
-    await requireRole("MANAGER", "ADMIN");
+    const actor = await requireScopedRole("MANAGER", "ADMIN");
     const { id } = await params;
+    await assertCustomerInScope(id, actor);
     const customer = await prisma.customer.findUnique({
       where: { id },
       select: { taxExemptDocPath: true },

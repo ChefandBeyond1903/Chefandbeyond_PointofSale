@@ -166,10 +166,14 @@ export async function GET(req: NextRequest) {
       if (s.status !== "COMPLETED") refundedSaleAddbackCents += Math.round(margin);
     }
 
-    // Store credit customers are holding — a liability. Not date-scoped.
+    // Store credit customers are holding — a liability. Not date-scoped; scoped
+    // to the report's store when one is in effect.
     const creditAgg = limited
       ? null
-      : await prisma.customer.aggregate({ _sum: { storeCreditCents: true } });
+      : await prisma.customer.aggregate({
+          _sum: { storeCreditCents: true },
+          ...(storeId ? { where: { storeId } } : {}),
+        });
     const storeCreditOutstandingCents = creditAgg?._sum.storeCreditCents ?? 0;
 
     // Operating expenses in the same window and store scope, for the P&L.

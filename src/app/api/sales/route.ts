@@ -99,12 +99,18 @@ export async function POST(req: NextRequest) {
       const c = await prisma.customer.findUnique({
         where: { id: body.customerId },
         select: {
+          storeId: true,
           taxExempt: true,
           taxExemptExpiresAt: true,
           paymentTerms: true,
           storeCreditCents: true,
         },
       });
+      // Customers belong to the store that created them — you can't ring a sale
+      // against another store's customer.
+      if (c && storeId && c.storeId && c.storeId !== storeId) {
+        throw new HttpError(400, "That customer belongs to another store.");
+      }
       if (c) {
         customerTerms = c.paymentTerms ?? "";
         customerStoreCreditCents = c.storeCreditCents;
@@ -318,8 +324,12 @@ export async function POST(req: NextRequest) {
         cSnap = { name: c.name, company: c.company, email: c.email, phone: c.phone, address: c.address };
       } else if (body.customer) {
         const inp = body.customer;
+        // Match / create within the selling store only — each store keeps its
+        // own customer list.
+        const scopeWhere = storeId ? { storeId } : { storeId: null };
         const existing = await tx.customer.findFirst({
           where: {
+            ...scopeWhere,
             OR: [{ name: inp.name }, ...(inp.email ? [{ email: inp.email }] : [])],
           },
         });
@@ -342,6 +352,7 @@ export async function POST(req: NextRequest) {
               phone: inp.phone,
               address: inp.address,
               company: inp.company,
+              storeId: storeId ?? null,
             },
           });
           customerId = c.id;

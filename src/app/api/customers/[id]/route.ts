@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireRole, HttpError } from "@/lib/auth";
+import { HttpError } from "@/lib/auth";
+import { requireScopedRole, assertCustomerInScope } from "@/lib/scope";
 import { customerUpdateSchema } from "@/lib/validation";
 import { parseDateInput } from "@/lib/date";
 import { ok, toErrorResponse } from "@/lib/api";
@@ -9,8 +10,9 @@ type Params = { params: Promise<{ id: string }> };
 
 export async function GET(_req: NextRequest, { params }: Params) {
   try {
-    await requireRole("MANAGER", "ADMIN");
+    const actor = await requireScopedRole("MANAGER", "ADMIN");
     const { id } = await params;
+    await assertCustomerInScope(id, actor);
     const customer = await prisma.customer.findUnique({
       where: { id },
       include: {
@@ -54,8 +56,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
-    await requireRole("MANAGER", "ADMIN");
+    const actor = await requireScopedRole("MANAGER", "ADMIN");
     const { id } = await params;
+    await assertCustomerInScope(id, actor);
     const parsed = customerUpdateSchema.parse(await req.json());
     const data: Record<string, unknown> = { ...parsed };
     // "" / null clears the expiry; a string becomes a Date; undefined is left alone.
@@ -73,8 +76,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
 export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
-    await requireRole("MANAGER", "ADMIN");
+    const actor = await requireScopedRole("MANAGER", "ADMIN");
     const { id } = await params;
+    await assertCustomerInScope(id, actor);
     // Past sales keep their customer snapshot; only the directory link clears.
     await prisma.customer.delete({ where: { id } });
     return ok({ ok: true });

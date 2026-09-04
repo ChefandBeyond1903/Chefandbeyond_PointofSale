@@ -45,6 +45,7 @@ model Store {
   inventory      StoreInventory[]
   bills          Bill[]
   expenses       Expense[]
+  customers      Customer[]
 }
 
 /// Staff who can sign in. role is "CASHIER", "MANAGER" (scoped to one store),
@@ -146,7 +147,7 @@ model Vendor {
 /// invoiced to a customer name, and can be edited here afterward.
 model Customer {
   id        String   @id @default(cuid())
-  name      String   @unique
+  name      String
   email     String   @default("")
   phone     String   @default("")
   address   String   @default("")
@@ -172,10 +173,19 @@ model Customer {
   // StoreCreditEntry so the balance is auditable.
   storeCreditCents Int @default(0)
 
+  // The store that created this customer. Non-admin staff only see their own
+  // store's customers; an admin sees all. Null = created before scoping / by an
+  // admin with no store.
+  storeId String?
+  store   Store?  @relation(fields: [storeId], references: [id])
+
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
   sales             Sale[]
   storeCreditLedger StoreCreditEntry[]
+
+  @@index([storeId])
+  @@index([name])
 }
 
 /// One movement of a customer's store-credit balance.

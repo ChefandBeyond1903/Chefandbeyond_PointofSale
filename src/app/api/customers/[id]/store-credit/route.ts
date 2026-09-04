@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireRole, HttpError } from "@/lib/auth";
+import { HttpError } from "@/lib/auth";
+import { requireScopedRole, assertCustomerInScope } from "@/lib/scope";
 import { storeCreditAdjustSchema } from "@/lib/validation";
 import { ok, toErrorResponse } from "@/lib/api";
 
@@ -19,8 +20,9 @@ const ledgerSelect = {
 // The store-credit ledger for one customer.
 export async function GET(_req: NextRequest, { params }: Params) {
   try {
-    await requireRole("CASHIER", "MANAGER", "ADMIN");
+    const actor = await requireScopedRole("CASHIER", "MANAGER", "ADMIN");
     const { id } = await params;
+    await assertCustomerInScope(id, actor);
     const customer = await prisma.customer.findUnique({
       where: { id },
       select: { id: true, storeCreditCents: true },
@@ -41,8 +43,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
 // Grant or adjust store credit. Manager / admin only.
 export async function POST(req: NextRequest, { params }: Params) {
   try {
-    const actor = await requireRole("MANAGER", "ADMIN");
+    const actor = await requireScopedRole("MANAGER", "ADMIN");
     const { id } = await params;
+    await assertCustomerInScope(id, actor);
     const { amountCents, reason } = storeCreditAdjustSchema.parse(await req.json());
 
     const customer = await prisma.$transaction(async (tx) => {

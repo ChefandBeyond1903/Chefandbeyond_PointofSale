@@ -45,3 +45,17 @@ export function storeWhere(u: ScopedUser): { storeId?: string } {
   const s = scopeStoreId(u);
   return s ? { storeId: s } : {};
 }
+
+/**
+ * 404s unless the caller may see this customer — their own store's, or any if
+ * they're an admin. Customers are created per store (Customer.storeId).
+ */
+export async function assertCustomerInScope(customerId: string, u: ScopedUser): Promise<void> {
+  const scoped = scopeStoreId(u);
+  if (!scoped) return;
+  const row = await prisma.customer.findUnique({
+    where: { id: customerId },
+    select: { storeId: true },
+  });
+  if (!row || row.storeId !== scoped) throw new HttpError(404, "Customer not found");
+}

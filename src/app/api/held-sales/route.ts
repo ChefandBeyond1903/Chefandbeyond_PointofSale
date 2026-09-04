@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireScopedUser, scopeStoreId } from "@/lib/scope";
+import { requireScopedUser, scopeStoreId, assertCustomerInScope } from "@/lib/scope";
 import { heldSaleCreateSchema } from "@/lib/validation";
 import { ok, toErrorResponse } from "@/lib/api";
 import type { HeldSaleLine } from "@/lib/types";
@@ -65,6 +65,7 @@ export async function POST(req: NextRequest) {
 
     let cust = { name: "", email: "", phone: "", address: "", company: "" };
     if (f.customerId) {
+      await assertCustomerInScope(f.customerId, actor);
       const c = await prisma.customer.findUnique({ where: { id: f.customerId } });
       if (c) cust = { name: c.name, email: c.email, phone: c.phone, address: c.address, company: c.company };
     } else if (f.customer) {

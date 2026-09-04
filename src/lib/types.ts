@@ -72,6 +72,8 @@ export interface Customer {
   taxExemptDocName: string;
   paymentTerms: string;
   storeCreditCents: number;
+  /** The store that created this customer (null = shared / legacy). */
+  storeId?: string | null;
   createdAt?: string;
   _count?: { sales: number };
   sales?: {
