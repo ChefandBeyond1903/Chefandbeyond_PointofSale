@@ -76,6 +76,9 @@ export interface Customer {
   storeId?: string | null;
   createdAt?: string;
   _count?: { sales: number };
+  /** Sum of unpaid invoices' balance (net of deposits). 0 = owes nothing. */
+  openBalanceCents?: number;
+  openInvoiceCount?: number;
   sales?: {
     id: string;
     number: number;

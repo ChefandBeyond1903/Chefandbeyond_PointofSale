@@ -167,20 +167,23 @@ export function OverviewView() {
             </Card>
 
             {/* Owed to you */}
-            <Card title="Owed to you" href="/reports" hrefLabel="Reports">
+            <Card title="Owed to you" href="/invoices?status=OPEN" hrefLabel="Invoices">
               <dl className="grid grid-cols-3 gap-2 text-center sm:gap-3">
-                <Metric
+                <LinkMetric
+                  href="/invoices?status=OPEN"
                   label="Balance due"
                   value={String(data.receivables.unpaidInvoices.count)}
                   sub={formatMoney(data.receivables.unpaidInvoices.amountCents)}
                 />
-                <Metric
+                <LinkMetric
+                  href="/invoices?status=OPEN&overdue=1"
                   label="Overdue"
                   value={String(data.receivables.overdueInvoices.count)}
                   sub={formatMoney(data.receivables.overdueInvoices.amountCents)}
                   danger={data.receivables.overdueInvoices.count > 0}
                 />
-                <Metric
+                <LinkMetric
+                  href="/invoices?status=OPEN"
                   label="Deposits held"
                   value={formatMoney(data.receivables.depositsHeldCents)}
                   sub="customer liability"

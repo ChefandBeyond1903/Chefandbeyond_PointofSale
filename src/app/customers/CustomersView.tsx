@@ -58,6 +58,7 @@ export function CustomersView({
 }) {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [q, setQ] = useState("");
+  const [owesOnly, setOwesOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -225,6 +226,11 @@ export function CustomersView({
     }
   }
 
+  const owingCount = customers.filter((c) => (c.openBalanceCents ?? 0) > 0).length;
+  const shownCustomers = owesOnly
+    ? customers.filter((c) => (c.openBalanceCents ?? 0) > 0)
+    : customers;
+
   async function remove(c: Customer) {
     const warn =
       c._count && c._count.sales > 0
@@ -249,6 +255,13 @@ export function CustomersView({
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
+        <button
+          onClick={() => setOwesOnly((v) => !v)}
+          className={owesOnly ? "btn-primary" : "btn-secondary"}
+          title="Show only customers with an unpaid invoice"
+        >
+          Owes money{owingCount > 0 ? ` (${owingCount})` : ""}
+        </button>
         {canManage ? (
           <button onClick={() => setDraft({ ...emptyDraft })} className="btn-primary ml-auto">
             + New customer
@@ -275,24 +288,27 @@ export function CustomersView({
               <th className="px-4 py-2.5">Email</th>
               <th className="px-4 py-2.5">Phone</th>
               <th className="px-4 py-2.5 text-right">Invoices</th>
+              <th className="px-4 py-2.5 text-right">Balance due</th>
               <th className="px-4 py-2.5"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-100">
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-zinc-400">
+                <td colSpan={7} className="px-4 py-8 text-center text-zinc-400">
                   Loading…
                 </td>
               </tr>
-            ) : customers.length === 0 ? (
+            ) : shownCustomers.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-zinc-400">
-                  No customers{q.trim() ? " match your search" : " yet"}.
+                <td colSpan={7} className="px-4 py-8 text-center text-zinc-400">
+                  {owesOnly
+                    ? "No customer owes anything right now."
+                    : `No customers${q.trim() ? " match your search" : " yet"}.`}
                 </td>
               </tr>
             ) : (
-              customers.map((c) => (
+              shownCustomers.map((c) => (
                 <tr key={c.id}>
                   <td className="px-4 py-2.5 font-medium">
                     {c.name}
@@ -329,6 +345,20 @@ export function CustomersView({
                   <td className="px-4 py-2.5 text-zinc-500">{c.email || "—"}</td>
                   <td className="px-4 py-2.5 text-zinc-500">{formatPhone(c.phone) || "—"}</td>
                   <td className="px-4 py-2.5 text-right text-zinc-500">{c._count?.sales ?? 0}</td>
+                  <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                    {(c.openBalanceCents ?? 0) > 0 ? (
+                      <span className="font-medium text-amber-700">
+                        {formatMoney(c.openBalanceCents!)}
+                        {(c.openInvoiceCount ?? 0) > 1 && (
+                          <span className="ml-1 text-xs font-normal text-amber-500">
+                            ({c.openInvoiceCount})
+                          </span>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="text-zinc-300">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-2.5 text-right whitespace-nowrap">
                     {canManage ? (
                       <>

@@ -27,6 +27,7 @@ export function InvoicesView({
   const [term, setTerm] = useState(""); // what's typed in the box
   const [query, setQuery] = useState(""); // what we've actually searched for
   const [filter, setFilter] = useState<Filter>("OPEN");
+  const [overdueOnly, setOverdueOnly] = useState(false);
   const [storeId, setStoreId] = useState(""); // "" = every store (admin only)
   const [stores, setStores] = useState<Store[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
@@ -63,7 +64,22 @@ export function InvoicesView({
       .catch(() => {});
   }, [isAdmin]);
 
-  const pg = usePaged(sales);
+  // Deep links from Overview ("Balance due" / "Overdue"):
+  // /invoices?status=OPEN&overdue=1.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("status");
+    if (status && FILTERS.some((f) => f.key === status)) setFilter(status as Filter);
+    if (params.get("overdue") === "1") {
+      setOverdueOnly(true);
+      if (!status) setFilter("OPEN");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const isOverdue = (s: Sale) => !!s.dueDate && new Date(s.dueDate) < new Date();
+  const rows = overdueOnly ? sales.filter(isOverdue) : sales;
+  const pg = usePaged(rows);
   const showStore = isAdmin && !storeId; // redundant once a store is chosen
   const cols = showStore ? 6 : 5;
 
@@ -129,6 +145,17 @@ export function InvoicesView({
               {f.label}
             </button>
           ))}
+          <button
+            onClick={() => setOverdueOnly((v) => !v)}
+            className={`ml-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+              overdueOnly
+                ? "bg-red-100 text-red-700"
+                : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800"
+            }`}
+            title="Only invoices past their due date"
+          >
+            Overdue
+          </button>
         </div>
       </div>
 
@@ -165,7 +192,7 @@ export function InvoicesView({
             ) : pg.total === 0 ? (
               <tr>
                 <td colSpan={cols} className="px-4 py-8 text-center text-zinc-400">
-                  No invoices.
+                  {overdueOnly ? "No overdue invoices." : "No invoices."}
                 </td>
               </tr>
             ) : (
@@ -206,6 +233,11 @@ export function InvoicesView({
                         refunded={refunded}
                         total={s.totalCents}
                       />
+                      {isOverdue(s) && (
+                        <span className="ml-1.5 inline-block rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+                          Overdue
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-2.5 text-right font-medium tabular-nums">
                       {formatMoney(s.totalCents)}
