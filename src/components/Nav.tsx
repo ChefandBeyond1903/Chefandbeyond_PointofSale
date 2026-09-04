@@ -13,6 +13,7 @@ const ADMIN_ONLY: Role[] = ["ADMIN"];
 const LINKS: { href: string; label: string; roles: Role[] }[] = [
   { href: "/overview", label: "Overview", roles: ADMIN_ONLY },
   { href: "/", label: "Register", roles: ALL },
+  { href: "/invoices", label: "Invoices", roles: ALL },
   { href: "/products", label: "Products", roles: ALL },
   { href: "/vendors", label: "Vendors", roles: ALL },
   { href: "/customers", label: "Customers", roles: ALL },

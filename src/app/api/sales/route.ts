@@ -13,11 +13,13 @@ export async function GET(req: NextRequest) {
   try {
     const actor = await requireScopedUser();
     const { searchParams } = new URL(req.url);
-    const take = Math.min(Number(searchParams.get("take") ?? 50), 200);
+    const take = Math.min(Number(searchParams.get("take") ?? 50), 500);
     const from = searchParams.get("from");
     const to = searchParams.get("to");
     const cashierId = searchParams.get("cashierId")?.trim();
     const number = Number(searchParams.get("number"));
+    const q = searchParams.get("q")?.trim();
+    const status = searchParams.get("status")?.trim().toUpperCase();
 
     const where: Prisma.SaleWhereInput = {};
     // Non-admins only ever see their own store's sales.
@@ -25,10 +27,25 @@ export async function GET(req: NextRequest) {
     if (scopedStore) where.storeId = scopedStore;
     if (cashierId) where.cashierId = cashierId;
     if (Number.isInteger(number) && number > 0) where.number = number;
+    if (status && ["COMPLETED", "INVOICED", "REFUNDED", "VOIDED"].includes(status)) {
+      where.status = status;
+    }
     if (from || to) {
       where.createdAt = {};
       if (from) where.createdAt.gte = new Date(from);
       if (to) where.createdAt.lte = new Date(to);
+    }
+    if (q) {
+      // Free-text invoice search: match a number, or any customer snapshot.
+      const asNumber = Number(q.replace(/[^0-9]/g, ""));
+      const or: Prisma.SaleWhereInput[] = [
+        { customerNameSnapshot: { contains: q, mode: "insensitive" } },
+        { customerCompanySnapshot: { contains: q, mode: "insensitive" } },
+        { customerEmailSnapshot: { contains: q, mode: "insensitive" } },
+        { customerPhoneSnapshot: { contains: q, mode: "insensitive" } },
+      ];
+      if (Number.isInteger(asNumber) && asNumber > 0) or.push({ number: asNumber });
+      where.OR = or;
     }
 
     const sales = await prisma.sale.findMany({
