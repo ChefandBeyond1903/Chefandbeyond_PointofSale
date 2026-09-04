@@ -23,7 +23,7 @@ export function ReportsView({
   isAdmin?: boolean;
   limited?: boolean;
 }) {
-  const [range, setRange] = useState<DateRange>(() => resolvePreset("today"));
+  const [range, setRange] = useState<DateRange>(() => resolvePreset("this_month"));
   const [storeId, setStoreId] = useState<string>(""); // "" = all stores (admin only)
   const [data, setData] = useState<ReportSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -115,7 +115,7 @@ export function ReportsView({
               ))}
             </select>
           )}
-          <DateRangePicker defaultPreset="today" onChange={setRange} />
+          <DateRangePicker defaultPreset="this_month" onChange={setRange} />
         </div>
       </div>
 
