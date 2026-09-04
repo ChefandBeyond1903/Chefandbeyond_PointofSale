@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireRole, HttpError } from "@/lib/auth";
-import { requireScopedUser } from "@/lib/scope";
+import { requireScopedUser, scopeStoreId } from "@/lib/scope";
 import {
   productBulkDeleteSchema,
   productBulkUpdateSchema,
@@ -24,6 +24,7 @@ export async function GET(req: NextRequest) {
     // a full-catalog load small. The Products admin page asks for detail=1.
     const withDetail = searchParams.get("detail") === "1";
     const take = Math.min(Number(searchParams.get("take") ?? 200), 5000);
+    const storeIdParam = searchParams.get("storeId")?.trim();
 
     const where: Prisma.ProductWhereInput = {};
     if (!includeInactive) where.active = true;
@@ -71,8 +72,11 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    // On-hand in one grouped query — the caller's store, or every store for an
-    // admin — instead of dragging back every StoreInventory row per product.
+    // On-hand in one grouped query. Non-admins are pinned to their own store;
+    // an admin has no assigned store and instead picks one on the register
+    // (?storeId=), falling back to every store combined when none is picked.
+    const scopedStore = scopeStoreId(actor);
+    const stockStoreId = scopedStore ?? storeIdParam ?? null;
     const stockByProduct = new Map<string, number>();
     if (rows.length) {
       const grouped = await prisma.storeInventory.groupBy({
@@ -80,7 +84,7 @@ export async function GET(req: NextRequest) {
         _sum: { quantity: true },
         where: {
           productId: { in: rows.map((r) => r.id) },
-          ...(actor.storeId ? { storeId: actor.storeId } : {}),
+          ...(stockStoreId ? { storeId: stockStoreId } : {}),
         },
       });
       for (const g of grouped) stockByProduct.set(g.productId, g._sum.quantity ?? 0);

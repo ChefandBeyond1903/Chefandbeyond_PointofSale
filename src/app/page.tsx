@@ -139,11 +139,15 @@ export default function RegisterPage() {
   // first load has read it back in.
   const ticketHydrated = useRef(false);
 
+  // An admin has no assigned store, so on-hand counts follow whichever store
+  // they've picked to sell from — everyone else's are pinned to their own.
+  const storeQs = role === "ADMIN" && sellStoreId ? `&storeId=${encodeURIComponent(sellStoreId)}` : "";
+
   const loadCatalog = useCallback(async () => {
     setLoading(true);
     try {
       const [p, c] = await Promise.all([
-        api<{ products: Product[] }>("/api/products?favorite=1&take=5000"),
+        api<{ products: Product[] }>(`/api/products?favorite=1&take=5000${storeQs}`),
         api<{ categories: Category[] }>("/api/categories"),
       ]);
       setFavorites(p.products);
@@ -153,16 +157,16 @@ export default function RegisterPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [storeQs]);
 
   const loadAllProducts = useCallback(async () => {
     try {
-      const r = await api<{ products: Product[] }>("/api/products?take=5000");
+      const r = await api<{ products: Product[] }>(`/api/products?take=5000${storeQs}`);
       setAllProducts(r.products);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load products");
     }
-  }, []);
+  }, [storeQs]);
 
   function toggleBrowseAll() {
     setBrowseAll((on) => {
@@ -405,7 +409,7 @@ export default function RegisterPage() {
     const t = setTimeout(async () => {
       try {
         const r = await api<{ products: Product[] }>(
-          `/api/products?q=${encodeURIComponent(q)}&take=80`,
+          `/api/products?q=${encodeURIComponent(q)}&take=80${storeQs}`,
         );
         setSearchHits(r.products);
       } catch {
@@ -415,7 +419,7 @@ export default function RegisterPage() {
       }
     }, 250);
     return () => clearTimeout(t);
-  }, [query]);
+  }, [query, storeQs]);
 
   const isSearching = query.trim().length > 0;
 
@@ -452,6 +456,15 @@ export default function RegisterPage() {
       /* ignore */
     }
   }, [sellStoreId]);
+
+  // An admin switching which store they're selling from changes both the tax
+  // rate (handled above via `sellStore`) and on-hand counts — refresh whatever
+  // product lists are currently in view so stock isn't shown from the wrong store.
+  useEffect(() => {
+    if (!isAdmin) return;
+    loadCatalog();
+    if (browseAll) loadAllProducts();
+  }, [isAdmin, sellStoreId, loadCatalog, loadAllProducts, browseAll]);
 
   // A selected tax-exempt customer (cert not past its expiry) zeroes the tax
   // and gives the invoice a due date from their payment terms.
@@ -1358,8 +1371,8 @@ export default function RegisterPage() {
               label={`Tax${
                 taxExemptActive
                   ? " (exempt)"
-                  : storeTaxRateBps != null
-                    ? ` (${formatBps(storeTaxRateBps)})`
+                  : baseTaxRateBps != null
+                    ? ` (${formatBps(baseTaxRateBps)})`
                     : ""
               }`}
               value={formatMoney(totals.tax)}
