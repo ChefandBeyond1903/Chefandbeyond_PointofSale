@@ -6,7 +6,7 @@ import { formatMoney } from "@/lib/money";
 import { usePaged } from "@/lib/usePaged";
 import { Pager } from "@/components/Pager";
 import { InvoiceModal } from "@/components/InvoiceModal";
-import type { Sale } from "@/lib/types";
+import type { Sale, Store } from "@/lib/types";
 
 type Filter = "OPEN" | "PAID" | "REFUNDED" | "ALL";
 
@@ -27,6 +27,8 @@ export function InvoicesView({
   const [term, setTerm] = useState(""); // what's typed in the box
   const [query, setQuery] = useState(""); // what we've actually searched for
   const [filter, setFilter] = useState<Filter>("OPEN");
+  const [storeId, setStoreId] = useState(""); // "" = every store (admin only)
+  const [stores, setStores] = useState<Store[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +42,7 @@ export function InvoicesView({
       const f = FILTERS.find((x) => x.key === filter);
       if (f?.status) qs.set("status", f.status);
       if (query.trim()) qs.set("q", query.trim());
+      if (storeId) qs.set("storeId", storeId);
       const res = await api<{ sales: Sale[] }>(`/api/sales?${qs.toString()}`);
       setSales(res.sales);
     } catch (err) {
@@ -47,14 +50,21 @@ export function InvoicesView({
     } finally {
       setLoading(false);
     }
-  }, [filter, query]);
+  }, [filter, query, storeId]);
 
   useEffect(() => {
     load();
   }, [load]);
 
+  useEffect(() => {
+    if (!isAdmin) return;
+    api<{ stores: Store[] }>("/api/stores?all=1")
+      .then((r) => setStores(r.stores))
+      .catch(() => {});
+  }, [isAdmin]);
+
   const pg = usePaged(sales);
-  const showStore = isAdmin;
+  const showStore = isAdmin && !storeId; // redundant once a store is chosen
   const cols = showStore ? 6 : 5;
 
   return (
@@ -90,7 +100,22 @@ export function InvoicesView({
             </button>
           )}
         </form>
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex flex-wrap items-center gap-1">
+          {isAdmin && stores.length > 0 && (
+            <select
+              className="input mr-1 h-8 w-auto min-w-44 text-sm"
+              value={storeId}
+              onChange={(e) => setStoreId(e.target.value)}
+              aria-label="Filter invoices by store"
+            >
+              <option value="">All stores</option>
+              {stores.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          )}
           {FILTERS.map((f) => (
             <button
               key={f.key}

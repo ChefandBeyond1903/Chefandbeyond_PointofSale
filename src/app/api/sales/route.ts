@@ -22,9 +22,12 @@ export async function GET(req: NextRequest) {
     const status = searchParams.get("status")?.trim().toUpperCase();
 
     const where: Prisma.SaleWhereInput = {};
-    // Non-admins only ever see their own store's sales.
+    // Non-admins only ever see their own store's sales; an admin may narrow to
+    // one store with ?storeId=.
     const scopedStore = scopeStoreId(actor);
+    const storeParam = searchParams.get("storeId")?.trim();
     if (scopedStore) where.storeId = scopedStore;
+    else if (storeParam) where.storeId = storeParam;
     if (cashierId) where.cashierId = cashierId;
     if (Number.isInteger(number) && number > 0) where.number = number;
     if (status && ["COMPLETED", "INVOICED", "REFUNDED", "VOIDED"].includes(status)) {
