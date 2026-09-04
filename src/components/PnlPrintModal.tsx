@@ -7,12 +7,17 @@ import { DateRangePicker } from "@/components/DateRangePicker";
 import type { Company, ReportSummary } from "@/lib/types";
 import type { DateRange, DateRangePresetKey } from "@/lib/dateRange";
 
-/** "$1,234.50" -> "1,234.50" (statement columns carry no sign/symbol). */
+/** "$1,234.50" -> "1,234.50" — magnitude only, for lines shown as deductions. */
 function amt(cents: number): string {
   return formatMoney(Math.abs(cents)).replace("$", "");
 }
+/** Always parenthesised — for lines that are always a subtraction. */
 function paren(cents: number): string {
   return `(${amt(cents)})`;
+}
+/** Sign-aware — for running subtotals/totals: "1,234.50" or "(1,234.50)". */
+function signed(cents: number): string {
+  return cents < 0 ? `(${amt(cents)})` : amt(cents);
 }
 
 function fmtDay(iso: string): string {
@@ -156,11 +161,14 @@ export function PnlPrintModal({
 
               <div className="mt-6 space-y-5">
                 <Section title="Revenue">
-                  <PLLine label="Gross sales (ex-tax)" value={amt(t.subtotalCents - t.discountCents)} />
+                  <PLLine
+                    label="Gross sales (ex-tax)"
+                    value={signed(t.subtotalCents - t.discountCents)}
+                  />
                   <PLLine label="Cost of goods sold" value={paren(t.costCents)} muted />
                   <PLLine
                     label="Gross profit"
-                    value={amt(t.profitCents)}
+                    value={signed(t.profitCents)}
                     strong
                     rule
                     note={`${t.marginPct}% margin`}
@@ -170,7 +178,7 @@ export function PnlPrintModal({
                   )}
                   <PLLine
                     label="Gross profit after refunds"
-                    value={amt(grossAfterRefunds)}
+                    value={signed(grossAfterRefunds)}
                     strong
                     rule
                   />
@@ -205,24 +213,21 @@ export function PnlPrintModal({
                   />
                 </Section>
 
-                <div className="flex items-center justify-between border-y-[3px] border-double border-zinc-900 bg-zinc-50 px-3 py-3 text-base font-bold text-zinc-900">
-                  <span className="uppercase tracking-wide">Net profit</span>
-                  <span className="tabular-nums">{amt(t.netProfitCents)}</span>
+                <div
+                  className={`flex items-center justify-between border-y-[3px] border-double px-3 py-3 text-base font-bold ${
+                    t.netProfitCents < 0
+                      ? "border-red-700 bg-red-50 text-red-700"
+                      : "border-zinc-900 bg-zinc-50 text-zinc-900"
+                  }`}
+                >
+                  <span className="uppercase tracking-wide">
+                    Net {t.netProfitCents < 0 ? "loss" : "profit"}
+                  </span>
+                  <span className="tabular-nums">{signed(t.netProfitCents)}</span>
                 </div>
               </div>
 
-              <footer className="mt-6 space-y-1 border-t border-zinc-200 pt-3 text-[11px] text-zinc-500">
-                <p>
-                  {t.saleCount} transaction{t.saleCount === 1 ? "" : "s"} · {t.itemsSold} item
-                  {t.itemsSold === 1 ? "" : "s"} sold · avg. sale {amt(t.averageSaleCents)}
-                </p>
-                <p>Sales tax collected ({amt(t.taxCents)}) is excluded — it is not revenue.</p>
-                {t.storeCreditOutstandingCents > 0 && (
-                  <p>
-                    Customers hold {amt(t.storeCreditOutstandingCents)} in store credit — a
-                    liability, not shown above.
-                  </p>
-                )}
+              <footer className="mt-6 border-t border-zinc-200 pt-3 text-[11px] text-zinc-500">
                 <p>All amounts in USD. Prepared {new Date().toLocaleString()}.</p>
               </footer>
             </>
