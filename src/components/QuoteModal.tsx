@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney, formatBps } from "@/lib/money";
 import { InvoiceModal } from "@/components/InvoiceModal";
+import { QuoteStatusPill } from "@/components/QuoteStatusPill";
 import type { QuoteDetail } from "@/lib/types";
 
 /**
@@ -93,7 +94,7 @@ export function QuoteModal({
               <div>
                 <div className="flex items-center gap-2">
                   <h2 className="text-lg font-semibold">Quote Q-{quote.number}</h2>
-                  <StatusPill status={quote.status} />
+                  <QuoteStatusPill status={quote.status} />
                 </div>
                 <p className="text-sm text-zinc-500">
                   {new Date(quote.createdAt).toLocaleString()}
@@ -270,28 +271,5 @@ export function QuoteModal({
         />
       )}
     </div>
-  );
-}
-
-function StatusPill({ status }: { status: string }) {
-  let cls = "bg-zinc-100 text-zinc-600";
-  let label: string = status;
-  if (status === "OPEN") {
-    cls = "bg-amber-100 text-amber-800";
-    label = "Open";
-  } else if (status === "APPROVED") {
-    cls = "bg-emerald-100 text-emerald-700";
-    label = "Approved";
-  } else if (status === "CONVERTED") {
-    cls = "bg-indigo-100 text-indigo-700";
-    label = "Converted";
-  } else if (status === "REJECTED") {
-    cls = "bg-red-100 text-red-700";
-    label = "Rejected";
-  }
-  return (
-    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>
-      {label}
-    </span>
   );
 }

@@ -8,6 +8,8 @@ import { matchesSearch } from "@/lib/search";
 import { VendorHistoryModal } from "@/components/VendorHistoryModal";
 import { usePaged } from "@/lib/usePaged";
 import { Pager } from "@/components/Pager";
+import { ListHeader, SearchBox } from "@/components/ListToolbar";
+import { LoadingRow, EmptyRow } from "@/components/TableState";
 import type { Vendor } from "@/lib/types";
 
 type Draft = {
@@ -111,14 +113,8 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
 
   return (
     <div className="w-full flex-1 p-4">
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-semibold">Vendors</h1>
-        <input
-          className="input max-w-xs"
-          placeholder="Search vendors…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
+      <ListHeader title="Vendors">
+        <SearchBox value={q} onChange={setQ} placeholder="Search vendors…" />
         {canManage ? (
           <button onClick={() => setDraft({ ...emptyDraft })} className="btn-primary ml-auto">
             + New vendor
@@ -126,7 +122,7 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
         ) : (
           <span className="ml-auto text-xs text-zinc-400">View only</span>
         )}
-      </div>
+      </ListHeader>
 
       {error && !draft && (
         <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
@@ -150,19 +146,13 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
           </thead>
           <tbody className="divide-y divide-zinc-100">
             {loading ? (
-              <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-zinc-400">
-                  Loading…
-                </td>
-              </tr>
+              <LoadingRow colSpan={8} />
             ) : pg.total === 0 ? (
-              <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-zinc-400">
-                  {vendors.length === 0
-                    ? "No vendors yet. Add one to start."
-                    : "No vendors match your search."}
-                </td>
-              </tr>
+              <EmptyRow colSpan={8}>
+                {vendors.length === 0
+                  ? "No vendors yet. Add one to start."
+                  : "No vendors match your search."}
+              </EmptyRow>
             ) : (
               pg.pageItems.map((v) => (
                 <tr key={v.id}>

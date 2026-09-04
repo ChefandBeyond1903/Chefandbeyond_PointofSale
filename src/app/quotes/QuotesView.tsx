@@ -7,6 +7,9 @@ import { formatMoney } from "@/lib/money";
 import { usePaged } from "@/lib/usePaged";
 import { Pager } from "@/components/Pager";
 import { QuoteModal } from "@/components/QuoteModal";
+import { QuoteStatusPill } from "@/components/QuoteStatusPill";
+import { ListHeader, SearchBox, FilterChips } from "@/components/ListToolbar";
+import { LoadingRow, EmptyRow } from "@/components/TableState";
 import type { Quote, QuoteStatus, Store } from "@/lib/types";
 
 type Filter = QuoteStatus | "ALL";
@@ -70,40 +73,17 @@ export function QuotesView({
 
   return (
     <div className="w-full flex-1 p-4">
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-semibold">Quotes</h1>
+      <ListHeader title="Quotes">
         <Link href="/" className="btn-secondary">
           Build a quote
         </Link>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            setQuery(term);
-          }}
-          className="flex items-center gap-2"
-        >
-          <input
-            className="input w-72 max-w-full"
-            placeholder="Search quote # or customer…"
-            value={term}
-            onChange={(e) => setTerm(e.target.value)}
-          />
-          <button type="submit" className="btn-primary">
-            Search
-          </button>
-          {query && (
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => {
-                setTerm("");
-                setQuery("");
-              }}
-            >
-              Clear
-            </button>
-          )}
-        </form>
+        <SearchBox
+          mode="submit"
+          value={term}
+          onChange={setTerm}
+          onSubmit={setQuery}
+          placeholder="Search quote # or customer…"
+        />
         <div className="ml-auto flex flex-wrap items-center gap-1">
           {isAdmin && stores.length > 0 && (
             <select
@@ -120,21 +100,9 @@ export function QuotesView({
               ))}
             </select>
           )}
-          {FILTERS.map((f) => (
-            <button
-              key={f.key}
-              onClick={() => setFilter(f.key)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                filter === f.key
-                  ? "bg-zinc-100 text-zinc-900"
-                  : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800"
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
+          <FilterChips options={FILTERS} value={filter} onChange={setFilter} />
         </div>
-      </div>
+      </ListHeader>
 
       {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       {query && !loading && (
@@ -159,17 +127,9 @@ export function QuotesView({
           </thead>
           <tbody className="divide-y divide-zinc-100">
             {loading ? (
-              <tr>
-                <td colSpan={cols} className="px-4 py-8 text-center text-zinc-400">
-                  Loading…
-                </td>
-              </tr>
+              <LoadingRow colSpan={cols} />
             ) : pg.total === 0 ? (
-              <tr>
-                <td colSpan={cols} className="px-4 py-8 text-center text-zinc-400">
-                  No quotes.
-                </td>
-              </tr>
+              <EmptyRow colSpan={cols}>No quotes.</EmptyRow>
             ) : (
               pg.pageItems.map((q) => {
                 const customer =
@@ -198,7 +158,7 @@ export function QuotesView({
                       </td>
                     )}
                     <td className="px-4 py-2.5">
-                      <StatusPill status={q.status} />
+                      <QuoteStatusPill status={q.status} />
                     </td>
                     <td className="px-4 py-2.5 text-right font-medium tabular-nums">
                       {formatMoney(q.totalCents)}
@@ -221,28 +181,5 @@ export function QuotesView({
         />
       )}
     </div>
-  );
-}
-
-function StatusPill({ status }: { status: string }) {
-  let cls = "bg-zinc-100 text-zinc-600";
-  let label: string = status;
-  if (status === "OPEN") {
-    cls = "bg-amber-100 text-amber-800";
-    label = "Open";
-  } else if (status === "APPROVED") {
-    cls = "bg-emerald-100 text-emerald-700";
-    label = "Approved";
-  } else if (status === "CONVERTED") {
-    cls = "bg-indigo-100 text-indigo-700";
-    label = "Converted";
-  } else if (status === "REJECTED") {
-    cls = "bg-red-100 text-red-700";
-    label = "Rejected";
-  }
-  return (
-    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>
-      {label}
-    </span>
   );
 }

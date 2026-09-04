@@ -6,6 +6,10 @@ import { formatMoney } from "@/lib/money";
 import { usePaged } from "@/lib/usePaged";
 import { Pager } from "@/components/Pager";
 import { InvoiceModal } from "@/components/InvoiceModal";
+import { SaleStatusPill } from "@/components/SaleStatusPill";
+import { Badge } from "@/components/Badge";
+import { ListHeader, SearchBox, FilterChips, FilterToggle } from "@/components/ListToolbar";
+import { LoadingRow, EmptyRow } from "@/components/TableState";
 import type { Sale, Store } from "@/lib/types";
 
 type Filter = "OPEN" | "PAID" | "REFUNDED" | "ALL";
@@ -85,37 +89,14 @@ export function InvoicesView({
 
   return (
     <div className="w-full flex-1 p-4">
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-semibold">Invoices</h1>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            setQuery(term);
-          }}
-          className="flex items-center gap-2"
-        >
-          <input
-            className="input w-80 max-w-full"
-            placeholder="Search invoice # or customer name, company, phone, email…"
-            value={term}
-            onChange={(e) => setTerm(e.target.value)}
-          />
-          <button type="submit" className="btn-primary">
-            Search
-          </button>
-          {query && (
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => {
-                setTerm("");
-                setQuery("");
-              }}
-            >
-              Clear
-            </button>
-          )}
-        </form>
+      <ListHeader title="Invoices">
+        <SearchBox
+          mode="submit"
+          value={term}
+          onChange={setTerm}
+          onSubmit={setQuery}
+          placeholder="Search invoice # or customer name, company, phone, email…"
+        />
         <div className="ml-auto flex flex-wrap items-center gap-1">
           {isAdmin && stores.length > 0 && (
             <select
@@ -132,32 +113,17 @@ export function InvoicesView({
               ))}
             </select>
           )}
-          {FILTERS.map((f) => (
-            <button
-              key={f.key}
-              onClick={() => setFilter(f.key)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                filter === f.key
-                  ? "bg-zinc-100 text-zinc-900"
-                  : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800"
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-          <button
+          <FilterChips options={FILTERS} value={filter} onChange={setFilter} />
+          <FilterToggle
+            active={overdueOnly}
             onClick={() => setOverdueOnly((v) => !v)}
-            className={`ml-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              overdueOnly
-                ? "bg-red-100 text-red-700"
-                : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800"
-            }`}
+            tone="warn"
             title="Only invoices past their due date"
           >
             Overdue
-          </button>
+          </FilterToggle>
         </div>
-      </div>
+      </ListHeader>
 
       {error && (
         <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
@@ -184,22 +150,13 @@ export function InvoicesView({
           </thead>
           <tbody className="divide-y divide-zinc-100">
             {loading ? (
-              <tr>
-                <td colSpan={cols} className="px-4 py-8 text-center text-zinc-400">
-                  Loading…
-                </td>
-              </tr>
+              <LoadingRow colSpan={cols} />
             ) : pg.total === 0 ? (
-              <tr>
-                <td colSpan={cols} className="px-4 py-8 text-center text-zinc-400">
-                  {overdueOnly ? "No overdue invoices." : "No invoices."}
-                </td>
-              </tr>
+              <EmptyRow colSpan={cols}>
+                {overdueOnly ? "No overdue invoices." : "No invoices."}
+              </EmptyRow>
             ) : (
               pg.pageItems.map((s) => {
-                const paid = s.amountPaidCents ?? 0;
-                const refunded = s.refundedCents ?? 0;
-                const balance = Math.max(0, s.totalCents - paid);
                 const customer =
                   s.customerCompanySnapshot ||
                   s.customerNameSnapshot ||
@@ -227,16 +184,16 @@ export function InvoicesView({
                       </td>
                     )}
                     <td className="px-4 py-2.5">
-                      <StatusPill
+                      <SaleStatusPill
                         status={s.status}
-                        balance={balance}
-                        refunded={refunded}
-                        total={s.totalCents}
+                        totalCents={s.totalCents}
+                        amountPaidCents={s.amountPaidCents}
+                        refundedCents={s.refundedCents}
                       />
                       {isOverdue(s) && (
-                        <span className="ml-1.5 inline-block rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+                        <Badge tone="red" className="ml-1.5">
                           Overdue
-                        </span>
+                        </Badge>
                       )}
                     </td>
                     <td className="px-4 py-2.5 text-right font-medium tabular-nums">
@@ -260,45 +217,5 @@ export function InvoicesView({
         />
       )}
     </div>
-  );
-}
-
-function StatusPill({
-  status,
-  balance,
-  refunded,
-  total,
-}: {
-  status: string;
-  balance: number;
-  refunded: number;
-  total: number;
-}) {
-  let cls = "bg-zinc-100 text-zinc-600";
-  let label: string = status;
-  if (status === "INVOICED") {
-    cls = "bg-amber-100 text-amber-800";
-    label = balance > 0 ? `Owes ${formatMoney(balance)}` : "Awaiting payment";
-  } else if (status === "COMPLETED") {
-    if (refunded > 0 && refunded < total) {
-      cls = "bg-orange-100 text-orange-800";
-      label = "Part-refunded";
-    } else {
-      cls = "bg-green-100 text-green-700";
-      label = "Paid";
-    }
-  } else if (status === "REFUNDED") {
-    cls = "bg-zinc-200 text-zinc-700";
-    label = "Refunded";
-  } else if (status === "VOIDED") {
-    cls = "bg-zinc-100 text-zinc-500";
-    label = "Voided";
-  }
-  return (
-    <span
-      className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}
-    >
-      {label}
-    </span>
   );
 }

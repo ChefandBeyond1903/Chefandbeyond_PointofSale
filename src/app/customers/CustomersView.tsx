@@ -8,6 +8,9 @@ import { formatDateOnly } from "@/lib/date";
 import { MoneyInput } from "@/components/MoneyInput";
 import { PhoneInput } from "@/components/PhoneInput";
 import { InvoiceModal } from "@/components/InvoiceModal";
+import { SaleStatusPill } from "@/components/SaleStatusPill";
+import { ListHeader, SearchBox, FilterToggle } from "@/components/ListToolbar";
+import { LoadingRow, EmptyRow } from "@/components/TableState";
 import type { Customer, StoreCreditEntry } from "@/lib/types";
 
 const TERMS = ["Net 15", "Net 30", "Net 45", "Net 60"] as const;
@@ -247,21 +250,19 @@ export function CustomersView({
 
   return (
     <div className="w-full flex-1 p-4">
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-semibold">Customers</h1>
-        <input
-          className="input max-w-xs"
-          placeholder="Search name, email, phone, company, address, notes…"
+      <ListHeader title="Customers">
+        <SearchBox
           value={q}
-          onChange={(e) => setQ(e.target.value)}
+          onChange={setQ}
+          placeholder="Search name, email, phone, company, address, notes…"
         />
-        <button
+        <FilterToggle
+          active={owesOnly}
           onClick={() => setOwesOnly((v) => !v)}
-          className={owesOnly ? "btn-primary" : "btn-secondary"}
           title="Show only customers with an unpaid invoice"
         >
           Owes money{owingCount > 0 ? ` (${owingCount})` : ""}
-        </button>
+        </FilterToggle>
         {canManage ? (
           <button onClick={() => setDraft({ ...emptyDraft })} className="btn-primary ml-auto">
             + New customer
@@ -269,7 +270,7 @@ export function CustomersView({
         ) : (
           <span className="ml-auto text-xs text-zinc-400">View only</span>
         )}
-      </div>
+      </ListHeader>
 
       <p className="mb-3 text-xs text-zinc-400">
         Customers are added automatically the first time you invoice them on the register.
@@ -294,19 +295,13 @@ export function CustomersView({
           </thead>
           <tbody className="divide-y divide-zinc-100">
             {loading ? (
-              <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-zinc-400">
-                  Loading…
-                </td>
-              </tr>
+              <LoadingRow colSpan={7} />
             ) : shownCustomers.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-zinc-400">
-                  {owesOnly
-                    ? "No customer owes anything right now."
-                    : `No customers${q.trim() ? " match your search" : " yet"}.`}
-                </td>
-              </tr>
+              <EmptyRow colSpan={7}>
+                {owesOnly
+                  ? "No customer owes anything right now."
+                  : `No customers${q.trim() ? " match your search" : " yet"}.`}
+              </EmptyRow>
             ) : (
               shownCustomers.map((c) => (
                 <tr key={c.id}>
@@ -650,43 +645,33 @@ export function CustomersView({
                     <p className="text-xs text-zinc-400">No sales yet.</p>
                   ) : (
                     <ul className="max-h-56 divide-y divide-zinc-100 overflow-y-auto text-sm">
-                      {custSales.map((s) => {
-                        const balance = (s.totalCents ?? 0) - (s.amountPaidCents ?? 0);
-                        const badge =
-                          s.status === "REFUNDED"
-                            ? { t: "Refunded", c: "bg-zinc-200 text-zinc-600" }
-                            : s.status === "INVOICED"
-                              ? { t: `Owes ${formatMoney(balance)}`, c: "bg-amber-100 text-amber-700" }
-                              : (s.refundedCents ?? 0) > 0
-                                ? { t: "Part-refunded", c: "bg-orange-100 text-orange-700" }
-                                : { t: "Paid", c: "bg-green-100 text-green-700" };
-                        return (
-                          <li key={s.id}>
-                            <button
-                              type="button"
-                              onClick={() => setOpenInvoiceId(s.id)}
-                              className="flex w-full items-center justify-between gap-2 py-1.5 text-left hover:bg-zinc-50"
-                            >
-                              <span>
-                                <span className="font-medium">#{s.number}</span>
-                                <span className="ml-2 text-xs text-zinc-400">
-                                  {formatDateOnly(s.createdAt)}
-                                </span>
+                      {custSales.map((s) => (
+                        <li key={s.id}>
+                          <button
+                            type="button"
+                            onClick={() => setOpenInvoiceId(s.id)}
+                            className="flex w-full items-center justify-between gap-2 py-1.5 text-left hover:bg-zinc-50"
+                          >
+                            <span>
+                              <span className="font-medium">#{s.number}</span>
+                              <span className="ml-2 text-xs text-zinc-400">
+                                {formatDateOnly(s.createdAt)}
                               </span>
-                              <span className="flex items-center gap-2">
-                                <span
-                                  className={`rounded-full px-2 py-0.5 text-[11px] ${badge.c}`}
-                                >
-                                  {badge.t}
-                                </span>
-                                <span className="font-medium tabular-nums">
-                                  {formatMoney(s.totalCents)}
-                                </span>
+                            </span>
+                            <span className="flex items-center gap-2">
+                              <SaleStatusPill
+                                status={s.status ?? ""}
+                                totalCents={s.totalCents}
+                                amountPaidCents={s.amountPaidCents}
+                                refundedCents={s.refundedCents}
+                              />
+                              <span className="font-medium tabular-nums">
+                                {formatMoney(s.totalCents)}
                               </span>
-                            </button>
-                          </li>
-                        );
-                      })}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
                     </ul>
                   )}
                 </div>
