@@ -103,4 +103,23 @@ body {
     border: none !important;
     width: 80mm;
   }
+
+  /* The Profit & Loss statement modal: print just the sheet, full page. */
+  body:has(#pnl-print) * {
+    visibility: hidden;
+  }
+  body:has(#pnl-print) #pnl-print,
+  body:has(#pnl-print) #pnl-print * {
+    visibility: visible;
+  }
+  body:has(#pnl-print) #pnl-print {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    color: #000;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }

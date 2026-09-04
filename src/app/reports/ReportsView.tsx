@@ -6,7 +6,8 @@ import { formatMoney } from "@/lib/money";
 import { InvoiceModal } from "@/components/InvoiceModal";
 import { ReceiptModal } from "@/components/ReceiptModal";
 import { DateRangePicker } from "@/components/DateRangePicker";
-import { resolvePreset, type DateRange } from "@/lib/dateRange";
+import { PnlPrintModal } from "@/components/PnlPrintModal";
+import { resolvePreset, type DateRange, type DateRangePresetKey } from "@/lib/dateRange";
 import type {
   Bill,
   HeldSaleSummary,
@@ -24,6 +25,9 @@ export function ReportsView({
   limited?: boolean;
 }) {
   const [range, setRange] = useState<DateRange>(() => resolvePreset("this_month"));
+  const [rangeLabel, setRangeLabel] = useState("This month");
+  const [rangeKey, setRangeKey] = useState<DateRangePresetKey | "custom">("this_month");
+  const [pnlPrintOpen, setPnlPrintOpen] = useState(false);
   const [storeId, setStoreId] = useState<string>(""); // "" = all stores (admin only)
   const [data, setData] = useState<ReportSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -128,7 +132,22 @@ export function ReportsView({
               ))}
             </select>
           )}
-          <DateRangePicker defaultPreset="this_month" onChange={setRange} />
+          <DateRangePicker
+            defaultPreset="this_month"
+            onChange={(r, l, k) => {
+              setRange(r);
+              setRangeLabel(l);
+              setRangeKey(k);
+            }}
+          />
+          {!limited && (
+            <button
+              onClick={() => setPnlPrintOpen(true)}
+              className="btn-secondary h-8 whitespace-nowrap"
+            >
+              Print P&amp;L
+            </button>
+          )}
         </div>
       </div>
 
@@ -357,6 +376,17 @@ export function ReportsView({
 
       {printSaleId && (
         <ReceiptModal saleId={printSaleId} onClose={() => setPrintSaleId(null)} />
+      )}
+
+      {pnlPrintOpen && (
+        <PnlPrintModal
+          initialRange={range}
+          initialLabel={rangeLabel}
+          initialPreset={rangeKey === "custom" ? "this_month" : rangeKey}
+          storeId={storeId}
+          storeName={data?.scope.storeName ?? null}
+          onClose={() => setPnlPrintOpen(false)}
+        />
       )}
     </div>
   );

@@ -25,7 +25,9 @@ export function DateRangePicker({
   className = "",
 }: {
   defaultPreset?: DateRangePresetKey;
-  onChange: (range: DateRange) => void;
+  /** `label` is the chosen preset's name (or "Custom range"); `key` is the
+   *  preset key (or "custom"). */
+  onChange: (range: DateRange, label: string, key: DateRangePresetKey | "custom") => void;
   className?: string;
 }) {
   const [selection, setSelection] = useState<Selection>(defaultPreset);
@@ -38,13 +40,14 @@ export function DateRangePicker({
     if (!from || !to) return;
     const lo = from <= to ? from : to;
     const hi = from <= to ? to : from;
-    onChange({ from: startOfDay(lo), to: endOfDay(hi) });
+    onChange({ from: startOfDay(lo), to: endOfDay(hi) }, "Custom range", "custom");
   }
 
   function handleSelect(next: Selection) {
     setSelection(next);
     if (next !== "custom") {
-      onChange(resolvePreset(next));
+      const label = DATE_RANGE_PRESETS.find((p) => p.key === next)?.label ?? "";
+      onChange(resolvePreset(next), label, next);
       return;
     }
     // Seed the custom inputs with the current month so there's a valid range.
