@@ -247,6 +247,7 @@ export async function GET(req: NextRequest) {
           cashier: s.cashier?.name ?? "—",
           salesperson: s.salesperson?.name ?? s.cashier?.name ?? "—",
           store: storeLabel,
+          storeId: s.storeId ?? null,
           customer: s.customerNameSnapshot || "",
           paymentMethod: s.paymentMethod,
           itemCount: s.items.reduce((sum, i) => sum + i.quantity, 0),

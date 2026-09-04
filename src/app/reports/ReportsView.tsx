@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
 import { InvoiceModal } from "@/components/InvoiceModal";
@@ -30,6 +30,8 @@ export function ReportsView({
   const [error, setError] = useState<string | null>(null);
   const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
   const [printSaleId, setPrintSaleId] = useState<string | null>(null);
+  // Local filter for just the Invoices list ("" = every store).
+  const [invoiceStore, setInvoiceStore] = useState<string>("");
   const [pos, setPos] = useState<PurchaseOrder[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
   const [heldTickets, setHeldTickets] = useState<HeldSaleSummary[]>([]);
@@ -79,6 +81,17 @@ export function ReportsView({
   useEffect(() => {
     reload();
   }, [reload]);
+
+  // The page-level store filter, when set, already narrows the data — the local
+  // per-list filter only applies on top of an all-stores view.
+  const effInvoiceStore = storeId ? "" : invoiceStore;
+  const shownSales = useMemo(
+    () =>
+      (data?.recentSales ?? []).filter(
+        (s) => !effInvoiceStore || s.storeId === effInvoiceStore,
+      ),
+    [data, effInvoiceStore],
+  );
 
   async function del(
     kind: "invoice" | "purchase order" | "bill" | "held ticket",
@@ -195,17 +208,34 @@ export function ReportsView({
             </div>
 
             <div className="card p-4">
-              <h2 className="mb-3 font-semibold">Invoices</h2>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h2 className="font-semibold">Invoices</h2>
+                {isAdmin && !storeId && data.stores.length > 0 && (
+                  <select
+                    className="input h-8 w-auto min-w-44 text-sm"
+                    value={invoiceStore}
+                    onChange={(e) => setInvoiceStore(e.target.value)}
+                    aria-label="Filter invoices by store"
+                  >
+                    <option value="">All stores</option>
+                    {data.stores.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
               <p className="mb-2 text-xs text-zinc-400">
                 Every completed sale is an invoice. Open one to raise purchase orders by vendor.
               </p>
-              {data.recentSales.length === 0 ? (
+              {shownSales.length === 0 ? (
                 <p className="text-sm text-zinc-400">No sales in this period.</p>
               ) : (
                 <div className="max-h-96 overflow-y-auto">
                   <table className="w-full text-sm">
                     <tbody className="divide-y divide-zinc-100">
-                      {data.recentSales.map((s) => (
+                      {shownSales.map((s) => (
                         <tr
                           key={s.id}
                           onClick={() => setOpenInvoiceId(s.id)}
@@ -220,7 +250,7 @@ export function ReportsView({
                               minute: "2-digit",
                             })}
                           </td>
-                          {data.scope.allStores && (
+                          {data.scope.allStores && !effInvoiceStore && (
                             <td className="py-2 text-zinc-400">{s.store}</td>
                           )}
                           <td className="py-2 text-zinc-500">{s.customer || s.salesperson}</td>

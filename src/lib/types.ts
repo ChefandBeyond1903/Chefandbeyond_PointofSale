@@ -535,6 +535,7 @@ export interface ReportSummary {
     cashier: string;
     salesperson: string;
     store: string;
+    storeId: string | null;
     customer: string;
     paymentMethod: string;
     itemCount: number;
