@@ -10,20 +10,57 @@ const ALL: Role[] = ["CASHIER", "MANAGER", "ADMIN"];
 const STAFF_UP: Role[] = ["MANAGER", "ADMIN"];
 const ADMIN_ONLY: Role[] = ["ADMIN"];
 
-const LINKS: { href: string; label: string; roles: Role[] }[] = [
-  { href: "/overview", label: "Overview", roles: ADMIN_ONLY },
-  { href: "/", label: "Register", roles: ALL },
-  { href: "/invoices", label: "Invoices", roles: ALL },
-  { href: "/quotes", label: "Quotes", roles: ALL },
-  { href: "/products", label: "Products", roles: ALL },
-  { href: "/vendors", label: "Vendors", roles: ALL },
-  { href: "/customers", label: "Customers", roles: ALL },
-  { href: "/purchase-orders", label: "Purchase Orders", roles: ALL },
-  { href: "/bills", label: "Bills", roles: STAFF_UP },
-  { href: "/inventory", label: "Inventory", roles: ALL },
-  { href: "/reports", label: "Reports", roles: ALL },
-  { href: "/users", label: "Staff", roles: STAFF_UP },
-  { href: "/settings", label: "Settings", roles: STAFF_UP },
+type NavItem = { href: string; label: string; roles: Role[] };
+type NavGroup = { key: string; label: string; items: NavItem[] };
+
+// The nav is organized around workflows, not a flat feature list. Each group
+// becomes one top-level tab; its items become a second row of sub-tabs once
+// you're anywhere inside it (and the mobile drawer mirrors the same five
+// groups). A group's own link goes to its first item the signed-in role can
+// see — for ADMIN that's Overview under Reports, for everyone else it's
+// Reports itself, no special-casing needed.
+const NAV: NavGroup[] = [
+  {
+    key: "sales",
+    label: "Sales",
+    items: [
+      { href: "/", label: "Register", roles: ALL },
+      { href: "/quotes", label: "Quotes", roles: ALL },
+      { href: "/invoices", label: "Invoices", roles: ALL },
+    ],
+  },
+  {
+    key: "customers",
+    label: "Customers",
+    items: [{ href: "/customers", label: "Customers", roles: ALL }],
+  },
+  {
+    key: "inventory",
+    label: "Inventory & Vendors",
+    items: [
+      { href: "/products", label: "Products", roles: ALL },
+      { href: "/vendors", label: "Vendors", roles: ALL },
+      { href: "/purchase-orders", label: "Purchase Orders", roles: ALL },
+      { href: "/bills", label: "Bills", roles: STAFF_UP },
+      { href: "/inventory", label: "Inventory", roles: ALL },
+    ],
+  },
+  {
+    key: "reports",
+    label: "Reports",
+    items: [
+      { href: "/overview", label: "Overview", roles: ADMIN_ONLY },
+      { href: "/reports", label: "Reports", roles: ALL },
+    ],
+  },
+  {
+    key: "settings",
+    label: "Settings",
+    items: [
+      { href: "/users", label: "Staff", roles: STAFF_UP },
+      { href: "/settings", label: "Settings", roles: STAFF_UP },
+    ],
+  },
 ];
 
 // Nav tabs that show an admin "new since you last looked" badge. `key` matches
@@ -120,8 +157,6 @@ export function Nav({ user }: { user: SessionUser }) {
     };
   }, [drawerOpen]);
 
-  const links = LINKS.filter((l) => l.roles.includes(user.role));
-
   function isActive(href: string) {
     return href === "/" ? pathname === "/" : pathname.startsWith(href);
   }
@@ -131,6 +166,16 @@ export function Nav({ user }: { user: SessionUser }) {
     const watched = WATCHED.find((w) => w.href === href);
     return watched ? newCounts[watched.key] : 0;
   }
+
+  // Each group, filtered to what this role can see, with only the groups
+  // that have anything left in them.
+  const groups = NAV.map((g) => ({
+    ...g,
+    items: g.items.filter((i) => i.roles.includes(user.role)),
+  })).filter((g) => g.items.length > 0);
+
+  const groupIsActive = (g: NavGroup) => g.items.some((i) => isActive(i.href));
+  const activeGroup = groups.find(groupIsActive);
 
   async function logout() {
     setLoggingOut(true);
@@ -174,55 +219,91 @@ export function Nav({ user }: { user: SessionUser }) {
           </button>
         </div>
 
-        {/* Desktop bar: full horizontal tab strip. */}
-        <div className="mx-auto hidden h-14 w-full max-w-[1600px] items-center gap-1 px-4 sm:flex">
-          <span className="mr-4 flex shrink-0 items-center gap-2 font-semibold tracking-tight">
-            <span className="grid h-7 w-7 place-items-center rounded-md bg-indigo-600 text-xs font-bold text-white">
-              CB
+        {/* Desktop bar: five workflow groups. */}
+        <div className="mx-auto hidden w-full max-w-[1600px] flex-col px-4 sm:flex">
+          <div className="flex h-14 items-center gap-1">
+            <span className="mr-4 flex shrink-0 items-center gap-2 font-semibold tracking-tight">
+              <span className="grid h-7 w-7 place-items-center rounded-md bg-indigo-600 text-xs font-bold text-white">
+                CB
+              </span>
+              POS
             </span>
-            POS
-          </span>
-          <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-            {links.map((l) => {
-              const active = isActive(l.href);
-              const badge = badgeFor(l.href);
-              return (
-                <Link
-                  key={l.href}
-                  href={l.href}
-                  className={`flex shrink-0 items-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                    active ? "bg-zinc-100 text-zinc-900" : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800"
-                  }`}
-                >
-                  {l.label}
-                  {badge > 0 && (
-                    <span
-                      className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-indigo-600 px-1 text-[10px] font-bold text-white"
-                      title={`${badge} new since you last looked`}
-                    >
-                      {badge > 99 ? "99+" : badge}
-                    </span>
-                  )}
-                </Link>
-              );
-            })}
-          </nav>
-          <div className="flex shrink-0 items-center gap-3 pl-2 text-sm">
-            <span className="hidden whitespace-nowrap text-zinc-500 sm:inline">
-              {user.name} · <span className="capitalize">{user.role.toLowerCase()}</span>
-            </span>
-            <button
-              onClick={logout}
-              disabled={loggingOut}
-              className="btn-secondary shrink-0 whitespace-nowrap"
-            >
-              {loggingOut ? "Signing out…" : "Sign out"}
-            </button>
+            <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+              {groups.map((g) => {
+                const active = groupIsActive(g);
+                const badge = g.items.reduce((s, i) => s + badgeFor(i.href), 0);
+                return (
+                  <Link
+                    key={g.key}
+                    href={g.items[0].href}
+                    className={`flex shrink-0 items-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                      active
+                        ? "bg-zinc-100 text-zinc-900"
+                        : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800"
+                    }`}
+                  >
+                    {g.label}
+                    {badge > 0 && (
+                      <span
+                        className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-indigo-600 px-1 text-[10px] font-bold text-white"
+                        title={`${badge} new since you last looked`}
+                      >
+                        {badge > 99 ? "99+" : badge}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+            </nav>
+            <div className="flex shrink-0 items-center gap-3 pl-2 text-sm">
+              <span className="hidden whitespace-nowrap text-zinc-500 sm:inline">
+                {user.name} · <span className="capitalize">{user.role.toLowerCase()}</span>
+              </span>
+              <button
+                onClick={logout}
+                disabled={loggingOut}
+                className="btn-secondary shrink-0 whitespace-nowrap"
+              >
+                {loggingOut ? "Signing out…" : "Sign out"}
+              </button>
+            </div>
           </div>
+
+          {/* Sub-tabs for the active group — only when it actually has more
+              than one page (Customers is a single page, so it never shows). */}
+          {activeGroup && activeGroup.items.length > 1 && (
+            <div className="-mt-px flex items-center gap-1 border-t border-zinc-100 pb-2 pt-2">
+              {activeGroup.items.map((i) => {
+                const active = isActive(i.href);
+                const badge = badgeFor(i.href);
+                return (
+                  <Link
+                    key={i.href}
+                    href={i.href}
+                    className={`flex shrink-0 items-center whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                      active
+                        ? "bg-indigo-50 text-indigo-700"
+                        : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800"
+                    }`}
+                  >
+                    {i.label}
+                    {badge > 0 && (
+                      <span
+                        className="ml-1.5 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-indigo-600 px-1 text-[9px] font-bold text-white"
+                        title={`${badge} new since you last looked`}
+                      >
+                        {badge > 99 ? "99+" : badge}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
         </div>
       </header>
 
-      {/* Mobile slide-out menu */}
+      {/* Mobile slide-out menu — the same five groups as desktop. */}
       {drawerOpen && (
         <div className="fixed inset-0 z-50 sm:hidden">
           <div
@@ -266,31 +347,43 @@ export function Nav({ user }: { user: SessionUser }) {
             </div>
             <div className="border-t border-zinc-800" />
             <nav className="flex-1 overflow-y-auto py-2">
-              {links.map((l) => {
-                const active = isActive(l.href);
-                const badge = badgeFor(l.href);
-                return (
-                  <Link
-                    key={l.href}
-                    href={l.href}
-                    className={`flex items-center justify-between border-l-[3px] px-4 py-3 text-[15px] font-medium transition-colors ${
-                      active
-                        ? "border-indigo-500 bg-zinc-800 text-white"
-                        : "border-transparent text-zinc-300 hover:bg-zinc-800/60 hover:text-white"
-                    }`}
-                  >
-                    <span>{l.label}</span>
-                    {badge > 0 && (
-                      <span
-                        className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-indigo-500 px-1.5 text-[11px] font-bold text-white"
-                        title={`${badge} new since you last looked`}
+              {groups.map((g) => (
+                <div key={g.key} className="py-1.5 first:pt-0">
+                  {g.items.length > 1 && (
+                    <p className="px-4 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+                      {g.label}
+                    </p>
+                  )}
+                  {g.items.map((i) => {
+                    const active = isActive(i.href);
+                    const badge = badgeFor(i.href);
+                    // A single-item group (Customers) shows the group name
+                    // itself as the row label — there's no sub-page to name.
+                    const label = g.items.length > 1 ? i.label : g.label;
+                    return (
+                      <Link
+                        key={i.href}
+                        href={i.href}
+                        className={`flex items-center justify-between border-l-[3px] px-4 py-2.5 text-[15px] font-medium transition-colors ${
+                          active
+                            ? "border-indigo-500 bg-zinc-800 text-white"
+                            : "border-transparent text-zinc-300 hover:bg-zinc-800/60 hover:text-white"
+                        }`}
                       >
-                        {badge > 99 ? "99+" : badge}
-                      </span>
-                    )}
-                  </Link>
-                );
-              })}
+                        <span>{label}</span>
+                        {badge > 0 && (
+                          <span
+                            className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-indigo-500 px-1.5 text-[11px] font-bold text-white"
+                            title={`${badge} new since you last looked`}
+                          >
+                            {badge > 99 ? "99+" : badge}
+                          </span>
+                        )}
+                      </Link>
+                    );
+                  })}
+                </div>
+              ))}
             </nav>
             <div className="border-t border-zinc-800 px-4 py-3">
               <p className="truncate text-sm font-semibold">{user.name}</p>
