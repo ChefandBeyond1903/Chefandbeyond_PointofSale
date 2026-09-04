@@ -56,6 +56,7 @@ export function Nav({ user }: { user: SessionUser }) {
   const pathname = usePathname();
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [newCounts, setNewCounts] = useState<Record<NewKey, number>>({
     vendors: 0,
     customers: 0,
@@ -103,7 +104,32 @@ export function Nav({ user }: { user: SessionUser }) {
     refreshNewCounts();
   }, [pathname, isAdmin, refreshNewCounts]);
 
+  // A navigation (including the back/forward buttons) closes the mobile drawer.
+  useEffect(() => {
+    setDrawerOpen(false);
+  }, [pathname]);
+
+  // Block background scroll while the drawer is open.
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [drawerOpen]);
+
   const links = LINKS.filter((l) => l.roles.includes(user.role));
+
+  function isActive(href: string) {
+    return href === "/" ? pathname === "/" : pathname.startsWith(href);
+  }
+  // Hide the badge while the user is actually on that section.
+  function badgeFor(href: string) {
+    if (!isAdmin || isActive(href)) return 0;
+    const watched = WATCHED.find((w) => w.href === href);
+    return watched ? newCounts[watched.key] : 0;
+  }
 
   async function logout() {
     setLoggingOut(true);
@@ -119,55 +145,165 @@ export function Nav({ user }: { user: SessionUser }) {
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white">
-      <div className="mx-auto flex h-14 w-full max-w-[1600px] items-center gap-1 px-4">
-        <span className="mr-4 flex shrink-0 items-center gap-2 font-semibold tracking-tight">
-          <span className="grid h-7 w-7 place-items-center rounded-md bg-indigo-600 text-xs font-bold text-white">
-            CB
-          </span>
-          POS
-        </span>
-        <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-          {links.map((l) => {
-            const active = l.href === "/" ? pathname === "/" : pathname.startsWith(l.href);
-            const watched = WATCHED.find((w) => w.href === l.href);
-            // Hide the badge while the admin is actually on that section.
-            const badge =
-              watched && !active && isAdmin ? newCounts[watched.key] : 0;
-            return (
-              <Link
-                key={l.href}
-                href={l.href}
-                className={`flex shrink-0 items-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                  active ? "bg-zinc-100 text-zinc-900" : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800"
-                }`}
-              >
-                {l.label}
-                {badge > 0 && (
-                  <span
-                    className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-indigo-600 px-1 text-[10px] font-bold text-white"
-                    title={`${badge} new since you last looked`}
-                  >
-                    {badge > 99 ? "99+" : badge}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
-        </nav>
-        <div className="flex shrink-0 items-center gap-3 pl-2 text-sm">
-          <span className="hidden whitespace-nowrap text-zinc-500 sm:inline">
-            {user.name} · <span className="capitalize">{user.role.toLowerCase()}</span>
-          </span>
+    <>
+      <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white">
+        {/* Mobile bar: tapping the logo opens the slide-out menu. */}
+        <div className="flex h-14 items-center px-2 sm:hidden">
           <button
-            onClick={logout}
-            disabled={loggingOut}
-            className="btn-secondary shrink-0 whitespace-nowrap"
+            onClick={() => setDrawerOpen(true)}
+            className="-ml-0.5 flex items-center gap-2 rounded-md py-1.5 pl-2 pr-3 font-semibold tracking-tight hover:bg-zinc-50"
+            aria-label="Open menu"
           >
-            {loggingOut ? "Signing out…" : "Sign out"}
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 18 18"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              aria-hidden="true"
+            >
+              <path d="M2 4.5h14M2 9h14M2 13.5h14" />
+            </svg>
+            <span className="grid h-7 w-7 place-items-center rounded-md bg-indigo-600 text-xs font-bold text-white">
+              CB
+            </span>
+            POS
           </button>
         </div>
-      </div>
-    </header>
+
+        {/* Desktop bar: full horizontal tab strip. */}
+        <div className="mx-auto hidden h-14 w-full max-w-[1600px] items-center gap-1 px-4 sm:flex">
+          <span className="mr-4 flex shrink-0 items-center gap-2 font-semibold tracking-tight">
+            <span className="grid h-7 w-7 place-items-center rounded-md bg-indigo-600 text-xs font-bold text-white">
+              CB
+            </span>
+            POS
+          </span>
+          <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+            {links.map((l) => {
+              const active = isActive(l.href);
+              const badge = badgeFor(l.href);
+              return (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  className={`flex shrink-0 items-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                    active ? "bg-zinc-100 text-zinc-900" : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800"
+                  }`}
+                >
+                  {l.label}
+                  {badge > 0 && (
+                    <span
+                      className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-indigo-600 px-1 text-[10px] font-bold text-white"
+                      title={`${badge} new since you last looked`}
+                    >
+                      {badge > 99 ? "99+" : badge}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+          </nav>
+          <div className="flex shrink-0 items-center gap-3 pl-2 text-sm">
+            <span className="hidden whitespace-nowrap text-zinc-500 sm:inline">
+              {user.name} · <span className="capitalize">{user.role.toLowerCase()}</span>
+            </span>
+            <button
+              onClick={logout}
+              disabled={loggingOut}
+              className="btn-secondary shrink-0 whitespace-nowrap"
+            >
+              {loggingOut ? "Signing out…" : "Sign out"}
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Mobile slide-out menu */}
+      {drawerOpen && (
+        <div className="fixed inset-0 z-50 sm:hidden">
+          <div
+            className="cbpos-overlay absolute inset-0 bg-black/50"
+            onClick={() => setDrawerOpen(false)}
+            aria-hidden="true"
+          />
+          <div className="cbpos-drawer absolute inset-y-0 left-0 flex w-[82%] max-w-xs flex-col bg-zinc-900 text-zinc-100 shadow-2xl">
+            <div className="flex items-start justify-between px-4 pb-3 pt-5">
+              <div className="flex items-center gap-2.5">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-indigo-600 text-sm font-bold text-white">
+                  CB
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate font-semibold leading-tight tracking-tight">
+                    Chef &amp; Beyond POS
+                  </p>
+                  <p className="text-[11px] uppercase tracking-wide text-zinc-400">
+                    {user.role.toLowerCase()}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setDrawerOpen(false)}
+                className="shrink-0 rounded-md p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-white"
+                aria-label="Close menu"
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 18 18"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  aria-hidden="true"
+                >
+                  <path d="M3.5 3.5l11 11M14.5 3.5l-11 11" />
+                </svg>
+              </button>
+            </div>
+            <div className="border-t border-zinc-800" />
+            <nav className="flex-1 overflow-y-auto py-2">
+              {links.map((l) => {
+                const active = isActive(l.href);
+                const badge = badgeFor(l.href);
+                return (
+                  <Link
+                    key={l.href}
+                    href={l.href}
+                    className={`flex items-center justify-between border-l-[3px] px-4 py-3 text-[15px] font-medium transition-colors ${
+                      active
+                        ? "border-indigo-500 bg-zinc-800 text-white"
+                        : "border-transparent text-zinc-300 hover:bg-zinc-800/60 hover:text-white"
+                    }`}
+                  >
+                    <span>{l.label}</span>
+                    {badge > 0 && (
+                      <span
+                        className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-indigo-500 px-1.5 text-[11px] font-bold text-white"
+                        title={`${badge} new since you last looked`}
+                      >
+                        {badge > 99 ? "99+" : badge}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+            </nav>
+            <div className="border-t border-zinc-800 px-4 py-3">
+              <p className="truncate text-sm font-semibold">{user.name}</p>
+              <button
+                onClick={logout}
+                disabled={loggingOut}
+                className="mt-0.5 text-xs text-zinc-400 hover:text-white disabled:opacity-50"
+              >
+                {loggingOut ? "Signing out…" : "Sign out"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
