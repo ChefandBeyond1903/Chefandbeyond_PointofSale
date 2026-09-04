@@ -11,6 +11,16 @@ import { RefundReceiptModal } from "@/components/RefundReceiptModal";
 import type { InvoiceDetail, PurchaseOrder, Sale, Vendor } from "@/lib/types";
 
 type Person = { id: string; name: string };
+type ProductLite = { id: string; name: string; sku: string; priceCents: number };
+type EditLine = {
+  productId: string;
+  name: string;
+  sku: string;
+  quantity: number;
+  unitPriceCents: number;
+  discountCents: number;
+  serialNumber: string;
+};
 
 const PO_STATUSES: PurchaseOrder["status"][] = ["OPEN", "SENT", "RECEIVED", "CANCELLED"];
 
@@ -57,7 +67,7 @@ export function InvoiceModal({
   const [payAmount, setPayAmount] = useState(0);
   const [payBusy, setPayBusy] = useState(false);
 
-  // Editing the invoice's note / bill-to details / salesperson (managers).
+  // Editing the invoice's note / bill-to details / salesperson / items (managers).
   const [editOpen, setEditOpen] = useState(false);
   const [editBusy, setEditBusy] = useState(false);
   const [salespeople, setSalespeople] = useState<Person[]>([]);
@@ -70,6 +80,13 @@ export function InvoiceModal({
     note: "",
     salespersonId: "",
   });
+  // Line-item editing: replace a product, change qty/price/serial. Only sent
+  // back to the server if actually touched, so a plain note edit doesn't
+  // re-trigger cost/UMRP validation or an inventory re-square for nothing.
+  const [products, setProducts] = useState<ProductLite[]>([]);
+  const [editItems, setEditItems] = useState<EditLine[]>([]);
+  const [itemsTouched, setItemsTouched] = useState(false);
+  const [itemMenuIdx, setItemMenuIdx] = useState<number | null>(null);
 
   function openEdit() {
     if (!detail) return;
@@ -83,20 +100,108 @@ export function InvoiceModal({
       note: s.note ?? "",
       salespersonId: s.salesperson?.id ?? s.salespersonId ?? "",
     });
+    setEditItems(
+      s.items.map((it) => ({
+        productId: it.productId,
+        name: it.nameSnapshot,
+        sku: it.skuSnapshot,
+        quantity: it.quantity,
+        unitPriceCents: it.unitPriceCents,
+        discountCents: it.discountCents,
+        serialNumber: it.serialNumber ?? "",
+      })),
+    );
+    setItemsTouched(false);
+    setItemMenuIdx(null);
     if (salespeople.length === 0) {
       api<{ people: Person[] }>("/api/salespeople")
         .then((r) => setSalespeople(r.people))
         .catch(() => {});
     }
+    if (products.length === 0) {
+      api<{ products: ProductLite[] }>("/api/products?take=5000")
+        .then((r) => setProducts(r.products))
+        .catch(() => {});
+    }
     setEditOpen(true);
   }
 
+  function itemMatches(text: string): ProductLite[] {
+    const terms = text.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (!terms.length) return [];
+    return products
+      .filter((p) => {
+        const hay = `${p.name} ${p.sku}`.toLowerCase();
+        return terms.every((t) => hay.includes(t));
+      })
+      .slice(0, 30);
+  }
+
+  function updateItemText(idx: number, text: string) {
+    setItemsTouched(true);
+    setEditItems((cur) =>
+      cur.map((l, i) => (i === idx ? { ...l, name: text, productId: "" } : l)),
+    );
+  }
+
+  function replaceItemProduct(idx: number, p: ProductLite) {
+    setItemsTouched(true);
+    setEditItems((cur) =>
+      cur.map((l, i) =>
+        i === idx ? { ...l, productId: p.id, name: p.name, sku: p.sku, unitPriceCents: p.priceCents } : l,
+      ),
+    );
+    setItemMenuIdx(null);
+  }
+
+  function setItemField<K extends "quantity" | "unitPriceCents" | "serialNumber">(
+    idx: number,
+    field: K,
+    value: EditLine[K],
+  ) {
+    setItemsTouched(true);
+    setEditItems((cur) => cur.map((l, i) => (i === idx ? { ...l, [field]: value } : l)));
+  }
+
+  function removeItem(idx: number) {
+    setItemsTouched(true);
+    setEditItems((cur) => cur.filter((_, i) => i !== idx));
+  }
+
+  function addBlankItem() {
+    setItemsTouched(true);
+    setEditItems((cur) => [
+      ...cur,
+      { productId: "", name: "", sku: "", quantity: 1, unitPriceCents: 0, discountCents: 0, serialNumber: "" },
+    ]);
+    setItemMenuIdx(editItems.length);
+  }
+
   async function saveEdit() {
+    if (itemsTouched) {
+      if (editItems.length === 0) {
+        setErr("An invoice needs at least one item.");
+        return;
+      }
+      if (editItems.some((l) => !l.productId)) {
+        setErr("Pick a product from the list for every item.");
+        return;
+      }
+    }
     setEditBusy(true);
     setErr(null);
     try {
       const { salespersonId, ...rest } = edit;
-      const payload = salespersonId ? { ...rest, salespersonId } : rest;
+      const payload: Record<string, unknown> = salespersonId ? { ...rest, salespersonId } : rest;
+      if (itemsTouched) {
+        payload.items = editItems.map((l) => ({
+          productId: l.productId,
+          quantity: l.quantity,
+          unitPriceCents: l.unitPriceCents,
+          discountCents: l.discountCents,
+          ...(l.serialNumber.trim() ? { serialNumber: l.serialNumber.trim() } : {}),
+        }));
+      }
       await api(`/api/sales/${saleId}`, { method: "PATCH", body: JSON.stringify(payload) });
       setEditOpen(false);
       await load();
@@ -481,6 +586,95 @@ export function InvoiceModal({
                     onChange={(e) => setEdit({ ...edit, note: e.target.value })}
                   />
                 </div>
+
+                <div className="mt-3">
+                  <p className="mb-1.5 text-xs font-medium text-zinc-500">
+                    Items — replace a product or change its price/quantity
+                  </p>
+                  <div className="space-y-2">
+                    {editItems.map((it, idx) => (
+                      <div key={idx} className="rounded-md border border-zinc-200 bg-white p-2">
+                        <div className="relative">
+                          <input
+                            className="input h-8"
+                            placeholder="Name or model no."
+                            value={it.name}
+                            onChange={(e) => updateItemText(idx, e.target.value)}
+                            onFocus={() => setItemMenuIdx(idx)}
+                            onBlur={() =>
+                              setTimeout(
+                                () => setItemMenuIdx((cur) => (cur === idx ? null : cur)),
+                                150,
+                              )
+                            }
+                          />
+                          {itemMenuIdx === idx && itemMatches(it.name).length > 0 && (
+                            <ul className="absolute z-40 mt-1 max-h-48 w-full overflow-auto rounded-md border border-zinc-200 bg-white text-sm shadow-lg">
+                              {itemMatches(it.name).map((p) => (
+                                <li key={p.id}>
+                                  <button
+                                    type="button"
+                                    onMouseDown={(e) => {
+                                      e.preventDefault();
+                                      replaceItemProduct(idx, p);
+                                    }}
+                                    className="block w-full px-3 py-1.5 text-left hover:bg-indigo-50"
+                                  >
+                                    <span className="font-medium">{p.name}</span>
+                                    <span className="ml-2 text-xs text-zinc-400">{p.sku}</span>
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                        <div className="mt-1.5 flex items-center gap-1.5">
+                          <input
+                            type="number"
+                            min={1}
+                            className="input h-8 w-16 text-right"
+                            value={it.quantity}
+                            onChange={(e) =>
+                              setItemField(idx, "quantity", Math.max(1, parseInt(e.target.value, 10) || 1))
+                            }
+                          />
+                          <MoneyInput
+                            cents={it.unitPriceCents}
+                            onCentsChange={(c) => setItemField(idx, "unitPriceCents", c)}
+                            className="input h-8 w-24 text-right"
+                          />
+                          <input
+                            className="input h-8 flex-1"
+                            placeholder="Serial # (optional)"
+                            value={it.serialNumber}
+                            onChange={(e) => setItemField(idx, "serialNumber", e.target.value)}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeItem(idx)}
+                            className="btn-ghost h-8 px-2 text-xs text-red-500"
+                            title="Remove this item"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                        {!it.productId && it.name && (
+                          <p className="mt-1 text-[11px] text-amber-600">
+                            Pick a match from the list above.
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <button type="button" onClick={addBlankItem} className="btn-ghost mt-2 h-8 text-xs">
+                    + Add item
+                  </button>
+                  <p className="mt-1 text-[11px] text-zinc-400">
+                    Same rules as ringing a sale apply — no item may go below its minimum resale
+                    price, and every item needs a cost on file.
+                  </p>
+                </div>
+
                 <div className="mt-2 flex gap-2">
                   <button onClick={() => setEditOpen(false)} className="btn-ghost h-8 text-xs">
                     Cancel

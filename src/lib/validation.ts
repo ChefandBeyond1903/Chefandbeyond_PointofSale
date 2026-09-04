@@ -266,6 +266,9 @@ export const saleEditSchema = z.object({
   customerAddressSnapshot: z.string().trim().max(500).optional(),
   // Reassign the sale's credited salesperson.
   salespersonId: z.string().min(1).optional(),
+  // Replace the line items — swap a product, change quantity/price. Omit to
+  // leave items untouched. Same shape as a sale's items (serialNumber is kept).
+  items: z.array(saleItemSchema).min(1).optional(),
 });
 
 // Manager grants / adjusts a customer's store credit. amountCents is signed

@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { HttpError } from "@/lib/auth";
 import { requireScopedUser, requireScopedRole, scopeStoreId } from "@/lib/scope";
 import { salePaymentSchema, saleEditSchema } from "@/lib/validation";
+import { computeSale, type PricedInput } from "@/lib/sale";
+import { formatMoney } from "@/lib/money";
 import { parseEventDate } from "@/lib/date";
 import { ok, toErrorResponse } from "@/lib/api";
 
@@ -74,11 +76,25 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const raw = await req.json();
     const { id } = await params;
 
-    // --- edit the note / bill-to details ---
+    // --- edit the note / bill-to details / items ---
     if (!raw || typeof raw !== "object" || !("paymentMethod" in raw)) {
       const editor = await requireScopedRole("MANAGER", "ADMIN");
       const scoped = scopeStoreId(editor);
-      const cur = await prisma.sale.findUnique({ where: { id }, select: { storeId: true } });
+      const cur = await prisma.sale.findUnique({
+        where: { id },
+        select: {
+          storeId: true,
+          status: true,
+          number: true,
+          taxRateBps: true,
+          shippingCents: true,
+          customerTaxExemptSnapshot: true,
+          amountPaidCents: true,
+          refundedCents: true,
+          paidAt: true,
+          items: { select: { productId: true, quantity: true } },
+        },
+      });
       if (!cur || (scoped && cur.storeId !== scoped)) throw new HttpError(404, "Invoice not found");
       const fields = saleEditSchema.parse(raw);
 
@@ -98,19 +114,183 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
       const data: Record<string, unknown> = {};
       for (const k of Object.keys(fields) as (keyof typeof fields)[]) {
+        if (k === "items") continue;
         if (fields[k] !== undefined) data[k] = fields[k];
       }
-      const sale = await prisma.sale.update({
-        where: { id },
-        data,
-        include: {
-          items: true,
-          payments: { orderBy: { paidAt: "asc" } },
-          refunds: { orderBy: { refundedAt: "asc" }, include: { createdBy: { select: { id: true, name: true } } } },
-          cashier: { select: { id: true, name: true } },
-          salesperson: { select: { id: true, name: true } },
-          customer: true,
-        },
+
+      let itemsCreate: Record<string, unknown>[] | null = null;
+      let oldItems: { productId: string; quantity: number }[] = [];
+      if (fields.items) {
+        if (cur.status === "REFUNDED" || cur.status === "VOIDED") {
+          throw new HttpError(400, `Can't edit items on a ${cur.status.toLowerCase()} invoice.`);
+        }
+
+        // Merge duplicate product lines defensively (same as creating a sale).
+        const merged = new Map<
+          string,
+          { quantity: number; discountCents: number; unitPriceCents?: number; serialNumber: string }
+        >();
+        for (const item of fields.items) {
+          const prev = merged.get(item.productId);
+          if (prev) {
+            prev.quantity += item.quantity;
+            prev.discountCents += item.discountCents;
+            if (item.unitPriceCents !== undefined) prev.unitPriceCents = item.unitPriceCents;
+            if (item.serialNumber) {
+              prev.serialNumber = prev.serialNumber
+                ? `${prev.serialNumber}, ${item.serialNumber}`
+                : item.serialNumber;
+            }
+          } else {
+            merged.set(item.productId, {
+              quantity: item.quantity,
+              discountCents: item.discountCents,
+              unitPriceCents: item.unitPriceCents,
+              serialNumber: item.serialNumber ?? "",
+            });
+          }
+        }
+
+        const productIds = [...merged.keys()];
+        const products = await prisma.product.findMany({ where: { id: { in: productIds } } });
+        if (products.length !== productIds.length) {
+          throw new HttpError(400, "One or more products no longer exist");
+        }
+
+        // Same rules as ringing a sale: no cost, no sale; never below UMRP.
+        const noCost = products.filter((p) => p.costCents <= 0).map((p) => p.name);
+        if (noCost.length > 0) {
+          throw new HttpError(
+            400,
+            `Cost needs to be entered for: ${noCost.join(", ")}. Set a cost on the product before selling it.`,
+          );
+        }
+
+        const priced: PricedInput[] = [];
+        let listSubtotalCents = 0;
+        for (const p of products) {
+          const line = merged.get(p.id)!;
+          if (!p.active) throw new HttpError(400, `"${p.name}" is not available for sale`);
+          listSubtotalCents += p.priceCents * line.quantity;
+          priced.push({
+            productId: p.id,
+            name: p.name,
+            unitPriceCents: line.unitPriceCents ?? p.priceCents,
+            quantity: line.quantity,
+            lineDiscountCents: line.discountCents,
+          });
+        }
+
+        const taxRateBps = cur.customerTaxExemptSnapshot ? 0 : cur.taxRateBps;
+        const computed = computeSale(priced, 0, taxRateBps, cur.shippingCents);
+
+        const umrpById = new Map(products.map((p) => [p.id, p.umrpCents]));
+        for (const l of computed.lines) {
+          const umrp = umrpById.get(l.productId) ?? 0;
+          if (umrp <= 0) continue;
+          const netCents = l.unitPriceCents * l.quantity - l.discountCents;
+          if (netCents < umrp * l.quantity) {
+            const eachCents = Math.floor(netCents / l.quantity);
+            throw new HttpError(
+              400,
+              `"${l.nameSnapshot}" can't be sold below its minimum price of ${formatMoney(umrp)} each ` +
+                `(this sale works out to ${formatMoney(eachCents)}). Reduce the discount.`,
+            );
+          }
+        }
+
+        // The new total can't drop below what's already been collected /
+        // refunded — that would leave the invoice's numbers inconsistent.
+        // Issue a refund first to reduce it further.
+        const netCollected = cur.amountPaidCents - cur.refundedCents;
+        if (computed.totalCents < netCollected || computed.totalCents < cur.refundedCents) {
+          const floor = Math.max(netCollected, cur.refundedCents);
+          throw new HttpError(
+            400,
+            `This invoice has ${formatMoney(floor)} collected — the new total can't be less than that. ` +
+              `Issue a refund first if you need to reduce it further.`,
+          );
+        }
+
+        const settled = cur.amountPaidCents >= computed.totalCents;
+        data.subtotalCents = computed.subtotalCents;
+        data.listSubtotalCents = listSubtotalCents;
+        data.discountCents = computed.discountCents;
+        data.taxCents = computed.taxCents;
+        data.taxRateBps = computed.taxRateBps;
+        data.totalCents = computed.totalCents;
+        data.status = settled ? "COMPLETED" : "INVOICED";
+        data.paidAt = settled ? (cur.paidAt ?? new Date()) : null;
+
+        const meta = new Map(
+          products.map((p) => [p.id, { sku: p.sku, vendor: p.vendor, costCents: p.costCents }]),
+        );
+        itemsCreate = computed.lines.map((l) => ({
+          productId: l.productId,
+          nameSnapshot: l.nameSnapshot,
+          skuSnapshot: meta.get(l.productId)?.sku ?? "",
+          vendorSnapshot: meta.get(l.productId)?.vendor ?? "",
+          serialNumber: merged.get(l.productId)?.serialNumber ?? "",
+          unitPriceCents: l.unitPriceCents,
+          unitCostCents: meta.get(l.productId)?.costCents ?? 0,
+          quantity: l.quantity,
+          discountCents: l.discountCents,
+          taxRateBps: l.taxRateBps,
+          lineTotalCents: l.lineTotalCents,
+        }));
+        oldItems = cur.items;
+      }
+
+      const sale = await prisma.$transaction(async (tx) => {
+        if (itemsCreate) {
+          // Re-square inventory: put back what the old lines drew down, then
+          // draw down what the new lines need (may net to nothing per product).
+          if (cur.storeId) {
+            const allIds = [...new Set([...oldItems.map((i) => i.productId), ...itemsCreate.map((l) => l.productId as string)])];
+            const tracked = new Set(
+              (
+                await tx.product.findMany({
+                  where: { id: { in: allIds }, trackStock: true },
+                  select: { id: true },
+                })
+              ).map((p) => p.id),
+            );
+            for (const it of oldItems) {
+              if (!tracked.has(it.productId)) continue;
+              await tx.storeInventory.upsert({
+                where: { productId_storeId: { productId: it.productId, storeId: cur.storeId } },
+                create: { productId: it.productId, storeId: cur.storeId, quantity: it.quantity },
+                update: { quantity: { increment: it.quantity } },
+              });
+            }
+            for (const l of itemsCreate) {
+              const productId = l.productId as string;
+              const quantity = l.quantity as number;
+              if (!tracked.has(productId)) continue;
+              await tx.storeInventory.upsert({
+                where: { productId_storeId: { productId, storeId: cur.storeId } },
+                create: { productId, storeId: cur.storeId, quantity: -quantity },
+                update: { quantity: { decrement: quantity } },
+              });
+            }
+          }
+          await tx.saleItem.deleteMany({ where: { saleId: id } });
+        }
+        return tx.sale.update({
+          where: { id },
+          data: itemsCreate ? { ...data, items: { create: itemsCreate } } : data,
+          include: {
+            items: true,
+            payments: { orderBy: { paidAt: "asc" } },
+            refunds: {
+              orderBy: { refundedAt: "asc" },
+              include: { createdBy: { select: { id: true, name: true } } },
+            },
+            cashier: { select: { id: true, name: true } },
+            salesperson: { select: { id: true, name: true } },
+            customer: true,
+          },
+        });
       });
       return ok({ sale });
     }
