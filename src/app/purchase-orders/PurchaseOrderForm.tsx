@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
 import { MoneyInput } from "@/components/MoneyInput";
+import { Badge } from "@/components/Badge";
 import type { Customer, PurchaseOrder, PurchaseOrderStatus, Store, Vendor } from "@/lib/types";
 
 const STATUSES: PurchaseOrderStatus[] = ["OPEN", "CLOSED", "SENT", "RECEIVED", "CANCELLED"];
@@ -106,10 +108,16 @@ export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readO
   const [itemLines, setItemLines] = useState<ItemRow[]>([blankItem(), blankItem()]);
 
   const [itemOpen, setItemOpen] = useState(true);
+  // Related records, one click apart: the invoice this PO was raised from
+  // (if any), and any vendor bill(s) created from receiving it.
+  const [sourceSale, setSourceSale] = useState<PurchaseOrder["sale"]>(null);
+  const [bills, setBills] = useState<NonNullable<PurchaseOrder["bills"]>>([]);
 
   const prevVendorRef = useRef<Vendor | null>(null);
 
   const applyPo = useCallback((po: PurchaseOrder) => {
+    setSourceSale(po.sale ?? null);
+    setBills(po.bills ?? []);
     setVendor(po.vendor);
     setStatus(po.status);
     setPoNumber(po.poNumber);
@@ -351,7 +359,7 @@ export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readO
 
   return (
     <div className="w-full flex-1 p-4 pb-24">
-      <div className="mb-4 flex items-center gap-3">
+      <div className="mb-1 flex items-center gap-3">
         <h1 className="text-xl font-semibold">
           {isEdit ? `Purchase order ${poNumber}` : "New purchase order"}
         </h1>
@@ -361,6 +369,34 @@ export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readO
           </span>
         )}
       </div>
+
+      {/* Related records, one click apart. */}
+      {(sourceSale || bills.length > 0) && (
+        <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-zinc-500">
+          {sourceSale && (
+            <span>
+              Raised from{" "}
+              <Link href={`/invoices?open=${sourceSale.id}`} className="text-indigo-600 hover:underline">
+                invoice #{sourceSale.number}
+              </Link>
+            </span>
+          )}
+          {bills.length > 0 && (
+            <span className="flex items-center gap-1.5">
+              Bill{bills.length > 1 ? "s" : ""}:
+              {bills.map((b) => (
+                <Link
+                  key={b.id}
+                  href={`/bills?open=${b.id}`}
+                  className="text-indigo-600 hover:underline"
+                >
+                  {b.billNumber || formatMoney(b.subtotalCents)}
+                </Link>
+              ))}
+            </span>
+          )}
+        </div>
+      )}
 
       {error && (
         <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>

@@ -58,6 +58,16 @@ export function BillsView({
     return () => clearTimeout(t);
   }, [load]);
 
+  // Deep link from a related record (e.g. a purchase order's "Bills" line):
+  // /bills?open=<id> opens that bill straight away.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("open");
+    if (id) {
+      setOpenId(id);
+      window.history.replaceState(null, "", "/bills");
+    }
+  }, []);
+
   const totalOpen = useMemo(
     () => bills.filter((b) => b.status === "OPEN").reduce((s, b) => s + b.subtotalCents, 0),
     [bills],

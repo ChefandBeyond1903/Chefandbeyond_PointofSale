@@ -31,6 +31,10 @@ export async function GET(_req: NextRequest, { params }: Params) {
         categoryLines: { orderBy: { sortOrder: "asc" } },
         createdBy: { select: { id: true, name: true } },
         sale: { select: { id: true, number: true, createdAt: true } },
+        bills: {
+          orderBy: { createdAt: "asc" },
+          select: { id: true, billNumber: true, status: true, subtotalCents: true },
+        },
       },
     });
     if (!po) throw new HttpError(404, "Purchase order not found");

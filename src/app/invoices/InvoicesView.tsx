@@ -69,7 +69,9 @@ export function InvoicesView({
   }, [isAdmin]);
 
   // Deep links from Overview ("Balance due" / "Overdue"):
-  // /invoices?status=OPEN&overdue=1.
+  // /invoices?status=OPEN&overdue=1. Or from a related record (a purchase
+  // order raised from this invoice, a customer's history, …):
+  // /invoices?open=<id> opens that invoice directly.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const status = params.get("status");
@@ -77,6 +79,11 @@ export function InvoicesView({
     if (params.get("overdue") === "1") {
       setOverdueOnly(true);
       if (!status) setFilter("OPEN");
+    }
+    const open = params.get("open");
+    if (open) {
+      setOpenInvoiceId(open);
+      window.history.replaceState(null, "", "/invoices");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -315,6 +315,7 @@ export interface PurchaseOrder {
   sale?: { id: string; number: number; createdAt?: string } | null;
   items?: PurchaseOrderItem[];
   categoryLines?: PurchaseOrderCategoryLine[];
+  bills?: { id: string; billNumber: string; status: string; subtotalCents: number }[];
   _count?: { items: number };
 }
 
