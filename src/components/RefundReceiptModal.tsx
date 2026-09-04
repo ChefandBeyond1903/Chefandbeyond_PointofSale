@@ -5,6 +5,7 @@ import { api } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
 import { formatDateOnly } from "@/lib/date";
 import { INVOICE_FINE_PRINT } from "@/components/ReceiptModal";
+import { PrintPaperToggle, usePrintPaper } from "@/components/PrintPaperToggle";
 import type { Company, Sale, SaleRefund } from "@/lib/types";
 
 function methodLabel(r: SaleRefund): string {
@@ -35,6 +36,7 @@ export function RefundReceiptModal({
   closeLabel?: string;
 }) {
   const [company, setCompany] = useState<Company | null>(companyProp ?? null);
+  const [paper, setPaper] = usePrintPaper();
 
   useEffect(() => {
     if (companyProp !== undefined) return;
@@ -63,14 +65,19 @@ export function RefundReceiptModal({
       }}
     >
       <div
-        className="card max-h-[92vh] w-full max-w-sm overflow-y-auto p-4 sm:p-6"
+        className={`card max-h-[92vh] w-full overflow-y-auto p-4 sm:p-6 ${
+          paper === "full" ? "max-w-xl" : "max-w-sm"
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="w-full">
           {!refund ? (
             <p className="py-8 text-center text-sm text-zinc-500">No refund to show.</p>
           ) : (
-            <div id="receipt" className="rounded-md border border-zinc-200 p-4 font-mono text-xs">
+            <div
+              id="receipt"
+              className={`rounded-md border border-zinc-200 p-4 font-mono text-xs receipt-${paper}`}
+            >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/logo-header.webp"
@@ -158,17 +165,20 @@ export function RefundReceiptModal({
             </div>
           )}
 
-          <div className="mt-4 flex gap-2">
-            <button
-              onClick={() => window.print()}
-              disabled={!refund}
-              className="btn-secondary flex-1"
-            >
-              Print
-            </button>
-            <button onClick={onClose} className="btn-primary flex-1">
-              {closeLabel}
-            </button>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <PrintPaperToggle value={paper} onChange={setPaper} />
+            <div className="ml-auto flex flex-1 gap-2">
+              <button
+                onClick={() => window.print()}
+                disabled={!refund}
+                className="btn-secondary flex-1"
+              >
+                Print
+              </button>
+              <button onClick={onClose} className="btn-primary flex-1">
+                {closeLabel}
+              </button>
+            </div>
           </div>
         </div>
       </div>

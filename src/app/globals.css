@@ -99,8 +99,42 @@ body {
   }
   body:has(#receipt) #receipt {
     position: absolute;
-    inset: 0;
+    top: 0;
+    left: 0;
     border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    color: #000;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  /* 80 mm thermal roll. */
+  body:has(#receipt) #receipt.receipt-thermal {
+    width: 80mm;
+    padding: 3mm !important;
+    font-size: 9pt;
+  }
+  /* Standard sheet — fills whatever paper size is picked in the print dialog
+     (Letter, A4, …). */
+  body:has(#receipt) #receipt.receipt-full {
+    left: 0;
+    right: 0;
+    width: auto;
+    max-width: 175mm;
+    margin: 0 auto;
+    padding: 12mm !important;
+    font-family: var(--font-geist-sans), system-ui, Arial, sans-serif;
+    font-size: 11pt;
+    line-height: 1.55;
+  }
+  body:has(#receipt) #receipt.receipt-full hr {
+    border-style: solid;
+  }
+  body:has(#receipt) #receipt.receipt-full img {
+    height: 56px;
+  }
+  /* No class yet (older callers) → behave like the thermal roll. */
+  body:has(#receipt) #receipt:not(.receipt-full):not(.receipt-thermal) {
     width: 80mm;
   }
 

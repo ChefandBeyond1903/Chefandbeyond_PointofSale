@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/client";
 import { formatBps, formatMoney } from "@/lib/money";
 import { formatDateOnly } from "@/lib/date";
+import { PrintPaperToggle, usePrintPaper } from "@/components/PrintPaperToggle";
 import type { Company, Sale } from "@/lib/types";
 
 // Printed on every invoice/receipt.
@@ -36,6 +37,7 @@ export function ReceiptModal({
   const [sale, setSale] = useState<Sale | null>(saleProp ?? null);
   const [company, setCompany] = useState<Company | null>(companyProp ?? null);
   const [error, setError] = useState<string | null>(null);
+  const [paper, setPaper] = usePrintPaper();
 
   useEffect(() => {
     if (saleProp || !saleId) return;
@@ -68,7 +70,9 @@ export function ReceiptModal({
       }}
     >
       <div
-        className="card max-h-[92vh] w-full max-w-sm overflow-y-auto p-4 sm:p-6"
+        className={`card max-h-[92vh] w-full overflow-y-auto p-4 sm:p-6 ${
+          paper === "full" ? "max-w-xl" : "max-w-sm"
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="w-full">
@@ -79,7 +83,7 @@ export function ReceiptModal({
           ) : (
             <div
               id="receipt"
-              className="rounded-md border border-zinc-200 p-4 font-mono text-xs"
+              className={`rounded-md border border-zinc-200 p-4 font-mono text-xs receipt-${paper}`}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -221,17 +225,20 @@ export function ReceiptModal({
             </div>
           )}
 
-          <div className="mt-4 flex gap-2">
-            <button
-              onClick={() => window.print()}
-              disabled={!sale}
-              className="btn-secondary flex-1"
-            >
-              Print
-            </button>
-            <button onClick={onClose} className="btn-primary flex-1">
-              {closeLabel}
-            </button>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <PrintPaperToggle value={paper} onChange={setPaper} />
+            <div className="ml-auto flex flex-1 gap-2">
+              <button
+                onClick={() => window.print()}
+                disabled={!sale}
+                className="btn-secondary flex-1"
+              >
+                Print
+              </button>
+              <button onClick={onClose} className="btn-primary flex-1">
+                {closeLabel}
+              </button>
+            </div>
           </div>
         </div>
       </div>
