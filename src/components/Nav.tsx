@@ -157,6 +157,45 @@ export function Nav({ user }: { user: SessionUser }) {
     };
   }, [drawerOpen]);
 
+  // Auto sign-out after 5 minutes with no mouse/keyboard/touch/scroll
+  // activity anywhere on the page. Reads the current URL at fire time (not
+  // the pathname prop) so it always lands back on wherever the user actually
+  // was, even after they've navigated around since the effect first ran.
+  useEffect(() => {
+    const IDLE_MS = 5 * 60 * 1000;
+    let timer: ReturnType<typeof setTimeout>;
+    async function idleLogout() {
+      try {
+        await api("/api/auth/logout", { method: "POST" });
+      } catch {
+        /* session may already be gone — sign out locally regardless */
+      }
+      const back = window.location.pathname + window.location.search;
+      const next = back && back !== "/" ? `&next=${encodeURIComponent(back)}` : "";
+      router.push(`/login?reason=idle${next}`);
+      router.refresh();
+    }
+    function reset() {
+      clearTimeout(timer);
+      timer = setTimeout(idleLogout, IDLE_MS);
+    }
+    const events: (keyof WindowEventMap)[] = [
+      "mousemove",
+      "mousedown",
+      "keydown",
+      "touchstart",
+      "scroll",
+      "wheel",
+    ];
+    for (const e of events) window.addEventListener(e, reset, { passive: true });
+    reset();
+    return () => {
+      clearTimeout(timer);
+      for (const e of events) window.removeEventListener(e, reset);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function isActive(href: string) {
     return href === "/" ? pathname === "/" : pathname.startsWith(href);
   }

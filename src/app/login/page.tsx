@@ -9,6 +9,7 @@ function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const nextParam = params.get("next");
+  const idleReason = params.get("reason") === "idle";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -50,6 +51,12 @@ function LoginForm() {
           <h1 className="sr-only">Chef and Beyond POS</h1>
           <p className="mt-2 text-sm text-zinc-500">Sign in to your register</p>
         </div>
+
+        {idleReason && (
+          <p className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-center text-sm text-amber-800">
+            You were signed out after 5 minutes of inactivity.
+          </p>
+        )}
 
         <form onSubmit={onSubmit} className="card space-y-4 p-6">
           <div>
