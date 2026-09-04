@@ -135,33 +135,35 @@ export function OverviewView() {
                   <p className="mb-1 text-xs uppercase tracking-wide text-zinc-400">
                     Purchase orders due
                   </p>
-                  <table className="w-full text-sm">
-                    <tbody className="divide-y divide-zinc-100">
-                      {data.purchaseOrdersDue.map((p) => (
-                        <tr key={p.id}>
-                          <td className="py-1.5">
-                            <Link
-                              href={`/purchase-orders/${p.id}`}
-                              className="font-medium text-indigo-600 hover:underline"
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[420px] text-sm">
+                      <tbody className="divide-y divide-zinc-100">
+                        {data.purchaseOrdersDue.map((p) => (
+                          <tr key={p.id}>
+                            <td className="py-1.5 whitespace-nowrap">
+                              <Link
+                                href={`/purchase-orders/${p.id}`}
+                                className="font-medium text-indigo-600 hover:underline"
+                              >
+                                {p.poNumber}
+                              </Link>
+                              <span className="ml-2 text-zinc-400">{p.vendor}</span>
+                            </td>
+                            <td
+                              className={`py-1.5 text-right whitespace-nowrap ${
+                                p.overdue ? "font-medium text-red-600" : "text-zinc-500"
+                              }`}
                             >
-                              {p.poNumber}
-                            </Link>
-                            <span className="ml-2 text-zinc-400">{p.vendor}</span>
-                          </td>
-                          <td
-                            className={`py-1.5 text-right whitespace-nowrap ${
-                              p.overdue ? "font-medium text-red-600" : "text-zinc-500"
-                            }`}
-                          >
-                            {formatDateOnly(p.dueDate)}
-                          </td>
-                          <td className="py-1.5 text-right whitespace-nowrap tabular-nums">
-                            {formatMoney(p.totalCents)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                              {formatDateOnly(p.dueDate)}
+                            </td>
+                            <td className="py-1.5 text-right whitespace-nowrap tabular-nums">
+                              {formatMoney(p.totalCents)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
             </Card>
@@ -250,11 +252,12 @@ export function OverviewView() {
               {data.topProducts.length === 0 ? (
                 <p className="text-sm text-zinc-400">No sales this month.</p>
               ) : (
-                <table className="w-full text-sm">
+                <div className="overflow-x-auto">
+                <table className="w-full min-w-[360px] text-sm">
                   <tbody className="divide-y divide-zinc-100">
                     {data.topProducts.map((p) => (
                       <tr key={p.productId}>
-                        <td className="py-1.5 pr-2 font-mono">{p.sku || p.name}</td>
+                        <td className="py-1.5 pr-2 font-mono whitespace-nowrap">{p.sku || p.name}</td>
                         <td className="py-1.5 pr-2 text-right whitespace-nowrap text-zinc-500">
                           {p.quantity} sold
                         </td>
@@ -265,6 +268,7 @@ export function OverviewView() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               )}
             </Card>
 
