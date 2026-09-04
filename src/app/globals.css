@@ -88,16 +88,22 @@ body {
   }
   /* Native <select>: keep the full label readable. Reserve room for the
      browser's arrow, fall back to an ellipsis instead of a hard mid-word
-     clip, and never let a fixed width spill past its container. */
+     clip, never let a fixed width spill past its container, and always
+     center the selected label vertically regardless of height/padding. */
   select.input {
     @apply max-w-full pr-9;
     text-overflow: ellipsis;
+    display: flex;
+    align-items: center;
   }
-  /* Compact selects: text-sm's 20px line box doesn't fit inside h-8 (32px)
-     once the default py-2 is applied, so descenders get clipped. Trim the
-     vertical padding so the selected label sits centered. */
+  /* Compact selects: the default py-2 leaves no room for the line box once a
+     short fixed height is applied, so the label gets clipped instead of
+     centered. Trim vertical padding to match each height used in the app. */
   select.input.h-8 {
     @apply py-1;
+  }
+  select.input.h-7 {
+    @apply py-0;
   }
   .label {
     @apply mb-1 block text-xs font-medium text-zinc-600;
