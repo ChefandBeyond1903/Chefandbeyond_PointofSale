@@ -409,6 +409,17 @@ export function InvoiceModal({
       : 0;
   const refundedCents = sale?.refundedCents ?? 0;
   const refundableCents = sale ? (sale.amountPaidCents ?? 0) - refundedCents : 0;
+  // An item edit that swapped in something cheaper can leave more collected
+  // than the invoice now totals — the difference is owed back to the customer.
+  const creditOwedCents = sale ? Math.max(0, refundableCents - sale.totalCents) : 0;
+
+  function openRefundFor(amountCents: number, method: "CASH" | "CARD" | "CHECK" | "CREDIT") {
+    setRefundAmount(amountCents);
+    setRefundMethod(method);
+    setRefundRestock(false);
+    setRefundReason("Price adjustment");
+    setRefundOpen(true);
+  }
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
@@ -825,6 +836,31 @@ export function InvoiceModal({
               }
               return null;
             })()}
+
+            {canManage && creditOwedCents > 0 && !refundOpen && (
+              <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm">
+                <p className="font-medium text-amber-800">
+                  This invoice now totals less than what was collected — {formatMoney(creditOwedCents)}{" "}
+                  is owed back to the customer.
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    onClick={() => openRefundFor(creditOwedCents, "CASH")}
+                    className="btn-secondary h-8 text-xs"
+                  >
+                    Refund {formatMoney(creditOwedCents)}
+                  </button>
+                  {sale.customerId && (
+                    <button
+                      onClick={() => openRefundFor(creditOwedCents, "CREDIT")}
+                      className="btn-secondary h-8 text-xs"
+                    >
+                      Issue as store credit
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Refunds */}
             {(refundedCents > 0 || (canManage && refundableCents > 0)) && (

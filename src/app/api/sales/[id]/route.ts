@@ -88,6 +88,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           number: true,
           taxRateBps: true,
           shippingCents: true,
+          totalCents: true,
           customerTaxExemptSnapshot: true,
           amountPaidCents: true,
           refundedCents: true,
@@ -199,26 +200,36 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           }
         }
 
-        // The new total can't drop below what's already been collected /
-        // refunded — that would leave the invoice's numbers inconsistent.
-        // Issue a refund first to reduce it further.
-        const netCollected = cur.amountPaidCents - cur.refundedCents;
-        if (computed.totalCents < netCollected || computed.totalCents < cur.refundedCents) {
-          const floor = Math.max(netCollected, cur.refundedCents);
+        // The new total can't drop below what's already been refunded — that
+        // would leave the refund history inconsistent. It CAN drop below
+        // what's been paid: the difference becomes a credit (see
+        // effectivePaidCents below) that the invoice view offers to refund
+        // or turn into store credit, rather than forcing a fresh charge.
+        if (computed.totalCents < cur.refundedCents) {
           throw new HttpError(
             400,
-            `This invoice has ${formatMoney(floor)} collected — the new total can't be less than that. ` +
-              `Issue a refund first if you need to reduce it further.`,
+            `This invoice has ${formatMoney(cur.refundedCents)} already refunded — the new total ` +
+              `can't be less than that.`,
           );
         }
 
-        const settled = cur.amountPaidCents >= computed.totalCents;
+        // A COMPLETED sale is fully paid by definition. Legacy rows created
+        // before per-payment tracking existed can have amountPaidCents stuck
+        // at 0 despite being paid in full — treat a COMPLETED sale's
+        // collected amount as at least its (pre-edit) total, and persist
+        // that correction, so swapping in a pricier item only asks for the
+        // difference instead of the whole new price.
+        const effectivePaidCents =
+          cur.status === "COMPLETED" ? Math.max(cur.amountPaidCents, cur.totalCents) : cur.amountPaidCents;
+
+        const settled = effectivePaidCents >= computed.totalCents;
         data.subtotalCents = computed.subtotalCents;
         data.listSubtotalCents = listSubtotalCents;
         data.discountCents = computed.discountCents;
         data.taxCents = computed.taxCents;
         data.taxRateBps = computed.taxRateBps;
         data.totalCents = computed.totalCents;
+        data.amountPaidCents = effectivePaidCents;
         data.status = settled ? "COMPLETED" : "INVOICED";
         data.paidAt = settled ? (cur.paidAt ?? new Date()) : null;
 
