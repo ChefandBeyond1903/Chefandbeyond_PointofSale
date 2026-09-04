@@ -81,6 +81,21 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       const cur = await prisma.sale.findUnique({ where: { id }, select: { storeId: true } });
       if (!cur || (scoped && cur.storeId !== scoped)) throw new HttpError(404, "Invoice not found");
       const fields = saleEditSchema.parse(raw);
+
+      // A reassigned salesperson must be an active user — in the editor's store
+      // unless the editor is an admin (who may credit anyone).
+      if (fields.salespersonId !== undefined) {
+        const sp = await prisma.user.findFirst({
+          where: {
+            id: fields.salespersonId,
+            active: true,
+            ...(editor.role === "ADMIN" ? {} : { storeId: cur.storeId ?? "__none__" }),
+          },
+          select: { id: true },
+        });
+        if (!sp) throw new HttpError(400, "That salesperson isn't available for this invoice.");
+      }
+
       const data: Record<string, unknown> = {};
       for (const k of Object.keys(fields) as (keyof typeof fields)[]) {
         if (fields[k] !== undefined) data[k] = fields[k];

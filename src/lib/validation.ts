@@ -236,7 +236,8 @@ export const salePaymentSchema = z.object({
   tenderedCents: z.number().int().min(0).default(0),
 });
 
-// Edit an invoice's note and bill-to details (does not touch line items / money).
+// Edit an invoice's note, bill-to details and credited salesperson (does not
+// touch line items / money).
 export const saleEditSchema = z.object({
   note: z.string().trim().max(2000).optional(),
   customerNameSnapshot: z.string().trim().max(200).optional(),
@@ -244,6 +245,8 @@ export const saleEditSchema = z.object({
   customerEmailSnapshot: z.string().trim().max(200).optional(),
   customerPhoneSnapshot: z.string().trim().max(60).optional(),
   customerAddressSnapshot: z.string().trim().max(500).optional(),
+  // Reassign the sale's credited salesperson.
+  salespersonId: z.string().min(1).optional(),
 });
 
 // Manager grants / adjusts a customer's store credit. amountCents is signed

@@ -9,6 +9,8 @@ import { MoneyInput } from "@/components/MoneyInput";
 import { ReceiptModal } from "@/components/ReceiptModal";
 import type { InvoiceDetail, PurchaseOrder, Vendor } from "@/lib/types";
 
+type Person = { id: string; name: string };
+
 const PO_STATUSES: PurchaseOrder["status"][] = ["OPEN", "SENT", "RECEIVED", "CANCELLED"];
 
 type Pick = {
@@ -54,9 +56,10 @@ export function InvoiceModal({
   const [payAmount, setPayAmount] = useState(0);
   const [payBusy, setPayBusy] = useState(false);
 
-  // Editing the invoice's note / bill-to details (managers).
+  // Editing the invoice's note / bill-to details / salesperson (managers).
   const [editOpen, setEditOpen] = useState(false);
   const [editBusy, setEditBusy] = useState(false);
+  const [salespeople, setSalespeople] = useState<Person[]>([]);
   const [edit, setEdit] = useState({
     customerCompanySnapshot: "",
     customerNameSnapshot: "",
@@ -64,6 +67,7 @@ export function InvoiceModal({
     customerPhoneSnapshot: "",
     customerAddressSnapshot: "",
     note: "",
+    salespersonId: "",
   });
 
   function openEdit() {
@@ -76,7 +80,13 @@ export function InvoiceModal({
       customerPhoneSnapshot: s.customerPhoneSnapshot ?? "",
       customerAddressSnapshot: s.customerAddressSnapshot ?? "",
       note: s.note ?? "",
+      salespersonId: s.salesperson?.id ?? s.salespersonId ?? "",
     });
+    if (salespeople.length === 0) {
+      api<{ people: Person[] }>("/api/salespeople")
+        .then((r) => setSalespeople(r.people))
+        .catch(() => {});
+    }
     setEditOpen(true);
   }
 
@@ -84,7 +94,9 @@ export function InvoiceModal({
     setEditBusy(true);
     setErr(null);
     try {
-      await api(`/api/sales/${saleId}`, { method: "PATCH", body: JSON.stringify(edit) });
+      const { salespersonId, ...rest } = edit;
+      const payload = salespersonId ? { ...rest, salespersonId } : rest;
+      await api(`/api/sales/${saleId}`, { method: "PATCH", body: JSON.stringify(payload) });
       setEditOpen(false);
       await load();
       onChanged?.();
@@ -430,6 +442,28 @@ export function InvoiceModal({
                       setEdit({ ...edit, customerAddressSnapshot: e.target.value })
                     }
                   />
+                  <label className="sm:col-span-2">
+                    <span className="mb-1 block text-xs text-zinc-500">Salesperson</span>
+                    <select
+                      className="input h-8"
+                      value={edit.salespersonId}
+                      onChange={(e) => setEdit({ ...edit, salespersonId: e.target.value })}
+                    >
+                      {/* Keep the current person selectable even if they're not
+                          in the scoped list (e.g. moved store). */}
+                      {edit.salespersonId &&
+                        !salespeople.some((p) => p.id === edit.salespersonId) && (
+                          <option value={edit.salespersonId}>
+                            {detail?.sale.salesperson?.name ?? "Current"}
+                          </option>
+                        )}
+                      {salespeople.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   <textarea
                     className="input sm:col-span-2"
                     rows={2}
