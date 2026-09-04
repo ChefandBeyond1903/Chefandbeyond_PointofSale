@@ -74,7 +74,7 @@ export function OverviewView() {
             />
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {/* Sales windows */}
             <Card title="Sales" href="/reports" hrefLabel="Reports">
               <div className="overflow-x-auto">

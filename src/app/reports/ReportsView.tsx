@@ -222,7 +222,7 @@ export function ReportsView({
 
           {!limited && inv && <InventorySection inv={inv} />}
 
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <div className="card p-4">
               <h2 className="mb-3 font-semibold">Top products</h2>
               {data.topProducts.length === 0 ? (
@@ -329,7 +329,7 @@ export function ReportsView({
           </div>
 
           {isAdmin && (
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <RecordList
                 title="Purchase orders"
                 empty="No purchase orders in this period."
