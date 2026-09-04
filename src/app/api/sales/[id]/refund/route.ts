@@ -104,7 +104,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         }
       }
 
-      return tx.sale.update({
+      const saleAfter = await tx.sale.update({
         where: { id },
         data: {
           refundedCents: newRefundedCents,
@@ -119,9 +119,10 @@ export async function POST(req: NextRequest, { params }: Params) {
           customer: true,
         },
       });
+      return { sale: saleAfter, refundId: refund.id };
     });
 
-    return ok({ sale: updated });
+    return ok({ sale: updated.sale, refundId: updated.refundId });
   } catch (err) {
     return toErrorResponse(err);
   }

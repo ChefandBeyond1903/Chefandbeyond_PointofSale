@@ -7,7 +7,8 @@ import { formatMoney, formatBps } from "@/lib/money";
 import { formatDateOnly, todayInputValue } from "@/lib/date";
 import { MoneyInput } from "@/components/MoneyInput";
 import { ReceiptModal } from "@/components/ReceiptModal";
-import type { InvoiceDetail, PurchaseOrder, Vendor } from "@/lib/types";
+import { RefundReceiptModal } from "@/components/RefundReceiptModal";
+import type { InvoiceDetail, PurchaseOrder, Sale, Vendor } from "@/lib/types";
 
 type Person = { id: string; name: string };
 
@@ -116,26 +117,34 @@ export function InvoiceModal({
   const [refundReason, setRefundReason] = useState("");
   const [refundDate, setRefundDate] = useState(todayInputValue);
   const [refundBusy, setRefundBusy] = useState(false);
+  // Printable refund slip (opened after issuing a refund, or from the history).
+  const [refundSlip, setRefundSlip] = useState<{ sale: Sale; refundId: string } | null>(null);
 
   async function doRefund() {
     if (!detail) return;
     setRefundBusy(true);
     setErr(null);
     try {
-      await api(`/api/sales/${saleId}/refund`, {
-        method: "POST",
-        body: JSON.stringify({
-          method: refundMethod,
-          ...(refundMethod === "CHECK" ? { checkNumber: refundCheckNo.trim() } : {}),
-          restock: refundRestock,
-          reason: refundReason.trim(),
-          refundedAt: refundDate,
-          ...(refundAmount ? { amountCents: refundAmount } : {}),
-        }),
-      });
+      const res = await api<{ sale: Sale; refundId: string }>(
+        `/api/sales/${saleId}/refund`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            method: refundMethod,
+            ...(refundMethod === "CHECK" ? { checkNumber: refundCheckNo.trim() } : {}),
+            restock: refundRestock,
+            reason: refundReason.trim(),
+            refundedAt: refundDate,
+            ...(refundAmount ? { amountCents: refundAmount } : {}),
+          }),
+        },
+      );
       setRefundOpen(false);
       setRefundAmount(0);
       setRefundReason("");
+      setRefundCheckNo("");
+      // Pop the printable refund slip straight away.
+      setRefundSlip({ sale: res.sale, refundId: res.refundId });
       await load();
       onChanged?.();
     } catch (e) {
@@ -651,14 +660,23 @@ export function InvoiceModal({
                 {(sale.refunds ?? []).length > 0 && (
                   <ul className="mt-2 space-y-0.5 text-xs text-zinc-500">
                     {(sale.refunds ?? []).map((r) => (
-                      <li key={r.id}>
-                        {formatMoney(r.amountCents)} →{" "}
-                        {r.method === "CHECK" && r.checkNumber
-                          ? `Check #${r.checkNumber}`
-                          : r.method}{" "}
-                        · {formatDateOnly(r.refundedAt)}
-                        {r.restocked ? " · items restocked" : ""}
-                        {r.reason ? ` · ${r.reason}` : ""}
+                      <li key={r.id} className="flex items-center gap-2">
+                        <span>
+                          {formatMoney(r.amountCents)} →{" "}
+                          {r.method === "CHECK" && r.checkNumber
+                            ? `Check #${r.checkNumber}`
+                            : r.method}{" "}
+                          · {formatDateOnly(r.refundedAt)}
+                          {r.restocked ? " · items restocked" : ""}
+                          {r.reason ? ` · ${r.reason}` : ""}
+                        </span>
+                        <button
+                          onClick={() => setRefundSlip({ sale: sale as Sale, refundId: r.id })}
+                          className="btn-ghost shrink-0 px-1.5 py-0.5 text-[11px] text-indigo-600"
+                          title="Print the refund slip"
+                        >
+                          Slip
+                        </button>
                       </li>
                     ))}
                   </ul>
@@ -971,6 +989,14 @@ export function InvoiceModal({
 
       {printing && sale && (
         <ReceiptModal sale={sale} onClose={() => setPrinting(false)} />
+      )}
+
+      {refundSlip && (
+        <RefundReceiptModal
+          sale={refundSlip.sale}
+          refundId={refundSlip.refundId}
+          onClose={() => setRefundSlip(null)}
+        />
       )}
     </div>
   );
