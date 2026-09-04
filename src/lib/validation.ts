@@ -188,22 +188,25 @@ export const saleCreateSchema = z.object({
   orderDiscountCents: z.number().int().min(0).default(0),
   shippingCents: z.number().int().min(0).default(0),
   // Omitted when saving an unpaid invoice for a terms customer.
-  paymentMethod: z.enum(["CASH", "CARD", "CREDIT"]).optional(),
+  paymentMethod: z.enum(["CASH", "CARD", "CHECK", "CREDIT"]).optional(),
   tenderedCents: z.number().int().min(0).default(0),
+  // Customer's check number, when paymentMethod / depositMethod is CHECK.
+  checkNumber: z.string().trim().max(40).optional(),
   // A deposit / part-payment taken at the register. The sale is saved as an
   // invoice with this recorded and a balance still due (unless it covers the
   // full total, in which case it settles the sale).
   depositCents: z.number().int().min(0).default(0),
-  depositMethod: z.enum(["CASH", "CARD", "CREDIT"]).optional(),
+  depositMethod: z.enum(["CASH", "CARD", "CHECK", "CREDIT"]).optional(),
   // Split tender — one or more payments taken at the register in a single
   // transaction (e.g. store credit + card for the rest). Overrides
   // paymentMethod / depositCents when present.
   payments: z
     .array(
       z.object({
-        method: z.enum(["CASH", "CARD", "CREDIT"]),
+        method: z.enum(["CASH", "CARD", "CHECK", "CREDIT"]),
         amountCents: z.number().int().min(1),
         tenderedCents: z.number().int().min(0).default(0),
+        checkNumber: z.string().trim().max(40).optional(),
       }),
     )
     .max(4)
@@ -222,7 +225,9 @@ export const saleCreateSchema = z.object({
 
 // Record a payment (deposit, partial, or final) against an INVOICED sale.
 export const salePaymentSchema = z.object({
-  paymentMethod: z.enum(["CASH", "CARD", "CREDIT"]),
+  paymentMethod: z.enum(["CASH", "CARD", "CHECK", "CREDIT"]),
+  // The customer's check number, when paymentMethod is CHECK.
+  checkNumber: z.string().trim().max(40).optional(),
   // Amount to apply. Omit to pay the whole remaining balance.
   amountCents: z.number().int().min(1).optional(),
   // The day the money was received. The sale only counts as revenue once it is
@@ -252,7 +257,9 @@ export const storeCreditAdjustSchema = z.object({
 // refundable. method is where the money goes.
 export const saleRefundSchema = z.object({
   amountCents: z.number().int().min(1).optional(),
-  method: z.enum(["CASH", "CARD", "CREDIT"]),
+  method: z.enum(["CASH", "CARD", "CHECK", "CREDIT"]),
+  // The check number, when the refund is paid out by check.
+  checkNumber: z.string().trim().max(40).optional(),
   restock: z.boolean().default(false),
   reason: z.string().trim().max(500).default(""),
   refundedAt: dateInput.optional(),

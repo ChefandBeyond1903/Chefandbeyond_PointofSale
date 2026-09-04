@@ -332,7 +332,8 @@ export interface InvoiceDetail {
 export interface SalePayment {
   id: string;
   amountCents: number;
-  method: "CASH" | "CARD" | "CREDIT";
+  method: "CASH" | "CARD" | "CHECK" | "CREDIT";
+  checkNumber: string;
   paidAt: string;
   isDeposit: boolean;
   note: string;
@@ -343,7 +344,8 @@ export interface SalePayment {
 export interface SaleRefund {
   id: string;
   amountCents: number;
-  method: "CASH" | "CARD" | "CREDIT";
+  method: "CASH" | "CARD" | "CHECK" | "CREDIT";
+  checkNumber: string;
   restocked: boolean;
   reason: string;
   refundedAt: string;
@@ -362,7 +364,8 @@ export interface Sale {
   taxRateBps: number;
   shippingCents: number;
   totalCents: number;
-  paymentMethod: "CASH" | "CARD" | "CREDIT" | "SPLIT" | "";
+  paymentMethod: "CASH" | "CARD" | "CHECK" | "CREDIT" | "SPLIT" | "";
+  checkNumber?: string;
   tenderedCents: number;
   changeCents: number;
   note: string | null;

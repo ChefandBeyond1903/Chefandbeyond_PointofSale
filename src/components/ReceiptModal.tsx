@@ -190,7 +190,11 @@ export function ReceiptModal({
                 </>
               ) : (
                 <div className="flex justify-between">
-                  <span>{sale.paymentMethod}</span>
+                  <span>
+                    {sale.paymentMethod === "CHECK" && sale.checkNumber
+                      ? `Check #${sale.checkNumber}`
+                      : sale.paymentMethod}
+                  </span>
                   <span>{formatMoney(sale.tenderedCents)}</span>
                 </div>
               )}

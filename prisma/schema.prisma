@@ -275,6 +275,8 @@ model Sale {
   shippingCents     Int     @default(0)
   totalCents        Int
   paymentMethod     String
+  // Set when the whole sale was settled by a single check.
+  checkNumber       String  @default("")
   tenderedCents     Int     @default(0)
   changeCents       Int     @default(0)
   note              String?
@@ -577,7 +579,9 @@ model SalePayment {
   saleId      String
   sale        Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
   amountCents Int
-  method      String // "CASH" | "CARD" | "CREDIT" (store credit)
+  method      String // "CASH" | "CARD" | "CHECK" | "CREDIT" (store credit)
+  // The customer's check number, when method is CHECK.
+  checkNumber String   @default("")
   // The day the money was received — deposits and balance payments each land on
   // their own date.
   paidAt      DateTime
@@ -607,6 +611,8 @@ model SaleRefund {
   sale        Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
   amountCents Int
   method      String
+  // The check number, when the refund was paid out by check.
+  checkNumber String   @default("")
   restocked   Boolean  @default(false)
   reason      String   @default("")
   // The day the refund was issued — the date it reduces revenue for.

@@ -48,7 +48,8 @@ export function InvoiceModal({
   const [freightMins, setFreightMins] = useState<Record<string, number>>({});
 
   // Recording a payment (deposit / partial / final) against an open invoice.
-  const [payMethod, setPayMethod] = useState<"CASH" | "CARD" | "CREDIT">("CASH");
+  const [payMethod, setPayMethod] = useState<"CASH" | "CARD" | "CHECK" | "CREDIT">("CASH");
+  const [payCheckNo, setPayCheckNo] = useState("");
   const [payDate, setPayDate] = useState(todayInputValue);
   const [payAmount, setPayAmount] = useState(0);
   const [payBusy, setPayBusy] = useState(false);
@@ -96,7 +97,8 @@ export function InvoiceModal({
 
   // Refunding the sale (managers).
   const [refundOpen, setRefundOpen] = useState(false);
-  const [refundMethod, setRefundMethod] = useState<"CASH" | "CARD" | "CREDIT">("CASH");
+  const [refundMethod, setRefundMethod] = useState<"CASH" | "CARD" | "CHECK" | "CREDIT">("CASH");
+  const [refundCheckNo, setRefundCheckNo] = useState("");
   const [refundAmount, setRefundAmount] = useState(0);
   const [refundRestock, setRefundRestock] = useState(true);
   const [refundReason, setRefundReason] = useState("");
@@ -112,6 +114,7 @@ export function InvoiceModal({
         method: "POST",
         body: JSON.stringify({
           method: refundMethod,
+          ...(refundMethod === "CHECK" ? { checkNumber: refundCheckNo.trim() } : {}),
           restock: refundRestock,
           reason: refundReason.trim(),
           refundedAt: refundDate,
@@ -147,6 +150,7 @@ export function InvoiceModal({
         method: "PATCH",
         body: JSON.stringify({
           paymentMethod: payMethod,
+          ...(payMethod === "CHECK" ? { checkNumber: payCheckNo.trim() } : {}),
           paidAt: payDate,
           ...(amountCents ? { amountCents } : {}),
         }),
@@ -300,7 +304,9 @@ export function InvoiceModal({
                     ? ` (rung by ${sale.cashier.name})`
                     : ""}
                   {" · "}
-                  {sale.paymentMethod}
+                  {sale.paymentMethod === "CHECK" && sale.checkNumber
+                    ? `Check #${sale.checkNumber}`
+                    : sale.paymentMethod}
                   {sale.storeNameSnapshot ? ` · ${sale.storeNameSnapshot}` : ""}
                 </p>
                 {(sale.storeAddressSnapshot || sale.storePhoneSnapshot) && (
@@ -478,7 +484,10 @@ export function InvoiceModal({
                         {payments.map((p) => (
                           <li key={p.id}>
                             {p.isDeposit ? "Deposit" : "Payment"} {formatMoney(p.amountCents)} ·{" "}
-                            {p.method} · {formatDateOnly(p.paidAt)}
+                            {p.method === "CHECK" && p.checkNumber
+                              ? `Check #${p.checkNumber}`
+                              : p.method}{" "}
+                            · {formatDateOnly(p.paidAt)}
                           </li>
                         ))}
                       </ul>
@@ -492,11 +501,14 @@ export function InvoiceModal({
                             className="input h-8"
                             value={payMethod}
                             onChange={(e) =>
-                              setPayMethod(e.target.value as "CASH" | "CARD" | "CREDIT")
+                              setPayMethod(
+                                e.target.value as "CASH" | "CARD" | "CHECK" | "CREDIT",
+                              )
                             }
                           >
                             <option value="CASH">Cash</option>
                             <option value="CARD">Card</option>
+                            <option value="CHECK">Check</option>
                             {custCreditCents > 0 && (
                               <option value="CREDIT">
                                 Store credit ({formatMoney(custCreditCents)})
@@ -504,6 +516,18 @@ export function InvoiceModal({
                             )}
                           </select>
                         </div>
+                        {payMethod === "CHECK" && (
+                          <div>
+                            <label className="label">Check #</label>
+                            <input
+                              className="input h-8 w-28"
+                              value={payCheckNo}
+                              onChange={(e) => setPayCheckNo(e.target.value)}
+                              placeholder="1042"
+                              inputMode="numeric"
+                            />
+                          </div>
+                        )}
                         <div>
                           <label className="label">Received on</label>
                           <input
@@ -524,7 +548,11 @@ export function InvoiceModal({
                         </div>
                         <button
                           onClick={() => recordPayment(payAmount || undefined)}
-                          disabled={payBusy || (payAmount > 0 && payAmount > balance)}
+                          disabled={
+                            payBusy ||
+                            (payAmount > 0 && payAmount > balance) ||
+                            (payMethod === "CHECK" && !payCheckNo.trim())
+                          }
                           className="btn-primary h-8"
                         >
                           {payBusy
@@ -590,7 +618,11 @@ export function InvoiceModal({
                   <ul className="mt-2 space-y-0.5 text-xs text-zinc-500">
                     {(sale.refunds ?? []).map((r) => (
                       <li key={r.id}>
-                        {formatMoney(r.amountCents)} → {r.method} · {formatDateOnly(r.refundedAt)}
+                        {formatMoney(r.amountCents)} →{" "}
+                        {r.method === "CHECK" && r.checkNumber
+                          ? `Check #${r.checkNumber}`
+                          : r.method}{" "}
+                        · {formatDateOnly(r.refundedAt)}
                         {r.restocked ? " · items restocked" : ""}
                         {r.reason ? ` · ${r.reason}` : ""}
                       </li>
@@ -616,16 +648,31 @@ export function InvoiceModal({
                           className="input h-8"
                           value={refundMethod}
                           onChange={(e) =>
-                            setRefundMethod(e.target.value as "CASH" | "CARD" | "CREDIT")
+                            setRefundMethod(
+                              e.target.value as "CASH" | "CARD" | "CHECK" | "CREDIT",
+                            )
                           }
                         >
                           <option value="CASH">Cash</option>
                           <option value="CARD">Card</option>
+                          <option value="CHECK">Check</option>
                           <option value="CREDIT" disabled={!sale.customerId}>
                             Store credit
                           </option>
                         </select>
                       </div>
+                      {refundMethod === "CHECK" && (
+                        <div>
+                          <label className="label">Check #</label>
+                          <input
+                            className="input h-8 w-28"
+                            value={refundCheckNo}
+                            onChange={(e) => setRefundCheckNo(e.target.value)}
+                            placeholder="1042"
+                            inputMode="numeric"
+                          />
+                        </div>
+                      )}
                       <div>
                         <label className="label">Date</label>
                         <input
@@ -659,7 +706,11 @@ export function InvoiceModal({
                       </button>
                       <button
                         onClick={doRefund}
-                        disabled={refundBusy || (refundAmount > 0 && refundAmount > refundableCents)}
+                        disabled={
+                          refundBusy ||
+                          (refundAmount > 0 && refundAmount > refundableCents) ||
+                          (refundMethod === "CHECK" && !refundCheckNo.trim())
+                        }
                         className="btn-primary h-8 text-xs"
                       >
                         {refundBusy

@@ -34,6 +34,10 @@ export async function POST(req: NextRequest, { params }: Params) {
     if (body.method === "CREDIT" && !sale.customerId) {
       throw new HttpError(400, "This sale has no customer — refund to cash or card instead.");
     }
+    const checkNumber = (body.checkNumber ?? "").trim();
+    if (body.method === "CHECK" && !checkNumber) {
+      throw new HttpError(400, "Enter the check number for the refund.");
+    }
 
     const alreadyRestocked = sale.refunds.some((r) => r.restocked);
     const doRestock = body.restock && !alreadyRestocked && !!sale.storeId;
@@ -51,6 +55,7 @@ export async function POST(req: NextRequest, { params }: Params) {
           saleId: id,
           amountCents,
           method: body.method,
+          checkNumber,
           restocked: doRestock,
           reason: body.reason,
           refundedAt,

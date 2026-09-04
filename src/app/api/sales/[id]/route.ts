@@ -137,6 +137,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         throw new HttpError(400, `Only ${(avail / 100).toFixed(2)} of store credit is available.`);
       }
     }
+    const checkNumber = (body.checkNumber ?? "").trim();
+    if (body.paymentMethod === "CHECK" && !checkNumber) {
+      throw new HttpError(400, "Enter the check number.");
+    }
 
     // Never stamp a payment in the future — that would drop the sale out of
     // "up to now" report ranges (a "today" date anchors at noon UTC).
@@ -166,6 +170,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           saleId: id,
           amountCents,
           method: body.paymentMethod,
+          checkNumber,
           paidAt,
           isDeposit: !settled,
           createdById: actor.id,
@@ -197,6 +202,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
                 status: "COMPLETED",
                 paidAt,
                 paymentMethod: body.paymentMethod,
+                checkNumber: body.paymentMethod === "CHECK" ? checkNumber : "",
                 tenderedCents,
                 changeCents,
                 shiftId: openShift?.id ?? null,

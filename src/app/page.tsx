@@ -798,9 +798,10 @@ export default function RegisterPage() {
 
   // Take a deposit / part-payment now; the rest is billed as an invoice.
   async function takeDeposit(
-    method: "CASH" | "CARD" | "CREDIT",
+    method: "CASH" | "CARD" | "CHECK" | "CREDIT",
     depositCents: number,
     tenderedCents: number,
+    checkNumber?: string,
   ) {
     setError(null);
     if (isAdmin && !sellStoreId) {
@@ -815,6 +816,7 @@ export default function RegisterPage() {
           depositCents,
           depositMethod: method,
           tenderedCents,
+          ...(method === "CHECK" ? { checkNumber } : {}),
         }),
       });
       afterSaleSaved(res.sale);
@@ -825,7 +827,12 @@ export default function RegisterPage() {
 
   // Split tender — e.g. store credit + card for the rest — in one completed sale.
   async function completeSaleSplit(
-    payments: { method: "CASH" | "CARD" | "CREDIT"; amountCents: number; tenderedCents: number }[],
+    payments: {
+      method: "CASH" | "CARD" | "CHECK" | "CREDIT";
+      amountCents: number;
+      tenderedCents: number;
+      checkNumber?: string;
+    }[],
   ) {
     setError(null);
     if (isAdmin && !sellStoreId) {
@@ -843,7 +850,11 @@ export default function RegisterPage() {
     }
   }
 
-  async function completeSale(paymentMethod: "CASH" | "CARD" | "CREDIT", tenderedCents: number) {
+  async function completeSale(
+    paymentMethod: "CASH" | "CARD" | "CHECK" | "CREDIT",
+    tenderedCents: number,
+    checkNumber?: string,
+  ) {
     setError(null);
     if (isAdmin && !sellStoreId) {
       setError("Choose a store to sell from.");
@@ -852,7 +863,12 @@ export default function RegisterPage() {
     try {
       const res = await api<{ sale: Sale }>("/api/sales", {
         method: "POST",
-        body: JSON.stringify({ ...salePayloadBase(), paymentMethod, tenderedCents }),
+        body: JSON.stringify({
+          ...salePayloadBase(),
+          paymentMethod,
+          tenderedCents,
+          ...(paymentMethod === "CHECK" ? { checkNumber } : {}),
+        }),
       });
       afterSaleSaved(res.sale);
     } catch (err) {
@@ -1543,21 +1559,34 @@ function PaymentModal({
   canDeposit: boolean;
   creditCents?: number;
   onClose: () => void;
-  onConfirm: (method: "CASH" | "CARD" | "CREDIT", tenderedCents: number) => Promise<void>;
+  onConfirm: (
+    method: "CASH" | "CARD" | "CHECK" | "CREDIT",
+    tenderedCents: number,
+    checkNumber?: string,
+  ) => Promise<void>;
   onDeposit: (
-    method: "CASH" | "CARD" | "CREDIT",
+    method: "CASH" | "CARD" | "CHECK" | "CREDIT",
     depositCents: number,
     tenderedCents: number,
+    checkNumber?: string,
   ) => Promise<void>;
   onSplit: (
-    payments: { method: "CASH" | "CARD" | "CREDIT"; amountCents: number; tenderedCents: number }[],
+    payments: {
+      method: "CASH" | "CARD" | "CHECK" | "CREDIT";
+      amountCents: number;
+      tenderedCents: number;
+      checkNumber?: string;
+    }[],
   ) => Promise<void>;
   onSaveInvoice?: () => Promise<void>;
   error: string | null;
 }) {
   const credit = creditCents ?? 0;
-  const methods: ("CASH" | "CARD" | "CREDIT")[] = credit > 0 ? ["CASH", "CARD", "CREDIT"] : ["CASH", "CARD"];
-  const [tab, setTab] = useState<"CASH" | "CARD" | "CREDIT">("CASH");
+  const methods: ("CASH" | "CARD" | "CHECK" | "CREDIT")[] = credit > 0
+    ? ["CASH", "CARD", "CHECK", "CREDIT"]
+    : ["CASH", "CARD", "CHECK"];
+  const [tab, setTab] = useState<"CASH" | "CARD" | "CHECK" | "CREDIT">("CASH");
+  const [checkNo, setCheckNo] = useState("");
   const [mode, setMode] = useState<"FULL" | "DEPOSIT">("FULL");
   const [deposit, setDeposit] = useState(total);
   const [tendered, setTendered] = useState(total);
@@ -1595,9 +1624,18 @@ function PaymentModal({
         }
         await onSplit(payments);
       } else if (mode === "DEPOSIT") {
-        await onDeposit(tab, deposit, tab === "CASH" ? tendered : deposit);
+        await onDeposit(
+          tab,
+          deposit,
+          tab === "CASH" ? tendered : deposit,
+          tab === "CHECK" ? checkNo.trim() : undefined,
+        );
       } else {
-        await onConfirm(tab, tab === "CASH" ? tendered : total);
+        await onConfirm(
+          tab,
+          tab === "CASH" ? tendered : total,
+          tab === "CHECK" ? checkNo.trim() : undefined,
+        );
       }
     } finally {
       setBusy(false);
@@ -1648,7 +1686,13 @@ function PaymentModal({
                 tab === m ? "bg-white shadow-sm" : "text-zinc-500"
               }`}
             >
-              {m === "CASH" ? "Cash" : m === "CARD" ? "Card" : "Store credit"}
+              {m === "CASH"
+                ? "Cash"
+                : m === "CARD"
+                  ? "Card"
+                  : m === "CHECK"
+                    ? "Check"
+                    : "Store credit"}
             </button>
           ))}
         </div>
@@ -1737,6 +1781,21 @@ function PaymentModal({
               </div>
             )}
           </div>
+        ) : tab === "CHECK" ? (
+          <div className="space-y-1">
+            <label className="label">Check number</label>
+            <input
+              className="input"
+              value={checkNo}
+              onChange={(e) => setCheckNo(e.target.value)}
+              placeholder="e.g. 1042"
+              autoFocus
+              inputMode="numeric"
+            />
+            <p className="text-xs text-zinc-500">
+              Record the customer&apos;s check number, then confirm.
+            </p>
+          </div>
         ) : (
           <p className="rounded-md bg-zinc-50 px-3 py-6 text-center text-sm text-zinc-500">
             Run the card on your terminal, then confirm below.
@@ -1757,7 +1816,8 @@ function PaymentModal({
                 (creditNow < 1 ||
                   (creditRemaining > 0 && restTab === "CASH" && restTendered < creditRemaining))) ||
               (tab !== "CREDIT" && mode === "DEPOSIT" && !depositValid) ||
-              (tab === "CASH" && tendered < collectNow)
+              (tab === "CASH" && tendered < collectNow) ||
+              (tab === "CHECK" && !checkNo.trim())
             }
             className="btn-primary flex-1"
           >

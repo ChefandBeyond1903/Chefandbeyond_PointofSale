@@ -213,13 +213,19 @@ export async function POST(req: NextRequest) {
     const isTermsInvoice = customerTerms !== "";
 
     // Normalise every way the client can send money into one list of payments.
-    type Pay = { method: "CASH" | "CARD" | "CREDIT"; amountCents: number; tenderedCents: number };
+    type Pay = {
+      method: "CASH" | "CARD" | "CHECK" | "CREDIT";
+      amountCents: number;
+      tenderedCents: number;
+      checkNumber: string;
+    };
     let paymentList: Pay[] = [];
     if (body.payments && body.payments.length > 0) {
       paymentList = body.payments.map((p) => ({
         method: p.method,
         amountCents: p.amountCents,
         tenderedCents: p.tenderedCents,
+        checkNumber: p.checkNumber ?? "",
       }));
     } else if (body.depositCents > 0) {
       if (!body.depositMethod) throw new HttpError(400, "Choose how the deposit was paid.");
@@ -228,13 +234,22 @@ export async function POST(req: NextRequest) {
           method: body.depositMethod,
           amountCents: Math.min(body.depositCents, total),
           tenderedCents: body.tenderedCents,
+          checkNumber: body.checkNumber ?? "",
         },
       ];
     } else if (!isTermsInvoice) {
       if (!body.paymentMethod) throw new HttpError(400, "Choose a payment method.");
       paymentList = [
-        { method: body.paymentMethod, amountCents: total, tenderedCents: body.tenderedCents },
+        {
+          method: body.paymentMethod,
+          amountCents: total,
+          tenderedCents: body.tenderedCents,
+          checkNumber: body.checkNumber ?? "",
+        },
       ];
+    }
+    if (paymentList.some((p) => p.method === "CHECK" && !p.checkNumber.trim())) {
+      throw new HttpError(400, "Enter the check number for the check payment.");
     }
 
     let paidNowCents = 0;
@@ -330,6 +345,8 @@ export async function POST(req: NextRequest) {
           number,
           status: settledNow ? "COMPLETED" : "INVOICED",
           paidAt: settledNow ? new Date() : null,
+          checkNumber:
+            payMethod === "CHECK" ? (paymentList[0]?.checkNumber ?? "") : "",
           subtotalCents: computed.subtotalCents,
           listSubtotalCents,
           discountCents: computed.discountCents,
@@ -391,6 +408,7 @@ export async function POST(req: NextRequest) {
             saleId: created.id,
             amountCents: p.amountCents,
             method: p.method,
+            checkNumber: p.checkNumber,
             paidAt: new Date(),
             isDeposit: !settledNow,
             createdById: user.id,
