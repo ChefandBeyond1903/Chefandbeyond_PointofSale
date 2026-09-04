@@ -119,7 +119,7 @@ export function Nav({ user }: { user: SessionUser }) {
   }
 
   return (
-    <header className="border-b border-zinc-200 bg-white">
+    <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white">
       <div className="mx-auto flex h-14 w-full max-w-[1600px] items-center gap-1 px-4">
         <span className="mr-4 flex shrink-0 items-center gap-2 font-semibold tracking-tight">
           <span className="grid h-7 w-7 place-items-center rounded-md bg-indigo-600 text-xs font-bold text-white">
