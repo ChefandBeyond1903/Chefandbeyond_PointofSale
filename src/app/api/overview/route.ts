@@ -226,36 +226,39 @@ export async function GET() {
     const monthExpensesCents = monthExpenseAgg._sum.amountCents ?? 0;
     const monthCardFeeCents = cardFeeCents(monthCardGrossCents);
 
-    // A refund reverses (part of) its sale: net profit loses the margin given
-    // back, less the cost of anything restocked. ≤ 0.
-    let monthRefundImpactCents = 0;
+    // Gross profit is shown for every sale that was rung, then a "Refunded
+    // profit" line takes the reversed margin back out. Addback pulls a
+    // fully-refunded sale's profit into gross profit so the deduction nets.
+    let monthRefundedProfitCents = 0;
+    let monthRefundedSaleAddbackCents = 0;
     for (const r of monthRefunds) {
       const s = r.sale;
       if (!s || s.totalCents <= 0) {
-        monthRefundImpactCents -= r.amountCents;
+        monthRefundedProfitCents += r.amountCents;
         continue;
       }
       const frac = Math.min(1, r.amountCents / s.totalCents);
       const exTaxNet = s.subtotalCents - s.discountCents;
       const cogs = s.items.reduce((a, it) => a + it.unitCostCents * it.quantity, 0);
-      const impact =
-        s.status === "COMPLETED"
-          ? -frac * exTaxNet + (r.restocked ? frac * cogs : 0)
-          : r.restocked
-            ? 0
-            : -frac * cogs;
-      monthRefundImpactCents += Math.round(impact);
+      const margin = frac * (exTaxNet - cogs);
+      monthRefundedProfitCents += Math.round(r.restocked ? margin : margin + frac * cogs);
+      if (s.status !== "COMPLETED") monthRefundedSaleAddbackCents += Math.round(margin);
     }
+    const monthGrossProfitCents = month.profitCents + monthRefundedSaleAddbackCents;
 
     return ok({
       generatedAt: now.toISOString(),
       sales: { today, week, month },
       month: {
+        grossProfitCents: monthGrossProfitCents,
         expensesCents: monthExpensesCents,
         cardFeeCents: monthCardFeeCents,
-        refundImpactCents: monthRefundImpactCents,
+        refundedProfitCents: monthRefundedProfitCents,
         netProfitCents:
-          month.profitCents - monthExpensesCents - monthCardFeeCents + monthRefundImpactCents,
+          monthGrossProfitCents -
+          monthRefundedProfitCents -
+          monthExpensesCents -
+          monthCardFeeCents,
       },
       payables: {
         openBills: {

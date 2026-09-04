@@ -96,16 +96,16 @@ export function OverviewView() {
                 </table>
               </div>
               <div className="mt-3 space-y-1 border-t border-zinc-100 pt-2 text-sm">
-                <Line label="Gross profit (month)" value={formatMoney(data.sales.month.profitCents)} />
-                <Line label="Operating expenses (month)" value={`(${formatMoney(data.month.expensesCents)})`} negative />
-                <Line label="Card processing fees (3%)" value={`(${formatMoney(data.month.cardFeeCents)})`} negative />
-                {data.month.refundImpactCents !== 0 && (
+                <Line label="Gross profit (month)" value={formatMoney(data.month.grossProfitCents)} />
+                {data.month.refundedProfitCents !== 0 && (
                   <Line
-                    label="Refunds (margin given back)"
-                    value={`(${formatMoney(-data.month.refundImpactCents)})`}
+                    label="Refunded profit"
+                    value={`(${formatMoney(data.month.refundedProfitCents)})`}
                     negative
                   />
                 )}
+                <Line label="Operating expenses (month)" value={`(${formatMoney(data.month.expensesCents)})`} negative />
+                <Line label="Card processing fees (3%)" value={`(${formatMoney(data.month.cardFeeCents)})`} negative />
                 <Line label="Net profit (month)" value={formatMoney(data.month.netProfitCents)} strong />
               </div>
             </Card>

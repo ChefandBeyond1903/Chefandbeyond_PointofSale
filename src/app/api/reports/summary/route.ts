@@ -116,11 +116,13 @@ export async function GET(req: NextRequest) {
       overdueCount: unpaidInvoices.filter((i) => i.overdue).length,
     };
 
-    // Refunds issued in the window. A refund is a reversal of (part of) its
-    // sale, so its hit to profit is the margin given back — not the gross
-    // cash — and restocked goods claw the cost back. `refundsCents` is the
-    // total cash refunded (informational); `refundImpactCents` is what net
-    // profit actually loses.
+    // Refunds issued in the window. Gross profit is shown for every sale that
+    // was rung — including ones later refunded — then a single "Refunded
+    // profit" line takes the reversed margin back out. `refundsCents` is the
+    // total cash refunded (informational); `refundedProfitCents` is the margin
+    // deducted from gross profit; `refundedSaleAddbackCents` pulls a
+    // fully-refunded sale's profit into gross profit so the deduction has
+    // something to bite (partial refunds on live sales are already counted).
     const refundRows = limited
       ? []
       : await prisma.saleRefund.findMany({
@@ -143,29 +145,25 @@ export async function GET(req: NextRequest) {
           },
         });
     let refundsCents = 0;
-    let refundImpactCents = 0;
+    let refundedProfitCents = 0;
+    let refundedSaleAddbackCents = 0;
     for (const r of refundRows) {
       refundsCents += r.amountCents;
       const s = r.sale;
       if (!s || s.totalCents <= 0) {
-        refundImpactCents -= r.amountCents; // no sale to net against — treat as a loss
+        refundedProfitCents += r.amountCents; // no sale to net against — full loss
         continue;
       }
       const frac = Math.min(1, r.amountCents / s.totalCents);
       const exTaxNet = s.subtotalCents - s.discountCents; // revenue before tax, after discount
       const cogs = s.items.reduce((a, it) => a + it.unitCostCents * it.quantity, 0);
-      const refundExTax = frac * exTaxNet;
-      const refundCogs = frac * cogs;
-      // A still-COMPLETED sale's full profit is already in `profitCents`, so the
-      // refunded margin is removed here. A REFUNDED / VOIDED sale never made it
-      // into `profitCents`, so only unrecovered cost of goods is a loss.
-      const inBase = s.status === "COMPLETED";
-      const impact = inBase
-        ? -refundExTax + (r.restocked ? refundCogs : 0)
-        : r.restocked
-          ? 0
-          : -refundCogs;
-      refundImpactCents += Math.round(impact);
+      const margin = frac * (exTaxNet - cogs);
+      // Restocked: only the margin is lost. Not restocked: the cost of the goods
+      // that didn't come back is lost on top.
+      refundedProfitCents += Math.round(r.restocked ? margin : margin + frac * cogs);
+      // A fully refunded sale (status REFUNDED/VOIDED) never entered gross
+      // profit — add its margin so the deduction nets out.
+      if (s.status !== "COMPLETED") refundedSaleAddbackCents += Math.round(margin);
     }
 
     // Store credit customers are holding — a liability. Not date-scoped.
@@ -301,7 +299,10 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const profitCents = netCents - costCents;
+    // Gross profit from sales that stuck, plus the profit of any fully-refunded
+    // sale (so the "Refunded profit" line below has something to deduct).
+    const completedProfitCents = netCents - costCents;
+    const profitCents = completedProfitCents + refundedSaleAddbackCents;
     const saleCount = sales.length;
 
     // Operating expenses = the real expense categories only. The 3% card-
@@ -358,7 +359,7 @@ export async function GET(req: NextRequest) {
           cardSalesCents: 0,
           cardFeeCents: 0,
           refundsCents: 0,
-          refundImpactCents: 0,
+          refundedProfitCents: 0,
           storeCreditOutstandingCents: 0,
           netProfitCents: 0,
         },
@@ -390,17 +391,17 @@ export async function GET(req: NextRequest) {
         discountCents,
         costCents,
         profitCents,
-        marginPct: pct(profitCents, netCents),
+        marginPct: pct(completedProfitCents, netCents),
         itemsSold,
         averageSaleCents: saleCount > 0 ? Math.round(grossCents / saleCount) : 0,
         expensesCents,
         cardSalesCents,
         cardFeeCents: cardFeeCentsTotal,
         refundsCents,
-        refundImpactCents,
+        refundedProfitCents,
         storeCreditOutstandingCents,
         netProfitCents:
-          profitCents - expensesCents - cardFeeCentsTotal + refundImpactCents,
+          profitCents - refundedProfitCents - expensesCents - cardFeeCentsTotal,
       },
       expensesByCategory,
       byStore: toRows(byStore),

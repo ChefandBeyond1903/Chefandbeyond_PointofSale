@@ -439,9 +439,12 @@ export interface AdminOverview {
   generatedAt: string;
   sales: { today: OverviewWindow; week: OverviewWindow; month: OverviewWindow };
   month: {
+    /** Gross profit incl. the profit of sales later refunded this month. */
+    grossProfitCents: number;
     expensesCents: number;
     cardFeeCents: number;
-    refundImpactCents: number;
+    /** Margin taken back out by refunds — deducted from gross profit. */
+    refundedProfitCents: number;
     netProfitCents: number;
   };
   payables: {
@@ -526,13 +529,14 @@ export interface ReportSummary {
     /** Total cash refunded in the period (any method) — informational. */
     refundsCents: number;
     /**
-     * What those refunds actually cost profit: the margin given back, net of the
-     * cost of any restocked goods. ≤ 0. This is the figure netted into net profit.
+     * Profit taken back out by refunds: the margin given back, plus the cost of
+     * any goods not restocked. Shown as its own line and deducted from gross
+     * profit. `profitCents` already includes fully-refunded sales so this nets.
      */
-    refundImpactCents: number;
+    refundedProfitCents: number;
     /** Store credit customers currently hold — a liability (not date-scoped). */
     storeCreditOutstandingCents: number;
-    /** Gross profit minus operating expenses and card fees, plus refundImpactCents. */
+    /** Gross profit minus refunded profit, operating expenses and card fees. */
     netProfitCents: number;
   };
   /** Operating expenses grouped by category, largest first. */

@@ -151,6 +151,11 @@ export function ReportsView({
                   value={formatMoney(data.totals.profitCents)}
                   sub={`${data.totals.marginPct}% margin`}
                 />
+                <Stat
+                  label="Refunded profit"
+                  value={formatMoney(data.totals.refundedProfitCents)}
+                  sub="deducted from gross profit"
+                />
                 <Stat label="Operating expenses" value={formatMoney(data.totals.expensesCents)} />
                 <Stat
                   label="Card processing fees"
@@ -467,6 +472,28 @@ function ProfitLoss({ data }: { data: ReportSummary }) {
           strong
           border
         />
+        <PLRow
+          label="Refunded profit"
+          value={
+            t.refundedProfitCents === 0
+              ? formatMoney(0)
+              : `(${formatMoney(t.refundedProfitCents)})`
+          }
+          indent
+          negative={t.refundedProfitCents !== 0}
+        />
+        <PLRow
+          label="Gross profit after refunds"
+          value={formatMoney(t.profitCents - t.refundedProfitCents)}
+          strong
+          border
+        />
+        {t.refundsCents > 0 && (
+          <p className="mt-0.5 pl-4 text-[11px] text-zinc-400">
+            {formatMoney(t.refundsCents)} in cash was refunded; the rest was sales tax and
+            the cost of restocked goods.
+          </p>
+        )}
 
         <div className="mt-3 pt-1 text-xs font-medium uppercase tracking-wide text-zinc-400">
           Operating expenses
@@ -500,29 +527,6 @@ function ProfitLoss({ data }: { data: ReportSummary }) {
           indent
           negative
         />
-
-        {t.refundsCents > 0 && (
-          <>
-            <div className="mt-3 pt-1 text-xs font-medium uppercase tracking-wide text-zinc-400">
-              Refunds
-            </div>
-            <PLRow
-              label="Cash refunded this period"
-              value={formatMoney(t.refundsCents)}
-              indent
-            />
-            <PLRow
-              label="Effect on profit (margin given back, less restocked cost)"
-              value={
-                t.refundImpactCents === 0
-                  ? formatMoney(0)
-                  : `(${formatMoney(-t.refundImpactCents)})`
-              }
-              indent
-              negative={t.refundImpactCents !== 0}
-            />
-          </>
-        )}
 
         <PLRow
           label="Net profit"
