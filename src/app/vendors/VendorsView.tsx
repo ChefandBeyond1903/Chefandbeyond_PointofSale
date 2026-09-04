@@ -6,6 +6,8 @@ import { formatMoney } from "@/lib/money";
 import { MoneyInput } from "@/components/MoneyInput";
 import { matchesSearch } from "@/lib/search";
 import { VendorHistoryModal } from "@/components/VendorHistoryModal";
+import { usePaged } from "@/lib/usePaged";
+import { Pager } from "@/components/Pager";
 import type { Vendor } from "@/lib/types";
 
 type Draft = {
@@ -45,6 +47,8 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
       matchesSearch(s, [v.name, v.contact, v.email, v.phone, v.address, v.notes]),
     );
   }, [vendors, q]);
+
+  const pg = usePaged(filtered);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -128,6 +132,8 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
         <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
       )}
 
+      <Pager {...pg} className="mb-2 justify-end" />
+
       <div className="card overflow-x-auto">
         <table className="w-full min-w-[640px] text-sm">
           <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
@@ -149,7 +155,7 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
                   Loading…
                 </td>
               </tr>
-            ) : filtered.length === 0 ? (
+            ) : pg.total === 0 ? (
               <tr>
                 <td colSpan={8} className="px-4 py-8 text-center text-zinc-400">
                   {vendors.length === 0
@@ -158,7 +164,7 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
                 </td>
               </tr>
             ) : (
-              filtered.map((v) => (
+              pg.pageItems.map((v) => (
                 <tr key={v.id}>
                   <td className="px-4 py-2.5 font-medium">{v.name}</td>
                   <td className="px-4 py-2.5 text-zinc-500">{v.contact || "—"}</td>

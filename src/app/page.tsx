@@ -54,6 +54,8 @@ interface CartLine {
   // Line discount as a percent of the priced line value (PERCENT mode).
   discPercent: number;
   discMode: DiscMode;
+  // Optional serial number(s) for a serialised item.
+  serialNumber?: string;
 }
 
 /** Catalog list value of the line (before any manual price change). */
@@ -745,6 +747,10 @@ export default function RegisterPage() {
     }
   }
 
+  function setLineSerial(productId: string, serialNumber: string) {
+    setCart((cur) => cur.map((l) => (l.product.id === productId ? { ...l, serialNumber } : l)));
+  }
+
   function salePayloadBase() {
     return {
       items: cart.map((l) => ({
@@ -752,6 +758,7 @@ export default function RegisterPage() {
         quantity: l.quantity,
         discountCents: resolveLineDiscount(l),
         unitPriceCents: l.unitPriceCents,
+        ...(l.serialNumber?.trim() ? { serialNumber: l.serialNumber.trim() } : {}),
       })),
       orderDiscountCents: totals.orderDiscountResolved,
       shippingCents: totals.shipping,
@@ -1299,6 +1306,12 @@ export default function RegisterPage() {
                         )} each (now ${formatMoney(violation.eachCents)})`}
                       </p>
                     )}
+                    <input
+                      className="input mt-1.5 h-7 w-full text-xs"
+                      placeholder="Serial # (optional)"
+                      value={line.serialNumber ?? ""}
+                      onChange={(e) => setLineSerial(line.product.id, e.target.value)}
+                    />
                   </li>
                   );
                 })}

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/client";
+import { usePaged } from "@/lib/usePaged";
+import { Pager } from "@/components/Pager";
 import type { InventorySnapshot } from "@/lib/types";
 
 export function InventoryView() {
@@ -68,6 +70,8 @@ export function InventoryView() {
     );
   }, [data]);
 
+  const pg = usePaged(rows);
+
   return (
     <div className="w-full flex-1 p-4">
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -97,14 +101,16 @@ export function InventoryView() {
 
       {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
+      <Pager {...pg} className="mb-2 justify-end" />
+
       {/* Mobile: stacked cards (the wide table doesn't fit a phone). */}
       <div className="space-y-2 sm:hidden">
         {loading ? (
           <p className="text-sm text-zinc-400">Loading…</p>
-        ) : rows.length === 0 ? (
+        ) : pg.total === 0 ? (
           <p className="text-sm text-zinc-400">No products.</p>
         ) : (
-          rows.map((r) => (
+          pg.pageItems.map((r) => (
             <div
               key={r.productId}
               className={`card p-3 text-sm ${r.active ? "" : "opacity-50"}`}
@@ -178,14 +184,14 @@ export function InventoryView() {
                   Loading…
                 </td>
               </tr>
-            ) : rows.length === 0 ? (
+            ) : pg.total === 0 ? (
               <tr>
                 <td colSpan={4 + stores.length} className="px-4 py-8 text-center text-zinc-400">
                   No products.
                 </td>
               </tr>
             ) : (
-              rows.map((r) => (
+              pg.pageItems.map((r) => (
                 <tr key={r.productId} className={r.active ? "" : "opacity-50"}>
                   <td className="px-4 py-2.5 font-medium">
                     {r.name}

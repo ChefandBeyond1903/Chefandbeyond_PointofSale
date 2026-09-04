@@ -6,6 +6,8 @@ import { formatMoney } from "@/lib/money";
 import { formatDateOnly } from "@/lib/date";
 import { MoneyInput } from "@/components/MoneyInput";
 import { BILL_TERMS } from "@/lib/terms";
+import { usePaged } from "@/lib/usePaged";
+import { Pager } from "@/components/Pager";
 import { ExpensesPanel } from "./ExpensesPanel";
 import type { Bill } from "@/lib/types";
 
@@ -61,6 +63,8 @@ export function BillsView({
     [bills],
   );
 
+  const pg = usePaged(bills);
+
   return (
     <div className="w-full flex-1 p-4">
       <div className="mb-3 flex flex-wrap items-center gap-3">
@@ -104,6 +108,8 @@ export function BillsView({
 
       {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
+      <Pager {...pg} className="mb-2 justify-end" />
+
       <div className="card overflow-x-auto">
         <table className="w-full min-w-[820px] text-sm">
           <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
@@ -127,14 +133,14 @@ export function BillsView({
                   Loading…
                 </td>
               </tr>
-            ) : bills.length === 0 ? (
+            ) : pg.total === 0 ? (
               <tr>
                 <td colSpan={10} className="px-4 py-8 text-center text-zinc-400">
                   No bills{filter === "ALL" ? "" : ` (${filter.toLowerCase()})`}.
                 </td>
               </tr>
             ) : (
-              bills.map((b) => {
+              pg.pageItems.map((b) => {
                 const d = daysFromNow(b.dueDate);
                 const overdue = b.status === "OPEN" && d !== null && d < 0;
                 return (

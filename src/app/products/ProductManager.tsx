@@ -6,6 +6,8 @@ import { formatMoney } from "@/lib/money";
 import { MoneyInput } from "@/components/MoneyInput";
 import type { Category, Product } from "@/lib/types";
 import { matchesSearch } from "@/lib/search";
+import { usePaged } from "@/lib/usePaged";
+import { Pager } from "@/components/Pager";
 
 type Draft = {
   id?: string;
@@ -166,6 +168,7 @@ export function ProductManager({
     return [...list].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
   }, [products, q]);
 
+  const pg = usePaged(filtered);
   const filteredIds = useMemo(() => filtered.map((p) => p.id), [filtered]);
   const allFilteredSelected =
     filteredIds.length > 0 && filteredIds.every((id) => selected.has(id));
@@ -537,14 +540,16 @@ export function ProductManager({
         </div>
       )}
 
+      <Pager {...pg} className="mb-2 justify-end" />
+
       {/* Mobile: stacked cards (the wide table doesn't fit a phone). */}
       <div className="space-y-2 sm:hidden">
         {loading ? (
           <p className="text-sm text-zinc-400">Loading…</p>
-        ) : filtered.length === 0 ? (
+        ) : pg.total === 0 ? (
           <p className="text-sm text-zinc-400">No products.</p>
         ) : (
-          filtered.map((p) => (
+          pg.pageItems.map((p) => (
             <div key={p.id} className={`card p-3 text-sm ${p.active ? "" : "opacity-50"}`}>
               <div className="flex items-start gap-2">
                 {canManage && (
@@ -659,8 +664,17 @@ export function ProductManager({
                   Loading…
                 </td>
               </tr>
+            ) : pg.total === 0 ? (
+              <tr>
+                <td
+                  colSpan={canManage ? 10 : 9}
+                  className="px-4 py-8 text-center text-zinc-400"
+                >
+                  No products.
+                </td>
+              </tr>
             ) : (
-              filtered.map((p) => (
+              pg.pageItems.map((p) => (
                 <tr key={p.id} className={p.active ? "" : "opacity-50"}>
                   {canManage && (
                     <td className="px-3 py-2.5">

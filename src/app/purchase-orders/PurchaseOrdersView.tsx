@@ -6,6 +6,8 @@ import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
 import { InvoiceModal } from "@/components/InvoiceModal";
 import { BillModal } from "@/components/BillModal";
+import { usePaged } from "@/lib/usePaged";
+import { Pager } from "@/components/Pager";
 import type { PurchaseOrder, Sale } from "@/lib/types";
 
 const STATUSES = ["ALL", "OPEN", "CLOSED", "SENT", "PARTIAL", "RECEIVED", "CANCELLED"] as const;
@@ -37,7 +39,7 @@ export function PurchaseOrdersView({ canManage = true }: { canManage?: boolean }
     setLoading(true);
     setError(null);
     try {
-      const qs = filter === "ALL" ? "" : `?status=${filter}`;
+      const qs = filter === "ALL" ? "?take=500" : `?status=${filter}&take=500`;
       const res = await api<{ purchaseOrders: PurchaseOrder[] }>(`/api/purchase-orders${qs}`);
       setPos(res.purchaseOrders);
     } catch (err) {
@@ -50,6 +52,8 @@ export function PurchaseOrdersView({ canManage = true }: { canManage?: boolean }
   useEffect(() => {
     load();
   }, [load]);
+
+  const pg = usePaged(pos);
 
   async function openInvoiceByNumber() {
     const n = parseInt(invoiceNo.trim(), 10);
@@ -130,6 +134,8 @@ export function PurchaseOrdersView({ canManage = true }: { canManage?: boolean }
 
       {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
+      <Pager {...pg} className="mb-2 justify-end" />
+
       <div className="card overflow-x-auto">
         <table className="w-full min-w-[720px] text-sm">
           <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
@@ -152,14 +158,14 @@ export function PurchaseOrdersView({ canManage = true }: { canManage?: boolean }
                   Loading…
                 </td>
               </tr>
-            ) : pos.length === 0 ? (
+            ) : pg.total === 0 ? (
               <tr>
                 <td colSpan={9} className="px-4 py-8 text-center text-zinc-400">
                   No purchase orders{filter === "ALL" ? " yet" : ` with status ${filter}`}.
                 </td>
               </tr>
             ) : (
-              pos.map((po) => (
+              pg.pageItems.map((po) => (
                 <tr
                   key={po.id}
                   onClick={() => router.push(`/purchase-orders/${po.id}`)}

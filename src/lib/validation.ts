@@ -168,6 +168,7 @@ export const vendorUpdateSchema = z.object({
 export const saleItemSchema = z.object({
   productId: z.string().min(1),
   quantity: z.number().int().min(1).max(9999),
+  serialNumber: z.string().trim().max(200).default(""),
   discountCents: z.number().int().min(0).default(0),
   // Manual per-unit price set at the register (up or down). Omit to use the
   // product's catalog price.

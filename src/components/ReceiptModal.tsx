@@ -134,11 +134,16 @@ export function ReceiptModal({
               ) : null}
               <hr className="my-2 border-dashed" />
               {sale.items.map((it) => (
-                <div key={it.id} className="flex justify-between">
-                  <span>
-                    {it.quantity}× {it.nameSnapshot}
-                  </span>
-                  <span>{formatMoney(it.lineTotalCents)}</span>
+                <div key={it.id}>
+                  <div className="flex justify-between">
+                    <span>
+                      {it.quantity}× {it.nameSnapshot}
+                    </span>
+                    <span>{formatMoney(it.lineTotalCents)}</span>
+                  </div>
+                  {it.serialNumber ? (
+                    <div className="text-[10px] text-zinc-500">S/N: {it.serialNumber}</div>
+                  ) : null}
                 </div>
               ))}
               <hr className="my-2 border-dashed" />

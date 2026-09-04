@@ -692,6 +692,9 @@ export function InvoiceModal({
                     <td className="py-1.5">
                       {it.nameSnapshot}
                       <span className="block text-xs text-zinc-400">{it.skuSnapshot}</span>
+                      {it.serialNumber ? (
+                        <span className="block text-xs text-zinc-500">S/N: {it.serialNumber}</span>
+                      ) : null}
                     </td>
                     <td className="py-1.5 text-zinc-500">{it.vendorSnapshot || "—"}</td>
                     <td className="py-1.5 text-right">{formatMoney(it.unitPriceCents)}</td>

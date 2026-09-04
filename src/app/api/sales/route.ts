@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
     // Merge duplicate product lines defensively.
     const merged = new Map<
       string,
-      { quantity: number; discountCents: number; unitPriceCents?: number }
+      { quantity: number; discountCents: number; unitPriceCents?: number; serialNumber: string }
     >();
     for (const item of body.items) {
       const prev = merged.get(item.productId);
@@ -128,11 +128,17 @@ export async function POST(req: NextRequest) {
         prev.quantity += item.quantity;
         prev.discountCents += item.discountCents;
         if (item.unitPriceCents !== undefined) prev.unitPriceCents = item.unitPriceCents;
+        if (item.serialNumber) {
+          prev.serialNumber = prev.serialNumber
+            ? `${prev.serialNumber}, ${item.serialNumber}`
+            : item.serialNumber;
+        }
       } else {
         merged.set(item.productId, {
           quantity: item.quantity,
           discountCents: item.discountCents,
           unitPriceCents: item.unitPriceCents,
+          serialNumber: item.serialNumber ?? "",
         });
       }
     }
@@ -338,6 +344,7 @@ export async function POST(req: NextRequest) {
               productId: l.productId,
               nameSnapshot: l.nameSnapshot,
               skuSnapshot: meta.get(l.productId)?.sku ?? "",
+              serialNumber: merged.get(l.productId)?.serialNumber ?? "",
               vendorSnapshot: meta.get(l.productId)?.vendor ?? "",
               unitPriceCents: l.unitPriceCents,
               unitCostCents: meta.get(l.productId)?.costCents ?? 0,

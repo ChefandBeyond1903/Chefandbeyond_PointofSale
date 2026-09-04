@@ -343,6 +343,8 @@ model SaleItem {
   nameSnapshot   String
   skuSnapshot    String @default("")
   vendorSnapshot String @default("")
+  // Optional serial number(s) captured at the register for a serialised item.
+  serialNumber   String @default("")
   unitPriceCents Int
   unitCostCents  Int    @default(0)
   quantity       Int

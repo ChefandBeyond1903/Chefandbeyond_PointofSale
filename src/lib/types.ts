@@ -174,6 +174,7 @@ export interface SaleItem {
   nameSnapshot: string;
   skuSnapshot: string;
   vendorSnapshot: string;
+  serialNumber?: string;
   unitPriceCents: number;
   unitCostCents: number;
   quantity: number;
