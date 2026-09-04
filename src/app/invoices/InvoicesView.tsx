@@ -103,7 +103,7 @@ export function InvoicesView({
           value={term}
           onChange={setTerm}
           onSubmit={setQuery}
-          placeholder="Search invoice # or customer name, company, phone, email…"
+          placeholder="Search invoice #, serial number, or customer name, company, phone, email…"
         />
         <div className="ml-auto flex flex-wrap items-center gap-1">
           {isAdmin && stores.length > 0 && (

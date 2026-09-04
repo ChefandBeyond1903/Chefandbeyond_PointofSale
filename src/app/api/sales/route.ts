@@ -39,13 +39,16 @@ export async function GET(req: NextRequest) {
       if (to) where.createdAt.lte = new Date(to);
     }
     if (q) {
-      // Free-text invoice search: match a number, or any customer snapshot.
+      // Free-text invoice search: match a number, any customer snapshot, or
+      // a serial number on one of the sale's items — customers sometimes
+      // only have the serial off the unit, not their name or invoice #.
       const asNumber = Number(q.replace(/[^0-9]/g, ""));
       const or: Prisma.SaleWhereInput[] = [
         { customerNameSnapshot: { contains: q, mode: "insensitive" } },
         { customerCompanySnapshot: { contains: q, mode: "insensitive" } },
         { customerEmailSnapshot: { contains: q, mode: "insensitive" } },
         { customerPhoneSnapshot: { contains: q, mode: "insensitive" } },
+        { items: { some: { serialNumber: { contains: q, mode: "insensitive" } } } },
       ];
       if (Number.isInteger(asNumber) && asNumber > 0) or.push({ number: asNumber });
       where.OR = or;
