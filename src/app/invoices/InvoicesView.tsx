@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
+import { formatDateOnly } from "@/lib/date";
 import { usePaged } from "@/lib/usePaged";
 import { Pager } from "@/components/Pager";
 import { InvoiceModal } from "@/components/InvoiceModal";
@@ -92,7 +93,7 @@ export function InvoicesView({
   const rows = overdueOnly ? sales.filter(isOverdue) : sales;
   const pg = usePaged(rows);
   const showStore = isAdmin && !storeId; // redundant once a store is chosen
-  const cols = showStore ? 6 : 5;
+  const cols = showStore ? 7 : 6;
 
   return (
     <div className="w-full flex-1 p-4">
@@ -152,6 +153,7 @@ export function InvoicesView({
               <th className="px-4 py-2.5">Customer</th>
               {showStore && <th className="px-4 py-2.5">Store</th>}
               <th className="px-4 py-2.5">Status</th>
+              <th className="px-4 py-2.5">Due</th>
               <th className="px-4 py-2.5 text-right">Total</th>
             </tr>
           </thead>
@@ -202,6 +204,13 @@ export function InvoicesView({
                           Overdue
                         </Badge>
                       )}
+                    </td>
+                    <td
+                      className={`px-4 py-2.5 whitespace-nowrap ${
+                        isOverdue(s) ? "font-medium text-red-600" : "text-zinc-500"
+                      }`}
+                    >
+                      {s.dueDate ? formatDateOnly(s.dueDate) : "—"}
                     </td>
                     <td className="px-4 py-2.5 text-right font-medium tabular-nums">
                       {formatMoney(s.totalCents)}

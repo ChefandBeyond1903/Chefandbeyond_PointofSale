@@ -645,7 +645,9 @@ export function CustomersView({
                     <p className="text-xs text-zinc-400">No sales yet.</p>
                   ) : (
                     <ul className="max-h-56 divide-y divide-zinc-100 overflow-y-auto text-sm">
-                      {custSales.map((s) => (
+                      {custSales.map((s) => {
+                        const overdue = !!s.dueDate && new Date(s.dueDate) < new Date();
+                        return (
                         <li key={s.id}>
                           <button
                             type="button"
@@ -657,6 +659,13 @@ export function CustomersView({
                               <span className="ml-2 text-xs text-zinc-400">
                                 {formatDateOnly(s.createdAt)}
                               </span>
+                              {s.dueDate && (
+                                <span
+                                  className={`ml-2 text-xs ${overdue ? "font-medium text-red-600" : "text-zinc-400"}`}
+                                >
+                                  due {formatDateOnly(s.dueDate)}
+                                </span>
+                              )}
                             </span>
                             <span className="flex items-center gap-2">
                               <SaleStatusPill
@@ -671,7 +680,8 @@ export function CustomersView({
                             </span>
                           </button>
                         </li>
-                      ))}
+                        );
+                      })}
                     </ul>
                   )}
                 </div>
