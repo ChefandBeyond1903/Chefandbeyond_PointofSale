@@ -127,6 +127,13 @@ export async function POST(req: NextRequest) {
       include: { category: { select: { id: true, name: true } } },
     });
     await ensureVendor(product.vendor);
+    // Favoriting a product for the register also favorites its category.
+    if (product.favorite && product.categoryId) {
+      await prisma.category.update({
+        where: { id: product.categoryId },
+        data: { favorite: true },
+      });
+    }
     return ok({ product }, 201);
   } catch (err) {
     return toErrorResponse(err);

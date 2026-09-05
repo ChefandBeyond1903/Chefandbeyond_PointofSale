@@ -454,9 +454,10 @@ export default function RegisterPage() {
   // Categories starred to show as icon tiles on the register's home view.
   const favoriteCategories = useMemo(() => categories.filter((c) => c.favorite), [categories]);
 
+  // Just shows that category's favorite products — not the full catalog's
+  // category-chip list (that's still one tap away via "Open catalog").
   function tapFavoriteCategory(id: string) {
     setActiveCategory((cur) => (cur === id ? null : id));
-    setCatalogOpen(true);
   }
 
   // An admin has no assigned store and picks one to sell from; everyone else
@@ -1027,24 +1028,44 @@ export default function RegisterPage() {
            filters the favorite-products view down to it. Hidden while
            searching so it doesn't compete with the results. */}
         {!isSearching && favoriteCategories.length > 0 && (
-          <div className="mb-3 flex flex-wrap gap-2">
+          <div className="mb-3 grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
             {favoriteCategories.map((c) => (
               <button
                 key={c.id}
                 type="button"
                 onClick={() => tapFavoriteCategory(c.id)}
-                className={`flex w-16 flex-col items-center gap-1 rounded-lg border p-1.5 transition-colors ${
+                className={`flex flex-col items-center gap-1.5 rounded-lg border p-3 transition-colors ${
                   activeCategory === c.id
                     ? "border-indigo-500 bg-indigo-50"
                     : "border-zinc-200 bg-white hover:bg-zinc-50"
                 }`}
               >
-                <CategoryIcon category={c} size={36} />
-                <span className="line-clamp-2 w-full text-center text-[10px] font-medium leading-tight text-zinc-600">
+                <CategoryIcon category={c} size={56} />
+                <span className="line-clamp-2 w-full text-center text-xs font-medium leading-tight text-zinc-600">
                   {c.name}
                 </span>
               </button>
             ))}
+          </div>
+        )}
+
+        {/* A favorite category is showing (tile tapped, catalog not opened) —
+           just its favorite products, no category-chip list. */}
+        {activeCategory && !catalogOpen && !isSearching && (
+          <div className="mb-3 flex items-center justify-between text-sm">
+            <span className="text-zinc-500">
+              Favorites in{" "}
+              <span className="font-medium text-zinc-800">
+                {categories.find((c) => c.id === activeCategory)?.name ?? ""}
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setActiveCategory(null)}
+              className="btn-ghost text-xs"
+            >
+              Clear
+            </button>
           </div>
         )}
 
@@ -1078,7 +1099,7 @@ export default function RegisterPage() {
           </div>
         )}
 
-        {(isSearching || catalogOpen) &&
+        {(isSearching || catalogOpen || !!activeCategory) &&
           (loading ? (
             <p className="text-sm text-zinc-500">Loading catalog…</p>
           ) : (

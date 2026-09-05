@@ -82,6 +82,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       include: { category: { select: { id: true, name: true } } },
     });
     if (data.vendor !== undefined) await ensureVendor(product.vendor);
+    // Favoriting a product for the register also favorites its category, so
+    // the category shows up as a tile there without a separate step.
+    if (data.favorite === true && product.categoryId) {
+      await prisma.category.update({
+        where: { id: product.categoryId },
+        data: { favorite: true },
+      });
+    }
     return ok({ product });
   } catch (err) {
     return toErrorResponse(err);
