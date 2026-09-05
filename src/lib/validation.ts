@@ -63,8 +63,14 @@ export const categoryCreateSchema = z.object({
   name: z.string().trim().min(1).max(100),
 });
 
+// Every field optional — a favorite/icon toggle from the list shouldn't have
+// to resend the name.
 export const categoryUpdateSchema = z.object({
-  name: z.string().trim().min(1).max(100),
+  name: z.string().trim().min(1).max(100).optional(),
+  // Shows this category as an icon tile on the register.
+  favorite: z.boolean().optional(),
+  // Image for the register tile; "" clears it back to the fallback initial.
+  iconUrl: z.string().trim().max(2000).optional().or(z.literal("")),
 });
 
 // Accepts an ISO datetime or a plain "YYYY-MM-DD".

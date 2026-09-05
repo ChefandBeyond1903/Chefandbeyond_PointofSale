@@ -124,6 +124,11 @@ model HeldSale {
 model Category {
   id        String    @id @default(cuid())
   name      String    @unique
+  // Shows as an icon tile on the register's home view (favorite products in
+  // this category are what tapping it filters down to).
+  favorite  Boolean   @default(false)
+  // Image for the register tile. Empty = fall back to the category's initial.
+  iconUrl   String    @default("")
   createdAt DateTime  @default(now())
   products  Product[]
 }

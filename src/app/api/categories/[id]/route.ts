@@ -10,10 +10,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     await requireRole("MANAGER", "ADMIN");
     const { id } = await params;
-    const { name } = categoryUpdateSchema.parse(await req.json());
+    const fields = categoryUpdateSchema.parse(await req.json());
+    const data: Record<string, unknown> = {};
+    if (fields.name !== undefined) data.name = fields.name;
+    if (fields.favorite !== undefined) data.favorite = fields.favorite;
+    if (fields.iconUrl !== undefined) data.iconUrl = fields.iconUrl;
     const category = await prisma.category.update({
       where: { id },
-      data: { name },
+      data,
       include: { _count: { select: { products: true } } },
     });
     return ok({ category });

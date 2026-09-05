@@ -8,6 +8,7 @@ import { MoneyInput } from "@/components/MoneyInput";
 import { PercentInput } from "@/components/PercentInput";
 import { ReceiptModal } from "@/components/ReceiptModal";
 import { QuickAddProductModal } from "@/components/QuickAddProductModal";
+import { CategoryIcon } from "@/components/CategoryIcon";
 import { dueDateFromTerms } from "@/lib/terms";
 import { phoneDigits, formatPhone } from "@/lib/phone";
 import { PhoneInput } from "@/components/PhoneInput";
@@ -449,6 +450,14 @@ export default function RegisterPage() {
         : favorites;
     return source.filter((p) => !activeCategory || p.categoryId === activeCategory);
   }, [isSearching, searchHits, browseAll, allProducts, favorites, activeCategory]);
+
+  // Categories starred to show as icon tiles on the register's home view.
+  const favoriteCategories = useMemo(() => categories.filter((c) => c.favorite), [categories]);
+
+  function tapFavoriteCategory(id: string) {
+    setActiveCategory((cur) => (cur === id ? null : id));
+    setCatalogOpen(true);
+  }
 
   // An admin has no assigned store and picks one to sell from; everyone else
   // sells from their own store. The picked store's name and tax rate drive the
@@ -1012,6 +1021,32 @@ export default function RegisterPage() {
             {catalogOpen ? "Hide catalog" : "Open catalog"}
           </button>
         </div>
+
+        {/* Favorite-category icon tiles — always visible (not gated behind
+           "Open catalog") so a favorite category is one tap away. Tapping one
+           filters the favorite-products view down to it. Hidden while
+           searching so it doesn't compete with the results. */}
+        {!isSearching && favoriteCategories.length > 0 && (
+          <div className="mb-3 flex flex-wrap gap-2">
+            {favoriteCategories.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => tapFavoriteCategory(c.id)}
+                className={`flex w-16 flex-col items-center gap-1 rounded-lg border p-1.5 transition-colors ${
+                  activeCategory === c.id
+                    ? "border-indigo-500 bg-indigo-50"
+                    : "border-zinc-200 bg-white hover:bg-zinc-50"
+                }`}
+              >
+                <CategoryIcon category={c} size={36} />
+                <span className="line-clamp-2 w-full text-center text-[10px] font-medium leading-tight text-zinc-600">
+                  {c.name}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Category filters only when the catalog is explicitly open — a search
            should show its results, not a wall of category chips. */}

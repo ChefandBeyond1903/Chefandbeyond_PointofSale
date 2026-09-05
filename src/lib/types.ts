@@ -37,6 +37,10 @@ export interface Company {
 export interface Category {
   id: string;
   name: string;
+  /** Shows as an icon tile on the register's home view. */
+  favorite: boolean;
+  /** Image for the register tile; "" falls back to the category's initial. */
+  iconUrl: string;
   createdAt?: string;
   _count?: { products: number };
 }
