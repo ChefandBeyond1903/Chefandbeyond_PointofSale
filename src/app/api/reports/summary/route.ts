@@ -339,6 +339,43 @@ export async function GET(req: NextRequest) {
       .sort((a, b) => b.quantity - a.quantity)
       .slice(0, 10);
 
+    // Top-selling products grouped by category (every product sold in the
+    // period, not just the top 10 overall).
+    const productIds = [...byProduct.keys()];
+    const productCategories = productIds.length
+      ? await prisma.product.findMany({
+          where: { id: { in: productIds } },
+          select: { id: true, category: { select: { name: true } } },
+        })
+      : [];
+    const categoryByProductId = new Map(
+      productCategories.map((p) => [p.id, p.category?.name || "Uncategorized"]),
+    );
+    const byCategory = new Map<
+      string,
+      {
+        quantity: number;
+        revenueCents: number;
+        items: { productId: string; name: string; sku: string; quantity: number; revenueCents: number }[];
+      }
+    >();
+    for (const [productId, v] of byProduct.entries()) {
+      const cat = categoryByProductId.get(productId) ?? "Uncategorized";
+      const c = byCategory.get(cat) ?? { quantity: 0, revenueCents: 0, items: [] };
+      c.quantity += v.quantity;
+      c.revenueCents += v.revenueCents;
+      c.items.push({ productId, name: v.name, sku: v.sku, quantity: v.quantity, revenueCents: v.revenueCents });
+      byCategory.set(cat, c);
+    }
+    const topCategories = [...byCategory.entries()]
+      .map(([category, v]) => ({
+        category,
+        quantity: v.quantity,
+        revenueCents: v.revenueCents,
+        items: v.items.sort((a, b) => b.quantity - a.quantity).slice(0, 20),
+      }))
+      .sort((a, b) => b.quantity - a.quantity);
+
     // A cashier's report carries no money figures — only counts, top sellers
     // and the invoice list (with per-invoice profit stripped).
     if (limited) {
@@ -376,6 +413,7 @@ export async function GET(req: NextRequest) {
         byStaff: [],
         byPaymentMethod: [],
         topProducts,
+        topCategories,
         recentSales: recentSales.map((s) => ({ ...s, profitCents: 0 })),
         receivables: { count: 0, amountCents: 0, depositsHeldCents: 0, overdueCount: 0 },
         unpaidInvoices: [],
@@ -421,6 +459,7 @@ export async function GET(req: NextRequest) {
         totalCents: v.totalCents,
       })),
       topProducts,
+      topCategories,
       recentSales,
       receivables,
       unpaidInvoices,

@@ -63,6 +63,10 @@ export const categoryCreateSchema = z.object({
   name: z.string().trim().min(1).max(100),
 });
 
+export const categoryUpdateSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+});
+
 // Accepts an ISO datetime or a plain "YYYY-MM-DD".
 const dateInput = z
   .string()

@@ -222,6 +222,8 @@ export function ReportsView({
 
           {!limited && inv && <InventorySection inv={inv} />}
 
+          <TopCategoriesCard rows={data.topCategories} />
+
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <div className="card p-4">
               <h2 className="mb-3 font-semibold">Top products</h2>
@@ -585,6 +587,87 @@ function ProfitLoss({ data }: { data: ReportSummary }) {
       <p className="mt-2 text-xs text-zinc-400">
         Sales tax collected ({formatMoney(t.taxCents)}) is excluded — it isn&apos;t revenue.
       </p>
+    </div>
+  );
+}
+
+function TopCategoriesCard({ rows }: { rows: ReportSummary["topCategories"] }) {
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const toggle = (category: string) =>
+    setOpen((cur) => {
+      const next = new Set(cur);
+      if (next.has(category)) next.delete(category);
+      else next.add(category);
+      return next;
+    });
+
+  return (
+    <div className="card overflow-hidden">
+      <h2 className="border-b border-zinc-100 px-4 py-3 font-semibold">
+        Top selling products by category
+      </h2>
+      {rows.length > 0 && (
+        <p className="px-4 pt-2 text-xs text-zinc-400">Click a category to see its products.</p>
+      )}
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[420px] text-sm">
+          <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
+            <tr>
+              <th className="px-4 py-2">Category</th>
+              <th className="px-4 py-2 text-right">Qty sold</th>
+              <th className="px-4 py-2 text-right">Revenue</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-zinc-100">
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={3} className="px-4 py-6 text-center text-zinc-400">
+                  No sales in this period.
+                </td>
+              </tr>
+            ) : (
+              rows.map((c) => {
+                const expanded = open.has(c.category);
+                return (
+                  <Fragment key={c.category}>
+                    <tr
+                      onClick={() => toggle(c.category)}
+                      className="cursor-pointer hover:bg-zinc-50"
+                    >
+                      <td className="px-4 py-2 font-medium">
+                        <span className="mr-1 inline-block w-3 text-zinc-400">
+                          {expanded ? "▾" : "▸"}
+                        </span>
+                        {c.category}
+                      </td>
+                      <td className="px-4 py-2 text-right text-zinc-500">
+                        {c.quantity.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-2 text-right font-medium">
+                        {formatMoney(c.revenueCents)}
+                      </td>
+                    </tr>
+                    {expanded &&
+                      c.items.map((p) => (
+                        <tr key={p.productId} className="bg-zinc-50/60 text-xs">
+                          <td className="py-1.5 pl-10 pr-4 font-mono text-zinc-600">
+                            {p.sku || p.name}
+                          </td>
+                          <td className="px-4 py-1.5 text-right text-zinc-500">
+                            {p.quantity.toLocaleString()} sold
+                          </td>
+                          <td className="px-4 py-1.5 text-right text-zinc-600">
+                            {formatMoney(p.revenueCents)}
+                          </td>
+                        </tr>
+                      ))}
+                  </Fragment>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

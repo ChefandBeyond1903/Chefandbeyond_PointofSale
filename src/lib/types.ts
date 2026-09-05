@@ -606,6 +606,13 @@ export interface ReportSummary {
   byStaff: ProfitRow[];
   byPaymentMethod: { method: string; count: number; totalCents: number }[];
   topProducts: { productId: string; name: string; sku: string; quantity: number; revenueCents: number }[];
+  /** Every product sold in the period, grouped by its category, largest first. */
+  topCategories: {
+    category: string;
+    quantity: number;
+    revenueCents: number;
+    items: { productId: string; name: string; sku: string; quantity: number; revenueCents: number }[];
+  }[];
   recentSales: {
     id: string;
     number: number;
