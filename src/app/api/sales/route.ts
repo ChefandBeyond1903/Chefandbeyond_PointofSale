@@ -231,8 +231,10 @@ export async function POST(req: NextRequest) {
     const isTermsInvoice = customerTerms !== "";
 
     // Normalise every way the client can send money into one list of payments.
+    // method is CASH / CARD / CHECK / CREDIT, or a custom method (Zelle, …)
+    // that behaves like plain tender.
     type Pay = {
-      method: "CASH" | "CARD" | "CHECK" | "CREDIT";
+      method: string;
       amountCents: number;
       tenderedCents: number;
       checkNumber: string;

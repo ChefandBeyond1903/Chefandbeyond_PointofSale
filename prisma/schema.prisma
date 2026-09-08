@@ -719,3 +719,14 @@ model SaleRefund {
   @@index([refundedAt])
   @@index([shiftId])
 }
+
+/// Extra payment methods staff can add (Zelle, Venmo, wire, …). The built-in
+/// four — Cash, Card, Check, Store credit — are hard-coded and NOT in this
+/// table; Card charges a processing fee and Store credit moves a customer's
+/// balance, so they carry code. Everything here is treated as plain tender.
+model PaymentMethod {
+  id        String   @id @default(cuid())
+  code      String   @unique // uppercased slug, e.g. "ZELLE"
+  label     String
+  createdAt DateTime @default(now())
+}

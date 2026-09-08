@@ -60,8 +60,16 @@ export function InvoiceModal({
   // vendor name -> free-freight minimum (cents); 0 / missing means none.
   const [freightMins, setFreightMins] = useState<Record<string, number>>({});
 
+  // Custom payment methods (Zelle, …) added in Settings — plain tender.
+  const [customMethods, setCustomMethods] = useState<{ code: string; label: string }[]>([]);
+  useEffect(() => {
+    api<{ methods: { code: string; label: string }[] }>("/api/payment-methods")
+      .then((r) => setCustomMethods(r.methods))
+      .catch(() => {});
+  }, []);
+
   // Recording a payment (deposit / partial / final) against an open invoice.
-  const [payMethod, setPayMethod] = useState<"CASH" | "CARD" | "CHECK" | "CREDIT">("CASH");
+  const [payMethod, setPayMethod] = useState<string>("CASH");
   const [payCheckNo, setPayCheckNo] = useState("");
   const [payDate, setPayDate] = useState(todayInputValue);
   const [payAmount, setPayAmount] = useState(0);
@@ -215,7 +223,7 @@ export function InvoiceModal({
 
   // Refunding the sale (managers).
   const [refundOpen, setRefundOpen] = useState(false);
-  const [refundMethod, setRefundMethod] = useState<"CASH" | "CARD" | "CHECK" | "CREDIT">("CASH");
+  const [refundMethod, setRefundMethod] = useState<string>("CASH");
   const [refundCheckNo, setRefundCheckNo] = useState("");
   const [refundAmount, setRefundAmount] = useState(0);
   const [refundRestock, setRefundRestock] = useState(true);
@@ -413,7 +421,7 @@ export function InvoiceModal({
   // than the invoice now totals — the difference is owed back to the customer.
   const creditOwedCents = sale ? Math.max(0, refundableCents - sale.totalCents) : 0;
 
-  function openRefundFor(amountCents: number, method: "CASH" | "CARD" | "CHECK" | "CREDIT") {
+  function openRefundFor(amountCents: number, method: string) {
     setRefundAmount(amountCents);
     setRefundMethod(method);
     setRefundRestock(false);
@@ -748,15 +756,16 @@ export function InvoiceModal({
                           <select
                             className="input h-8"
                             value={payMethod}
-                            onChange={(e) =>
-                              setPayMethod(
-                                e.target.value as "CASH" | "CARD" | "CHECK" | "CREDIT",
-                              )
-                            }
+                            onChange={(e) => setPayMethod(e.target.value)}
                           >
                             <option value="CASH">Cash</option>
                             <option value="CARD">Card</option>
                             <option value="CHECK">Check</option>
+                            {customMethods.map((m) => (
+                              <option key={m.code} value={m.code}>
+                                {m.label}
+                              </option>
+                            ))}
                             {custCreditCents > 0 && (
                               <option value="CREDIT">
                                 Store credit ({formatMoney(custCreditCents)})
@@ -929,15 +938,16 @@ export function InvoiceModal({
                         <select
                           className="input h-8"
                           value={refundMethod}
-                          onChange={(e) =>
-                            setRefundMethod(
-                              e.target.value as "CASH" | "CARD" | "CHECK" | "CREDIT",
-                            )
-                          }
+                          onChange={(e) => setRefundMethod(e.target.value)}
                         >
                           <option value="CASH">Cash</option>
                           <option value="CARD">Card</option>
                           <option value="CHECK">Check</option>
+                          {customMethods.map((m) => (
+                            <option key={m.code} value={m.code}>
+                              {m.label}
+                            </option>
+                          ))}
                           <option value="CREDIT" disabled={!sale.customerId}>
                             Store credit
                           </option>

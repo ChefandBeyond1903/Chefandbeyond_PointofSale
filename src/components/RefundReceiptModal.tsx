@@ -12,7 +12,9 @@ function methodLabel(r: SaleRefund): string {
   if (r.method === "CHECK") return r.checkNumber ? `Check #${r.checkNumber}` : "Check";
   if (r.method === "CREDIT") return "Store credit";
   if (r.method === "CARD") return "Card";
-  return "Cash";
+  if (r.method === "CASH") return "Cash";
+  // A custom method (Zelle, …) — title-case the stored code.
+  return r.method.charAt(0) + r.method.slice(1).toLowerCase();
 }
 
 /**

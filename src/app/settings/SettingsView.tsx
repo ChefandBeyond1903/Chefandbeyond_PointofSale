@@ -21,6 +21,90 @@ export function SettingsView({ isAdmin = false }: { isAdmin?: boolean }) {
       <h1 className="text-xl font-semibold">Settings</h1>
       {isAdmin && <CompanyCard />}
       <StoresCard isAdmin={isAdmin} />
+      <PaymentMethodsCard />
+    </div>
+  );
+}
+
+/* --------------------------- Payment methods --------------------------- */
+
+function PaymentMethodsCard() {
+  const [methods, setMethods] = useState<{ id: string; code: string; label: string }[]>([]);
+  const [label, setLabel] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    api<{ methods: { id: string; code: string; label: string }[] }>("/api/payment-methods")
+      .then((r) => setMethods(r.methods))
+      .catch(() => {});
+  }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function add(e: React.FormEvent) {
+    e.preventDefault();
+    if (!label.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api("/api/payment-methods", { method: "POST", body: JSON.stringify({ label: label.trim() }) });
+      setLabel("");
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not add the payment method");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(id: string, name: string) {
+    if (!confirm(`Remove "${name}" as a payment option? Past sales keep it.`)) return;
+    try {
+      await api(`/api/payment-methods/${id}`, { method: "DELETE" });
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not remove it");
+    }
+  }
+
+  return (
+    <div className="card p-5">
+      <h2 className="mb-1 text-lg font-semibold">Payment methods</h2>
+      <p className="mb-4 text-sm text-zinc-500">
+        Cash, Card, Check and Store credit are always available. Add others staff can pick — Zelle,
+        Venmo, a wire — recorded as plain payment (no card fee).
+      </p>
+
+      {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+      <ul className="mb-4 divide-y divide-zinc-100 text-sm">
+        <li className="flex items-center justify-between py-2 text-zinc-400">
+          <span>Cash · Card · Check · Store credit</span>
+          <span className="text-xs">built in</span>
+        </li>
+        {methods.map((m) => (
+          <li key={m.id} className="flex items-center justify-between py-2">
+            <span className="font-medium">{m.label}</span>
+            <button onClick={() => remove(m.id, m.label)} className="btn-ghost text-xs text-red-500">
+              Remove
+            </button>
+          </li>
+        ))}
+      </ul>
+
+      <form onSubmit={add} className="flex flex-wrap items-center gap-2">
+        <input
+          className="input max-w-xs"
+          placeholder="New payment method (e.g. Zelle)"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+        />
+        <button type="submit" disabled={busy || !label.trim()} className="btn-primary">
+          {busy ? "Adding…" : "Add"}
+        </button>
+      </form>
     </div>
   );
 }

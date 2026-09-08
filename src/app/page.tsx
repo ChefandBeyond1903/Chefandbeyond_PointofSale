@@ -142,6 +142,8 @@ export default function RegisterPage() {
   const [company, setCompany] = useState<Company | null>(null);
   const [salespeople, setSalespeople] = useState<{ id: string; name: string }[]>([]);
   const [salespersonId, setSalespersonId] = useState<string>(""); // "" = signed-in operator
+  // Custom payment methods (Zelle, …) added in Settings.
+  const [paymentMethods, setPaymentMethods] = useState<{ code: string; label: string }[]>([]);
   const searchRef = useRef<HTMLInputElement>(null);
   // Guards the persist effect so it can't overwrite saved state before the
   // first load has read it back in.
@@ -244,6 +246,9 @@ export default function RegisterPage() {
       .catch(() => {});
     api<{ people: { id: string; name: string }[] }>("/api/salespeople")
       .then((r) => setSalespeople(r.people))
+      .catch(() => {});
+    api<{ methods: { code: string; label: string }[] }>("/api/payment-methods")
+      .then((r) => setPaymentMethods(r.methods))
       .catch(() => {});
   }, [loadCatalog, loadShift, loadCustomers, loadHeld]);
 
@@ -921,7 +926,7 @@ export default function RegisterPage() {
 
   // Take a deposit / part-payment now; the rest is billed as an invoice.
   async function takeDeposit(
-    method: "CASH" | "CARD" | "CHECK" | "CREDIT",
+    method: string,
     depositCents: number,
     tenderedCents: number,
     checkNumber?: string,
@@ -951,7 +956,7 @@ export default function RegisterPage() {
   // Split tender — e.g. store credit + card for the rest — in one completed sale.
   async function completeSaleSplit(
     payments: {
-      method: "CASH" | "CARD" | "CHECK" | "CREDIT";
+      method: string;
       amountCents: number;
       tenderedCents: number;
       checkNumber?: string;
@@ -974,7 +979,7 @@ export default function RegisterPage() {
   }
 
   async function completeSale(
-    paymentMethod: "CASH" | "CARD" | "CHECK" | "CREDIT",
+    paymentMethod: string,
     tenderedCents: number,
     checkNumber?: string,
   ) {
@@ -1626,6 +1631,7 @@ export default function RegisterPage() {
           total={totals.total}
           canDeposit={!!custId || custName.trim().length > 0}
           creditCents={selectedCustomer?.storeCreditCents ?? 0}
+          customMethods={paymentMethods}
           onClose={() => setPayOpen(false)}
           onConfirm={completeSale}
           onDeposit={takeDeposit}
@@ -1746,6 +1752,7 @@ function PaymentModal({
   total,
   canDeposit,
   creditCents,
+  customMethods = [],
   onClose,
   onConfirm,
   onDeposit,
@@ -1756,21 +1763,22 @@ function PaymentModal({
   total: number;
   canDeposit: boolean;
   creditCents?: number;
+  customMethods?: { code: string; label: string }[];
   onClose: () => void;
   onConfirm: (
-    method: "CASH" | "CARD" | "CHECK" | "CREDIT",
+    method: string,
     tenderedCents: number,
     checkNumber?: string,
   ) => Promise<void>;
   onDeposit: (
-    method: "CASH" | "CARD" | "CHECK" | "CREDIT",
+    method: string,
     depositCents: number,
     tenderedCents: number,
     checkNumber?: string,
   ) => Promise<void>;
   onSplit: (
     payments: {
-      method: "CASH" | "CARD" | "CHECK" | "CREDIT";
+      method: string;
       amountCents: number;
       tenderedCents: number;
       checkNumber?: string;
@@ -1780,10 +1788,25 @@ function PaymentModal({
   error: string | null;
 }) {
   const credit = creditCents ?? 0;
-  const methods: ("CASH" | "CARD" | "CHECK" | "CREDIT")[] = credit > 0
-    ? ["CASH", "CARD", "CHECK", "CREDIT"]
-    : ["CASH", "CARD", "CHECK"];
-  const [tab, setTab] = useState<"CASH" | "CARD" | "CHECK" | "CREDIT">("CASH");
+  // Built-in tabs, then any custom methods (Zelle, …), then Store credit.
+  const methods: string[] = [
+    "CASH",
+    "CARD",
+    "CHECK",
+    ...customMethods.map((m) => m.code),
+    ...(credit > 0 ? ["CREDIT"] : []),
+  ];
+  const methodLabel = (code: string) =>
+    code === "CASH"
+      ? "Cash"
+      : code === "CARD"
+        ? "Card"
+        : code === "CHECK"
+          ? "Check"
+          : code === "CREDIT"
+            ? "Store credit"
+            : (customMethods.find((m) => m.code === code)?.label ?? code);
+  const [tab, setTab] = useState<string>("CASH");
   const [checkNo, setCheckNo] = useState("");
   const [mode, setMode] = useState<"FULL" | "DEPOSIT">("FULL");
   const [deposit, setDeposit] = useState(total);
@@ -1810,7 +1833,7 @@ function PaymentModal({
       if (tab === "CREDIT") {
         // Store credit + (if it doesn't cover the order) another tender for the
         // rest — all in one completed transaction.
-        const payments: { method: "CASH" | "CARD" | "CREDIT"; amountCents: number; tenderedCents: number }[] = [
+        const payments: { method: string; amountCents: number; tenderedCents: number }[] = [
           { method: "CREDIT", amountCents: creditNow, tenderedCents: creditNow },
         ];
         if (creditRemaining > 0) {
@@ -1884,13 +1907,7 @@ function PaymentModal({
                 tab === m ? "bg-white shadow-sm" : "text-zinc-500"
               }`}
             >
-              {m === "CASH"
-                ? "Cash"
-                : m === "CARD"
-                  ? "Card"
-                  : m === "CHECK"
-                    ? "Check"
-                    : "Store credit"}
+              {methodLabel(m)}
             </button>
           ))}
         </div>
@@ -1996,7 +2013,9 @@ function PaymentModal({
           </div>
         ) : (
           <p className="rounded-md bg-zinc-50 px-3 py-6 text-center text-sm text-zinc-500">
-            Run the card on your terminal, then confirm below.
+            {tab === "CARD"
+              ? "Run the card on your terminal, then confirm below."
+              : `Record the ${methodLabel(tab)} payment, then confirm below.`}
           </p>
         )}
 
