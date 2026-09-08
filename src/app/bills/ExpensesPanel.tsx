@@ -3,8 +3,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
+import { formatDateOnly } from "@/lib/date";
 import { MoneyInput } from "@/components/MoneyInput";
-import type { Expense, Store } from "@/lib/types";
+import { RECUR_FREQUENCY_LABEL } from "@/lib/recur";
+import type { Expense, RecurringExpense, Store } from "@/lib/types";
+
+const FREQUENCIES = ["WEEKLY", "MONTHLY", "QUARTERLY", "YEARLY"] as const;
 
 function todayInput() {
   const d = new Date();
@@ -203,6 +207,13 @@ export function ExpensesPanel({ isAdmin }: { isAdmin: boolean }) {
       </p>
 
       {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+      <RecurringExpensesSection
+        isAdmin={isAdmin}
+        categories={categories}
+        stores={stores}
+        onPosted={load}
+      />
 
       <form onSubmit={submit} className="card mb-4 grid gap-3 p-4 sm:grid-cols-6">
         <div className="sm:col-span-2">
@@ -473,6 +484,314 @@ export function ExpensesPanel({ isAdmin }: { isAdmin: boolean }) {
               </button>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ----------------------- Recurring expenses ----------------------- */
+
+function recurTodayISO() {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 10);
+}
+
+type RecurForm = {
+  category: string;
+  payee: string;
+  amountCents: number;
+  memo: string;
+  status: "PAID" | "UNPAID";
+  frequency: (typeof FREQUENCIES)[number];
+  nextDate: string;
+  storeId: string;
+};
+
+const emptyRecurForm = (): RecurForm => ({
+  category: "",
+  payee: "",
+  amountCents: 0,
+  memo: "",
+  status: "PAID",
+  frequency: "MONTHLY",
+  nextDate: recurTodayISO(),
+  storeId: "",
+});
+
+function RecurringExpensesSection({
+  isAdmin,
+  categories,
+  stores,
+  onPosted,
+}: {
+  isAdmin: boolean;
+  categories: string[];
+  stores: Store[];
+  onPosted: () => void;
+}) {
+  const [rows, setRows] = useState<RecurringExpense[]>([]);
+  const [dueCount, setDueCount] = useState(0);
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState<RecurForm>(emptyRecurForm);
+  const [busy, setBusy] = useState(false);
+  const [posting, setPosting] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const r = await api<{ recurring: RecurringExpense[]; dueCount: number }>(
+        "/api/recurring-expenses",
+      );
+      setRows(r.recurring);
+      setDueCount(r.dueCount);
+    } catch {
+      /* non-fatal */
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function add(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.category) return setErr("Pick a category");
+    if (form.amountCents <= 0) return setErr("Enter an amount");
+    setBusy(true);
+    setErr(null);
+    try {
+      await api("/api/recurring-expenses", {
+        method: "POST",
+        body: JSON.stringify({
+          category: form.category,
+          payee: form.payee.trim(),
+          amountCents: form.amountCents,
+          memo: form.memo.trim(),
+          status: form.status,
+          frequency: form.frequency,
+          nextDate: form.nextDate,
+          ...(isAdmin && form.storeId ? { storeId: form.storeId } : {}),
+        }),
+      });
+      setForm(emptyRecurForm());
+      setOpen(false);
+      load();
+    } catch (e2) {
+      setErr(e2 instanceof ApiError ? e2.message : "Could not save");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleActive(r: RecurringExpense) {
+    try {
+      await api(`/api/recurring-expenses/${r.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ active: !r.active }),
+      });
+      load();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Could not update");
+    }
+  }
+
+  async function remove(r: RecurringExpense) {
+    if (!confirm(`Stop the recurring "${r.category}" expense? Posted ones stay.`)) return;
+    try {
+      await api(`/api/recurring-expenses/${r.id}`, { method: "DELETE" });
+      load();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Could not delete");
+    }
+  }
+
+  async function postDue() {
+    setPosting(true);
+    setErr(null);
+    try {
+      const r = await api<{ posted: number }>("/api/recurring-expenses/run", { method: "POST" });
+      await load();
+      onPosted();
+      if (r.posted === 0) setErr("Nothing was due.");
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Could not post");
+    } finally {
+      setPosting(false);
+    }
+  }
+
+  const isDue = (r: RecurringExpense) =>
+    r.active && new Date(r.nextDate).getTime() <= Date.now();
+
+  return (
+    <div className="card mb-4 p-4">
+      <div className="mb-2 flex flex-wrap items-center gap-3">
+        <h3 className="font-semibold">Recurring expenses</h3>
+        <span className="text-xs text-zinc-400">
+          {rows.length} template{rows.length === 1 ? "" : "s"}
+        </span>
+        {dueCount > 0 && (
+          <button onClick={postDue} disabled={posting} className="btn-primary ml-auto h-8 text-xs">
+            {posting ? "Posting…" : `Post ${dueCount} due`}
+          </button>
+        )}
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className={`btn-secondary h-8 text-xs ${dueCount > 0 ? "" : "ml-auto"}`}
+        >
+          {open ? "Cancel" : "+ New recurring"}
+        </button>
+      </div>
+
+      {err && <p className="mb-2 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{err}</p>}
+
+      {open && (
+        <form
+          onSubmit={add}
+          className="mb-3 grid gap-2 rounded-md border border-zinc-200 p-3 sm:grid-cols-6"
+        >
+          <div className="sm:col-span-2">
+            <label className="label">Category</label>
+            <select
+              className="input"
+              value={form.category}
+              onChange={(e) => setForm({ ...form, category: e.target.value })}
+            >
+              <option value="">— Pick —</option>
+              {categories.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="sm:col-span-2">
+            <label className="label">Payee (optional)</label>
+            <input
+              className="input"
+              value={form.payee}
+              onChange={(e) => setForm({ ...form, payee: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="label">Amount</label>
+            <MoneyInput
+              cents={form.amountCents}
+              onCentsChange={(c) => setForm({ ...form, amountCents: c })}
+            />
+          </div>
+          <div>
+            <label className="label">Repeats</label>
+            <select
+              className="input"
+              value={form.frequency}
+              onChange={(e) =>
+                setForm({ ...form, frequency: e.target.value as RecurForm["frequency"] })
+              }
+            >
+              {FREQUENCIES.map((f) => (
+                <option key={f} value={f}>
+                  {RECUR_FREQUENCY_LABEL[f]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">Starting</label>
+            <input
+              type="date"
+              className="input"
+              value={form.nextDate}
+              onChange={(e) => setForm({ ...form, nextDate: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="label">Status</label>
+            <select
+              className="input"
+              value={form.status}
+              onChange={(e) => setForm({ ...form, status: e.target.value as "PAID" | "UNPAID" })}
+            >
+              <option value="PAID">Paid</option>
+              <option value="UNPAID">Unpaid</option>
+            </select>
+          </div>
+          <div className={isAdmin ? "sm:col-span-2" : "sm:col-span-3"}>
+            <label className="label">Memo (optional)</label>
+            <input
+              className="input"
+              value={form.memo}
+              onChange={(e) => setForm({ ...form, memo: e.target.value })}
+            />
+          </div>
+          {isAdmin && (
+            <div>
+              <label className="label">Store</label>
+              <select
+                className="input"
+                value={form.storeId}
+                onChange={(e) => setForm({ ...form, storeId: e.target.value })}
+              >
+                <option value="">Company-wide</option>
+                {stores.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div className="flex items-end">
+            <button className="btn-primary w-full whitespace-nowrap" disabled={busy}>
+              {busy ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {rows.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-sm">
+            <thead className="text-left text-xs uppercase tracking-wide text-zinc-400">
+              <tr>
+                <th className="py-1.5">Category</th>
+                <th className="py-1.5">Payee</th>
+                <th className="py-1.5">Repeats</th>
+                <th className="py-1.5">Next</th>
+                <th className="py-1.5 text-right">Amount</th>
+                <th className="py-1.5"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-100">
+              {rows.map((r) => (
+                <tr key={r.id} className={r.active ? "" : "opacity-50"}>
+                  <td className="py-2 font-medium">{r.category}</td>
+                  <td className="py-2 text-zinc-500">{r.payee || "—"}</td>
+                  <td className="py-2 text-zinc-500">{RECUR_FREQUENCY_LABEL[r.frequency]}</td>
+                  <td
+                    className={`py-2 ${isDue(r) ? "font-medium text-amber-700" : "text-zinc-500"}`}
+                  >
+                    {formatDateOnly(r.nextDate)}
+                    {isDue(r) && " · due"}
+                  </td>
+                  <td className="py-2 text-right tabular-nums">{formatMoney(r.amountCents)}</td>
+                  <td className="py-2 text-right whitespace-nowrap">
+                    <button onClick={() => toggleActive(r)} className="btn-ghost text-xs">
+                      {r.active ? "Pause" : "Resume"}
+                    </button>
+                    <button
+                      onClick={() => remove(r)}
+                      className="btn-ghost text-xs text-red-500"
+                    >
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

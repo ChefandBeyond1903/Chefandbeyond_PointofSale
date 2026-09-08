@@ -39,14 +39,15 @@ model Store {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  users          User[]
-  sales          Sale[]
-  purchaseOrders PurchaseOrder[]
-  inventory      StoreInventory[]
-  bills          Bill[]
-  expenses       Expense[]
-  customers      Customer[]
-  quotes         Quote[]
+  users             User[]
+  sales             Sale[]
+  purchaseOrders    PurchaseOrder[]
+  inventory         StoreInventory[]
+  bills             Bill[]
+  expenses          Expense[]
+  recurringExpenses RecurringExpense[]
+  customers         Customer[]
+  quotes            Quote[]
 }
 
 /// Staff who can sign in. role is "CASHIER", "MANAGER" (scoped to one store),
@@ -84,6 +85,7 @@ model User {
   bills          Bill[]
   heldSales      HeldSale[]
   expenses       Expense[]
+  recurringExpenses RecurringExpense[]
   quotesCreated  Quote[]         @relation("QuoteCreatedBy")
 
   @@index([storeId])
@@ -729,4 +731,33 @@ model PaymentMethod {
   code      String   @unique // uppercased slug, e.g. "ZELLE"
   label     String
   createdAt DateTime @default(now())
+}
+
+/// A template for an operating expense that repeats — rent, utilities, a
+/// software subscription. "Post due" on the Bills page turns the ones whose
+/// nextDate has arrived into real Expense rows and rolls nextDate forward.
+model RecurringExpense {
+  id          String   @id @default(cuid())
+  category    String
+  payee       String   @default("")
+  amountCents Int
+  memo        String   @default("")
+  // Status the generated Expense gets ("PAID" | "UNPAID").
+  status      String   @default("PAID")
+  // "WEEKLY" | "MONTHLY" | "QUARTERLY" | "YEARLY".
+  frequency   String   @default("MONTHLY")
+  // Next calendar day an expense should be posted for.
+  nextDate    DateTime
+  active      Boolean  @default(true)
+
+  storeId String?
+  store   Store?  @relation(fields: [storeId], references: [id])
+
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([nextDate])
+  @@index([storeId])
 }

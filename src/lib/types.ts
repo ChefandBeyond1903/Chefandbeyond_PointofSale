@@ -275,6 +275,23 @@ export interface Expense {
   createdAt: string;
 }
 
+export type RecurFrequency = "WEEKLY" | "MONTHLY" | "QUARTERLY" | "YEARLY";
+
+export interface RecurringExpense {
+  id: string;
+  category: string;
+  payee: string;
+  amountCents: number;
+  memo: string;
+  status: ExpenseStatus;
+  frequency: RecurFrequency;
+  nextDate: string;
+  active: boolean;
+  storeId: string | null;
+  store?: { id: string; name: string } | null;
+  createdAt: string;
+}
+
 export interface PurchaseOrderCategoryLine {
   id: string;
   category: string;

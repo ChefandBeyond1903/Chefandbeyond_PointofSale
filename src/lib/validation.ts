@@ -127,6 +127,31 @@ export const expenseCategoryCreateSchema = z.object({
   name: z.string().trim().min(1).max(120),
 });
 
+// A template for an operating expense that repeats (rent, utilities, …).
+export const recurringExpenseCreateSchema = z.object({
+  category: z.string().trim().min(1).max(120),
+  payee: z.string().trim().max(160).default(""),
+  amountCents: z.number().int().min(1).max(100_000_000_00),
+  memo: z.string().trim().max(2000).default(""),
+  status: z.enum(["PAID", "UNPAID"]).default("PAID"),
+  frequency: z.enum(["WEEKLY", "MONTHLY", "QUARTERLY", "YEARLY"]).default("MONTHLY"),
+  // The first date to post it for (and every `frequency` thereafter).
+  nextDate: dateInput.refine((s) => !!s, "Pick a start date"),
+  storeId: z.string().trim().min(1).optional().or(z.literal("")).transform((v) => (v ? v : undefined)),
+});
+
+export const recurringExpenseUpdateSchema = z.object({
+  category: z.string().trim().min(1).max(120).optional(),
+  payee: z.string().trim().max(160).optional(),
+  amountCents: z.number().int().min(1).max(100_000_000_00).optional(),
+  memo: z.string().trim().max(2000).optional(),
+  status: z.enum(["PAID", "UNPAID"]).optional(),
+  frequency: z.enum(["WEEKLY", "MONTHLY", "QUARTERLY", "YEARLY"]).optional(),
+  nextDate: dateInput.optional(),
+  active: z.boolean().optional(),
+  storeId: z.string().trim().max(64).nullable().optional(),
+});
+
 export const billUpdateSchema = z.object({
   billNumber: z.string().trim().max(120).optional(),
   vendor: z.string().trim().min(1).max(160).optional(),
