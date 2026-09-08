@@ -4,6 +4,7 @@ import { HttpError } from "@/lib/auth";
 import { requireScopedUser, requireScopedRole, scopeStoreId } from "@/lib/scope";
 import { billUpdateSchema } from "@/lib/validation";
 import { parseDateInput } from "@/lib/date";
+import { ensureVendor } from "@/lib/vendors";
 import { ok, toErrorResponse } from "@/lib/api";
 
 type Params = { params: Promise<{ id: string }> };
@@ -47,7 +48,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     const data: Record<string, unknown> = {};
     if (body.billNumber !== undefined) data.billNumber = body.billNumber;
-    if (body.vendor !== undefined) data.vendor = body.vendor;
+    if (body.vendor !== undefined) {
+      data.vendor = body.vendor;
+      // Keep the Vendors directory in sync with whatever gets put on a bill.
+      await ensureVendor(body.vendor);
+    }
     if (body.terms !== undefined) data.terms = body.terms;
     if (body.memo !== undefined) data.memo = body.memo;
     if (body.billDate !== undefined) data.billDate = body.billDate ? parseDateInput(body.billDate) : new Date();

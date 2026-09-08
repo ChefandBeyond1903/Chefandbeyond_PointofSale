@@ -5,6 +5,7 @@ import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
 import { formatDateOnly } from "@/lib/date";
 import { MoneyInput } from "@/components/MoneyInput";
+import { VendorPicker } from "@/components/VendorPicker";
 import { BILL_TERMS } from "@/lib/terms";
 import { usePaged } from "@/lib/usePaged";
 import { Pager } from "@/components/Pager";
@@ -348,11 +349,10 @@ function BillDetailModal({
               </div>
               <div>
                 <label className="label">Vendor</label>
-                <input
-                  className="input"
+                <VendorPicker
                   value={edit.vendor}
                   disabled={!canManage}
-                  onChange={(e) => setEdit({ ...edit, vendor: e.target.value })}
+                  onChange={(name) => setEdit((s) => ({ ...s, vendor: name }))}
                 />
               </div>
               <div>

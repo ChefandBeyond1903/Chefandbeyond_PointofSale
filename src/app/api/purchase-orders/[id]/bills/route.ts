@@ -4,6 +4,7 @@ import { HttpError } from "@/lib/auth";
 import { requireScopedUser, requireScopedRole, scopeStoreId } from "@/lib/scope";
 import { billCreateSchema } from "@/lib/validation";
 import { parseDateInput } from "@/lib/date";
+import { ensureVendor } from "@/lib/vendors";
 import { ok, toErrorResponse } from "@/lib/api";
 
 type Params = { params: Promise<{ id: string }> };
@@ -87,6 +88,9 @@ export async function POST(req: NextRequest, { params }: Params) {
     const billDate = body.billDate ? parseDateInput(body.billDate) : new Date();
     const dueDate = body.dueDate ? parseDateInput(body.dueDate) : null;
     const subtotalCents = lines.reduce((s, l) => s + l.receiveQty * l.unitCostCents, 0);
+
+    // The bill inherits the PO's vendor — make sure it's in the directory.
+    await ensureVendor(po.vendor);
 
     const bill = await prisma.$transaction(async (tx) => {
       const created = await tx.bill.create({
