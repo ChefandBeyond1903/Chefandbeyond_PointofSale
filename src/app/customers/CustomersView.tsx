@@ -13,7 +13,7 @@ import { ListHeader, SearchBox, FilterToggle } from "@/components/ListToolbar";
 import { LoadingRow, EmptyRow } from "@/components/TableState";
 import type { Customer, StoreCreditEntry } from "@/lib/types";
 
-const TERMS = ["Net 15", "Net 30", "Net 45", "Net 60"] as const;
+const TERMS = ["Net 15", "Net 30", "Net 45", "Net 60", "Net 90"] as const;
 
 type Draft = {
   id?: string;

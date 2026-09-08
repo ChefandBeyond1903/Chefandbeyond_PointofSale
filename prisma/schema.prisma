@@ -172,7 +172,7 @@ model Customer {
   taxExemptDocName    String    @default("")
 
   // Default payment terms for this customer's invoices ("" = due on receipt).
-  // "" | "Due on receipt" | "Net 15" | "Net 30" | "Net 45" | "Net 60".
+  // "" | "Due on receipt" | "Net 15" | "Net 30" | "Net 45" | "Net 60" | "Net 90".
   paymentTerms String @default("")
 
   // Store credit the customer can spend like a payment method. Managers issue /

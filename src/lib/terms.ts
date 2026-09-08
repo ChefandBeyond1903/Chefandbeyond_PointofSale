@@ -5,6 +5,7 @@ export const BILL_TERMS = [
   "Net 30",
   "Net 45",
   "Net 60",
+  "Net 90",
   "Custom",
 ] as const;
 
@@ -30,6 +31,9 @@ export function dueDateFromTerms(billDate: Date, terms: string): Date | null {
       return d;
     case "Net 60":
       d.setDate(d.getDate() + 60);
+      return d;
+    case "Net 90":
+      d.setDate(d.getDate() + 90);
       return d;
     default:
       return null;

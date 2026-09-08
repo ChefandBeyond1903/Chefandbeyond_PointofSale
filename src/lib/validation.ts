@@ -314,7 +314,7 @@ export const heldSaleCreateSchema = z.object({
 });
 
 // Payment terms a customer can be given; "" means due on receipt.
-export const PAYMENT_TERMS = ["", "Due on receipt", "Net 15", "Net 30", "Net 45", "Net 60"] as const;
+export const PAYMENT_TERMS = ["", "Due on receipt", "Net 15", "Net 30", "Net 45", "Net 60", "Net 90"] as const;
 const paymentTermsSchema = z.enum(PAYMENT_TERMS);
 
 const customerTaxFields = {
