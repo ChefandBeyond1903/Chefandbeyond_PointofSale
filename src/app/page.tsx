@@ -1556,9 +1556,9 @@ export default function RegisterPage() {
 
             {totals.noCostItems.length > 0 && (
               <p className="rounded bg-red-50 px-3 py-2 text-xs text-red-700">
-                Cost needs to be entered for{" "}
-                {totals.noCostItems.map((i) => i.name).join(", ")}. These can&apos;t be sold
-                until a cost is set on the product.
+                No cost set for {totals.noCostItems.map((i) => i.name).join(", ")}. You can still
+                save a quote, but it can&apos;t be charged or turned into an invoice until a cost
+                is entered on the product.
               </p>
             )}
 
@@ -1576,7 +1576,6 @@ export default function RegisterPage() {
                   cart.length === 0 ||
                   savingQuote ||
                   totals.umrpViolations.length > 0 ||
-                  totals.noCostItems.length > 0 ||
                   (isAdmin && !sellStoreId)
                 }
                 className="btn-secondary flex-1"

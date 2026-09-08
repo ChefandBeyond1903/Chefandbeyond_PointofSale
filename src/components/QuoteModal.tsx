@@ -79,6 +79,11 @@ export function QuoteModal({
   }
 
   const quote = detail?.quote;
+  // A quote may hold products with no cost yet, but it can't become an
+  // invoice until every one has a cost (the register would block it anyway).
+  const noCostNames = (detail?.products ?? [])
+    .filter((p) => (p.costCents ?? 0) <= 0)
+    .map((p) => p.name);
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
@@ -188,11 +193,27 @@ export function QuoteModal({
                   </button>
                 )}
                 {quote.status === "APPROVED" && (
-                  <button onClick={convertToInvoice} className="btn-primary ml-auto h-8 text-xs">
+                  <button
+                    onClick={convertToInvoice}
+                    disabled={noCostNames.length > 0}
+                    title={
+                      noCostNames.length > 0
+                        ? `Enter a cost for ${noCostNames.join(", ")} first`
+                        : undefined
+                    }
+                    className="btn-primary ml-auto h-8 text-xs"
+                  >
                     Convert to invoice →
                   </button>
                 )}
               </div>
+            )}
+
+            {quote.status === "APPROVED" && noCostNames.length > 0 && (
+              <p className="mb-4 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
+                No cost is set for {noCostNames.join(", ")}. Enter it on the product before
+                converting this quote to an invoice.
+              </p>
             )}
 
             <div className="overflow-x-auto">

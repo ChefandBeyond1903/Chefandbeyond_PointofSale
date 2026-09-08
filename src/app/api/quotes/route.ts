@@ -118,15 +118,10 @@ export async function POST(req: NextRequest) {
       throw new HttpError(400, "One or more products no longer exist");
     }
 
-    // Same rule as a sale: a product with no cost can't be quoted — the
-    // margin would be unknowable.
-    const noCost = products.filter((p) => p.costCents <= 0).map((p) => p.name);
-    if (noCost.length > 0) {
-      throw new HttpError(
-        400,
-        `Cost needs to be entered for: ${noCost.join(", ")}. Set a cost on the product before quoting it.`,
-      );
-    }
+    // Unlike a sale, a quote MAY include a product with no cost yet — it's
+    // just a proposal. The no-cost rule is enforced when the quote is
+    // converted (it goes through the register / POST /api/sales, which
+    // blocks it until every product has a cost).
 
     const priced: PricedInput[] = [];
     let listSubtotalCents = 0;
