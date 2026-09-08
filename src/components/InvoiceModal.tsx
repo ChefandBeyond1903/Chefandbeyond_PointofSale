@@ -299,6 +299,29 @@ export function InvoiceModal({
     }
   }
 
+  // Undo a payment recorded by mistake — the balance comes back and the
+  // invoice re-opens if it's no longer fully paid.
+  async function deletePayment(paymentId: string) {
+    if (
+      !confirm(
+        "Remove this payment? The invoice balance comes back and it re-opens if it's " +
+          "no longer paid in full. Store-credit payments are returned to the customer.",
+      )
+    )
+      return;
+    setPayBusy(true);
+    setErr(null);
+    try {
+      await api(`/api/sales/${saleId}/payments/${paymentId}`, { method: "DELETE" });
+      await load();
+      onChanged?.();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Could not remove the payment");
+    } finally {
+      setPayBusy(false);
+    }
+  }
+
   useEffect(() => {
     load();
     api<{ vendors: Vendor[] }>("/api/vendors")
@@ -738,12 +761,24 @@ export function InvoiceModal({
                     {payments.length > 0 && (
                       <ul className="mt-2 space-y-0.5 text-xs text-amber-800">
                         {payments.map((p) => (
-                          <li key={p.id}>
-                            {p.isDeposit ? "Deposit" : "Payment"} {formatMoney(p.amountCents)} ·{" "}
-                            {p.method === "CHECK" && p.checkNumber
-                              ? `Check #${p.checkNumber}`
-                              : p.method}{" "}
-                            · {formatDateOnly(p.paidAt)}
+                          <li key={p.id} className="flex items-center gap-2">
+                            <span>
+                              {p.isDeposit ? "Deposit" : "Payment"} {formatMoney(p.amountCents)} ·{" "}
+                              {p.method === "CHECK" && p.checkNumber
+                                ? `Check #${p.checkNumber}`
+                                : p.method}{" "}
+                              · {formatDateOnly(p.paidAt)}
+                            </span>
+                            {canManage && (
+                              <button
+                                onClick={() => deletePayment(p.id)}
+                                disabled={payBusy}
+                                className="btn-ghost shrink-0 px-1.5 py-0 text-[11px] text-red-500"
+                                title="Remove this payment (recorded by mistake)"
+                              >
+                                Remove
+                              </button>
+                            )}
                           </li>
                         ))}
                       </ul>
@@ -829,16 +864,39 @@ export function InvoiceModal({
               }
               if (sale.paidAt && (payments.length > 0 || sale.termsSnapshot)) {
                 return (
-                  <div className="mb-3 text-sm text-green-700">
-                    Paid in full {formatDateOnly(sale.paidAt)}
+                  <div className="mb-3 rounded-md border border-green-200 bg-green-50 p-3">
+                    <p className="text-sm font-medium text-green-800">
+                      Paid in full {formatDateOnly(sale.paidAt)}
+                    </p>
                     {payments.length > 0 && (
-                      <span className="ml-2 text-xs text-zinc-500">
-                        (
-                        {payments
-                          .map((p) => `${formatMoney(p.amountCents)} ${p.method}`)
-                          .join(", ")}
-                        )
-                      </span>
+                      <ul className="mt-1.5 space-y-0.5 text-xs text-green-800">
+                        {payments.map((p) => (
+                          <li key={p.id} className="flex items-center gap-2">
+                            <span>
+                              {p.isDeposit ? "Deposit" : "Payment"} {formatMoney(p.amountCents)} ·{" "}
+                              {p.method === "CHECK" && p.checkNumber
+                                ? `Check #${p.checkNumber}`
+                                : p.method}{" "}
+                              · {formatDateOnly(p.paidAt)}
+                            </span>
+                            {canManage && (
+                              <button
+                                onClick={() => deletePayment(p.id)}
+                                disabled={payBusy}
+                                className="btn-ghost shrink-0 px-1.5 py-0 text-[11px] text-red-500"
+                                title="Remove this payment (recorded by mistake) — the invoice re-opens"
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {canManage && payments.length > 0 && (
+                      <p className="mt-1 text-[11px] text-green-700">
+                        Removing a payment re-opens the invoice with the balance owed again.
+                      </p>
                     )}
                   </div>
                 );
