@@ -113,10 +113,82 @@ body {
   }
 }
 
+/* Barcode label sheet (bulk label printing from the Products page). Label
+   dimensions come from CSS vars set on #label-sheet. */
+.cbpos-labels {
+  display: grid;
+  grid-template-columns: repeat(var(--label-cols, 3), var(--label-w, 2.25in));
+  gap: 0.08in;
+  justify-content: center;
+}
+.cbpos-label {
+  width: var(--label-w, 2.25in);
+  height: var(--label-h, 1.25in);
+  padding: 0.06in 0.1in;
+  border: 1px dashed #d4d4d8;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.03in;
+  overflow: hidden;
+  text-align: center;
+  color: #000;
+  break-inside: avoid;
+}
+.cbpos-label-name {
+  font-size: 8pt;
+  line-height: 1.15;
+  font-weight: 600;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.cbpos-label-barcode {
+  width: 100%;
+  height: 0.42in;
+}
+.cbpos-label-barcode svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.cbpos-label-code {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 7.5pt;
+  letter-spacing: 0.02em;
+}
+.cbpos-label-price {
+  font-size: 10pt;
+  font-weight: 700;
+}
+
 @media print {
   /* Anything tagged .no-print (nav, action bars, internal-only fields) is dropped. */
   .no-print {
     display: none !important;
+  }
+
+  /* Bulk barcode labels: print only the sheet, edge to edge, no label borders. */
+  body:has(#label-sheet) * {
+    visibility: hidden;
+  }
+  body:has(#label-sheet) #label-sheet,
+  body:has(#label-sheet) #label-sheet * {
+    visibility: visible;
+  }
+  body:has(#label-sheet) #label-sheet {
+    position: absolute;
+    inset: 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body:has(#label-sheet) .cbpos-labels {
+    gap: 0;
+  }
+  body:has(#label-sheet) .cbpos-label {
+    border: none !important;
   }
 
   /* When a receipt modal is on screen, print only the receipt. */

@@ -8,6 +8,7 @@ import type { Category, Product } from "@/lib/types";
 import { matchesSearch } from "@/lib/search";
 import { usePaged } from "@/lib/usePaged";
 import { Pager } from "@/components/Pager";
+import { LabelSheetModal } from "@/components/LabelSheetModal";
 
 type Draft = {
   id?: string;
@@ -69,6 +70,7 @@ export function ProductManager({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkCategoryId, setBulkCategoryId] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [labelsOpen, setLabelsOpen] = useState(false);
 
   // Inline "add vendor" state for the product modal.
   const [addingVendor, setAddingVendor] = useState(false);
@@ -513,6 +515,14 @@ export function ProductManager({
             className="btn-secondary h-8"
           >
             Apply
+          </button>
+          <span className="mx-1 h-4 w-px bg-zinc-300" />
+          <button
+            onClick={() => setLabelsOpen(true)}
+            disabled={bulkBusy}
+            className="btn-secondary h-8"
+          >
+            Print labels
           </button>
           <span className="mx-1 h-4 w-px bg-zinc-300" />
           <button
@@ -1105,6 +1115,21 @@ export function ProductManager({
             </div>
           </div>
         </div>
+      )}
+
+      {labelsOpen && (
+        <LabelSheetModal
+          products={products
+            .filter((p) => selected.has(p.id))
+            .map((p) => ({
+              id: p.id,
+              name: p.name,
+              sku: p.sku,
+              barcode: p.barcode,
+              priceCents: p.priceCents,
+            }))}
+          onClose={() => setLabelsOpen(false)}
+        />
       )}
     </div>
   );
