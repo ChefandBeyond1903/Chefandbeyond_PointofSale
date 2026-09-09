@@ -2,8 +2,27 @@
 
 import { useEffect, useRef, useState } from "react";
 import { BrowserMultiFormatReader } from "@zxing/browser";
+import { BarcodeFormat, DecodeHintType } from "@zxing/library";
 
 type ScanResult = { ok: boolean; message: string };
+
+const HINTS = new Map<DecodeHintType, unknown>([
+  [
+    DecodeHintType.POSSIBLE_FORMATS,
+    [
+      BarcodeFormat.CODE_128,
+      BarcodeFormat.CODE_39,
+      BarcodeFormat.CODE_93,
+      BarcodeFormat.EAN_13,
+      BarcodeFormat.EAN_8,
+      BarcodeFormat.UPC_A,
+      BarcodeFormat.UPC_E,
+      BarcodeFormat.ITF,
+      BarcodeFormat.QR_CODE,
+    ],
+  ],
+  [DecodeHintType.TRY_HARDER, true],
+]);
 
 /**
  * Camera barcode scanner for the register. Streams the back camera, decodes
@@ -23,13 +42,15 @@ export function ScannerModal({
   const [camError, setCamError] = useState<string | null>(null);
   const [flash, setFlash] = useState<ScanResult | null>(null);
   const [manual, setManual] = useState("");
+  const [torchOn, setTorchOn] = useState(false);
+  const [hasTorch, setHasTorch] = useState(false);
+  const trackRef = useRef<MediaStreamTrack | null>(null);
   const lastRef = useRef<{ code: string; at: number }>({ code: "", at: 0 });
   const busyRef = useRef(false);
 
   async function handle(code: string) {
     const c = code.trim();
     if (!c || busyRef.current) return;
-    // Ignore the same code fired repeatedly within 1.5s.
     const now = Date.now();
     if (c === lastRef.current.code && now - lastRef.current.at < 1500) return;
     lastRef.current = { code: c, at: now };
@@ -37,28 +58,65 @@ export function ScannerModal({
     try {
       const res = await onScan(c);
       setFlash(res);
-      // A short beep-ish visual; auto-clear the message.
       setTimeout(() => setFlash(null), 2200);
     } finally {
       busyRef.current = false;
     }
   }
 
+  async function toggleTorch() {
+    const track = trackRef.current;
+    if (!track) return;
+    try {
+      const next = !torchOn;
+      await track.applyConstraints({
+        advanced: [{ torch: next } as MediaTrackConstraintSet],
+      });
+      setTorchOn(next);
+    } catch {
+      /* device rejected it */
+    }
+  }
+
   useEffect(() => {
     let controls: { stop: () => void } | null = null;
     let cancelled = false;
-    const reader = new BrowserMultiFormatReader();
+    const reader = new BrowserMultiFormatReader(HINTS, {
+      delayBetweenScanAttempts: 120,
+    });
 
     (async () => {
       try {
         controls = await reader.decodeFromConstraints(
-          { video: { facingMode: "environment" } },
+          {
+            video: {
+              facingMode: { ideal: "environment" },
+              width: { ideal: 1920 },
+              height: { ideal: 1080 },
+            },
+          },
           videoRef.current!,
-          (result) => {
-            if (result) handle(result.getText());
+          (result, err) => {
+            if (result) {
+              handle(result.getText());
+            } else if (err && err.name && err.name !== "NotFoundException") {
+              // "NotFoundException" fires every empty frame — that's normal.
+              console.debug("scan error", err.name);
+            }
           },
         );
-        if (cancelled) controls?.stop();
+        if (cancelled) {
+          controls?.stop();
+          return;
+        }
+        // Torch capability check on the live track.
+        const stream = videoRef.current?.srcObject as MediaStream | null;
+        const track = stream?.getVideoTracks()[0] ?? null;
+        trackRef.current = track;
+        const caps = track?.getCapabilities?.() as
+          | (MediaTrackCapabilities & { torch?: boolean })
+          | undefined;
+        setHasTorch(!!caps?.torch);
       } catch (e) {
         const name = e instanceof Error ? e.name : "";
         setCamError(
@@ -79,10 +137,7 @@ export function ScannerModal({
   }, []);
 
   return (
-    <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4"
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4" onClick={onClose}>
       <div
         className="card w-full max-w-md overflow-hidden p-0"
         onClick={(e) => e.stopPropagation()}
@@ -102,11 +157,23 @@ export function ScannerModal({
             muted
             className="block max-h-[55vh] w-full object-cover"
           />
-          {/* Aiming guide */}
           {!camError && (
             <div className="pointer-events-none absolute inset-0 grid place-items-center">
               <div className="h-24 w-4/5 rounded-lg border-2 border-white/80 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
             </div>
+          )}
+          {!camError && (
+            <p className="absolute inset-x-0 top-2 text-center text-xs text-white/80">
+              Hold the barcode inside the frame
+            </p>
+          )}
+          {hasTorch && !camError && (
+            <button
+              onClick={toggleTorch}
+              className="absolute right-2 top-2 rounded-full bg-black/50 px-3 py-1 text-xs text-white"
+            >
+              {torchOn ? "Torch off" : "Torch"}
+            </button>
           )}
           {flash && (
             <div
