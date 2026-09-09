@@ -400,6 +400,8 @@ export default function RegisterPage() {
 
   // Charge to one of the customer's ship-to locations (or "" = their own
   // address). The location's contact details fill the bill-to fields.
+  // custLocationId: "" = not chosen yet (checkout is blocked for a customer
+  // that has locations), "MAIN" = the customer's own address, else a location id.
   function pickLocation(locId: string) {
     setCustLocationId(locId);
     const c = customers.find((x) => x.id === custId);
@@ -528,6 +530,8 @@ export default function RegisterPage() {
   // A selected tax-exempt customer (cert not past its expiry) zeroes the tax
   // and gives the invoice a due date from their payment terms.
   const selectedCustomer = custId ? (customers.find((c) => c.id === custId) ?? null) : null;
+  // A multi-location customer must have a location picked before checkout.
+  const locationNeeded = !!selectedCustomer?.locations?.length && !custLocationId;
   // A customer with payment terms is invoiced (billed later), not charged now.
   const invoiceCustomer = !!selectedCustomer?.paymentTerms;
   const invoiceDueLabel = (() => {
@@ -707,7 +711,12 @@ export default function RegisterPage() {
 
   function customerPayload() {
     if (custId)
-      return { customerId: custId, ...(custLocationId ? { customerLocationId: custLocationId } : {}) };
+      return {
+        customerId: custId,
+        ...(custLocationId && custLocationId !== "MAIN"
+          ? { customerLocationId: custLocationId }
+          : {}),
+      };
     if (custName.trim())
       return {
         customer: {
@@ -921,6 +930,10 @@ export default function RegisterPage() {
       setError("Choose a store to sell from.");
       return;
     }
+    if (locationNeeded) {
+      setError("Pick which of the customer's locations this is for.");
+      return;
+    }
     setSavingQuote(true);
     try {
       await api("/api/quotes", { method: "POST", body: JSON.stringify(salePayloadBase()) });
@@ -938,6 +951,10 @@ export default function RegisterPage() {
     setError(null);
     if (isAdmin && !sellStoreId) {
       setError("Choose a store to sell from.");
+      return;
+    }
+    if (locationNeeded) {
+      setError("Pick which of the customer's locations this is for.");
       return;
     }
     try {
@@ -1346,25 +1363,40 @@ export default function RegisterPage() {
               </button>
             </div>
             {!!selectedCustomer?.locations?.length && (
-              <select
-                className="input mt-2 h-8 text-sm"
-                value={custLocationId}
-                onChange={(e) => pickLocation(e.target.value)}
-                aria-label="Ship-to location"
-              >
-                <option value="">Main — {selectedCustomer.address || "no address on file"}</option>
-                {selectedCustomer.locations.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.label}
-                    {l.address ? ` — ${l.address}` : ""}
+              <>
+                <select
+                  className={`input mt-2 h-8 text-sm ${
+                    custLocationId ? "" : "border-amber-400 text-amber-700"
+                  }`}
+                  value={custLocationId}
+                  onChange={(e) => pickLocation(e.target.value)}
+                  aria-label="Ship-to location"
+                >
+                  <option value="" disabled>
+                    Which location is this for?
                   </option>
-                ))}
-              </select>
+                  <option value="MAIN">
+                    Main — {selectedCustomer.address || "no address on file"}
+                  </option>
+                  {selectedCustomer.locations.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.label}
+                      {l.address ? ` — ${l.address}` : ""}
+                    </option>
+                  ))}
+                </select>
+                {!custLocationId && (
+                  <p className="mt-1 text-[11px] text-amber-700">
+                    This customer has {selectedCustomer.locations.length} locations — pick which one
+                    to bill.
+                  </p>
+                )}
+              </>
             )}
             {custId && (
               <p className="mt-1 text-[11px] text-green-600">
                 Existing customer — details on file
-                {custLocationId && selectedCustomer?.locations
+                {custLocationId && custLocationId !== "MAIN" && selectedCustomer?.locations
                   ? ` · billing to ${
                       selectedCustomer.locations.find((l) => l.id === custLocationId)?.label ?? ""
                     }`
@@ -1644,6 +1676,7 @@ export default function RegisterPage() {
                   cart.length === 0 ||
                   savingQuote ||
                   totals.umrpViolations.length > 0 ||
+                  locationNeeded ||
                   (isAdmin && !sellStoreId)
                 }
                 className="btn-secondary flex-1"
@@ -1654,6 +1687,11 @@ export default function RegisterPage() {
             </div>
             {isAdmin && !sellStoreId && cart.length > 0 && (
               <p className="text-xs text-amber-700">Choose a store to sell from (top of the ticket).</p>
+            )}
+            {locationNeeded && cart.length > 0 && (
+              <p className="text-xs text-amber-700">
+                Pick which of {selectedCustomer!.name}&apos;s locations this is for (above the cart).
+              </p>
             )}
             {invoiceCustomer && cart.length > 0 && (
               <p className="text-xs text-zinc-500">
@@ -1668,6 +1706,7 @@ export default function RegisterPage() {
                 cart.length === 0 ||
                 totals.umrpViolations.length > 0 ||
                 totals.noCostItems.length > 0 ||
+                locationNeeded ||
                 (isAdmin && !sellStoreId)
               }
               className="btn-primary w-full py-3 text-base"
