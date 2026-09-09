@@ -488,6 +488,11 @@ export function InvoiceModal({
                     <span className="font-medium">
                       {sale.customerCompanySnapshot || sale.customerNameSnapshot}
                     </span>
+                    {sale.customerLocationSnapshot ? (
+                      <span className="ml-1 rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600">
+                        {sale.customerLocationSnapshot}
+                      </span>
+                    ) : null}
                     {sale.customerCompanySnapshot && sale.customerNameSnapshot ? (
                       <span className="text-zinc-400"> · {sale.customerNameSnapshot}</span>
                     ) : null}
@@ -496,6 +501,11 @@ export function InvoiceModal({
                     ) : null}
                     {sale.customerPhoneSnapshot ? (
                       <span className="text-zinc-400"> · {sale.customerPhoneSnapshot}</span>
+                    ) : null}
+                    {sale.customerAddressSnapshot ? (
+                      <span className="block text-xs text-zinc-400">
+                        {sale.customerAddressSnapshot}
+                      </span>
                     ) : null}
                   </p>
                 ) : null}

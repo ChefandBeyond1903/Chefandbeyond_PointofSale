@@ -21,7 +21,14 @@ export async function GET(req: NextRequest) {
         where: scoped ? { storeId: scoped } : {},
         orderBy: { name: "asc" },
         take: 1000,
-        include: { _count: { select: { sales: true } } },
+        include: {
+          _count: { select: { sales: true } },
+          locations: {
+            where: { active: true },
+            orderBy: { label: "asc" },
+            select: { id: true, label: true, address: true, contact: true, phone: true, email: true },
+          },
+        },
       }),
       // Open balance per customer — unpaid invoices only, net of any deposit
       // already taken. Powers the "who owes me" view/filter.

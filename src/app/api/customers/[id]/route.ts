@@ -17,6 +17,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
       where: { id },
       include: {
         _count: { select: { sales: true } },
+        locations: { orderBy: [{ active: "desc" }, { label: "asc" }] },
         sales: {
           orderBy: { createdAt: "desc" },
           take: 200,

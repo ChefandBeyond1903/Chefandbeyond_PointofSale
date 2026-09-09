@@ -122,7 +122,11 @@ export function ReceiptModal({
                   sale.customerNameSnapshot !== sale.customerCompanySnapshot
                     ? ` (${sale.customerNameSnapshot})`
                     : ""}
+                  {sale.customerLocationSnapshot ? ` — ${sale.customerLocationSnapshot}` : ""}
                 </p>
+              ) : null}
+              {sale.customerLocationSnapshot && sale.customerAddressSnapshot ? (
+                <p className="text-center text-zinc-500">{sale.customerAddressSnapshot}</p>
               ) : null}
               {sale.dueDate ? (
                 <p className="text-center text-zinc-500">

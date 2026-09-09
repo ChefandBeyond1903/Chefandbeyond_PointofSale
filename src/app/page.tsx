@@ -43,6 +43,7 @@ interface TicketSnapshot {
   custPhone: string;
   custAddress: string;
   custCompany: string;
+  custLocationId: string;
   salespersonId: string;
 }
 
@@ -114,6 +115,8 @@ export default function RegisterPage() {
   const [custPhone, setCustPhone] = useState("");
   const [custAddress, setCustAddress] = useState("");
   const [custCompany, setCustCompany] = useState("");
+  // "" = the customer's own address; otherwise one of their ship-to locations.
+  const [custLocationId, setCustLocationId] = useState("");
   const [custOpen, setCustOpen] = useState(false);
   const [custMenuOpen, setCustMenuOpen] = useState(false);
 
@@ -283,6 +286,7 @@ export default function RegisterPage() {
           setCustPhone(s.custPhone ?? "");
           setCustAddress(s.custAddress ?? "");
           setCustCompany(s.custCompany ?? "");
+          setCustLocationId(s.custLocationId ?? "");
           setSalespersonId(s.salespersonId ?? "");
         }
       }
@@ -310,6 +314,7 @@ export default function RegisterPage() {
         custPhone,
         custAddress,
         custCompany,
+        custLocationId,
         salespersonId,
       };
       localStorage.setItem(TICKET_KEY, JSON.stringify(snap));
@@ -325,6 +330,7 @@ export default function RegisterPage() {
     custPhone,
     custAddress,
     custCompany,
+    custLocationId,
     salespersonId,
   ]);
 
@@ -353,6 +359,7 @@ export default function RegisterPage() {
 
   function pickCustomer(name: string) {
     setCustName(name);
+    setCustLocationId("");
     const match = customers.find((c) => c.name.toLowerCase() === name.trim().toLowerCase());
     if (match) {
       setCustId(match.id);
@@ -387,7 +394,25 @@ export default function RegisterPage() {
     setCustPhone(formatPhone(c.phone));
     setCustAddress(c.address);
     setCustCompany(c.company);
+    setCustLocationId("");
     setCustMenuOpen(false);
+  }
+
+  // Charge to one of the customer's ship-to locations (or "" = their own
+  // address). The location's contact details fill the bill-to fields.
+  function pickLocation(locId: string) {
+    setCustLocationId(locId);
+    const c = customers.find((x) => x.id === custId);
+    const loc = c?.locations?.find((l) => l.id === locId);
+    if (loc) {
+      if (loc.address) setCustAddress(loc.address);
+      if (loc.phone) setCustPhone(formatPhone(loc.phone));
+      if (loc.email) setCustEmail(loc.email);
+    } else if (c) {
+      setCustAddress(c.address);
+      setCustPhone(formatPhone(c.phone));
+      setCustEmail(c.email);
+    }
   }
 
   function clearCustomer() {
@@ -397,6 +422,7 @@ export default function RegisterPage() {
     setCustPhone("");
     setCustAddress("");
     setCustCompany("");
+    setCustLocationId("");
     setCustOpen(false);
   }
 
@@ -680,7 +706,8 @@ export default function RegisterPage() {
   }
 
   function customerPayload() {
-    if (custId) return { customerId: custId };
+    if (custId)
+      return { customerId: custId, ...(custLocationId ? { customerLocationId: custLocationId } : {}) };
     if (custName.trim())
       return {
         customer: {
@@ -1253,17 +1280,30 @@ export default function RegisterPage() {
           <div className="border-b border-zinc-100 px-4 py-3">
             <div className="flex items-center gap-2">
               <div className="relative flex-1">
-                <input
-                  className="input h-8 w-full"
-                  placeholder="Customer — name, company, phone, email…"
-                  value={custName}
-                  onChange={(e) => {
-                    pickCustomer(e.target.value);
-                    setCustMenuOpen(true);
-                  }}
-                  onFocus={() => setCustMenuOpen(true)}
-                  onBlur={() => setTimeout(() => setCustMenuOpen(false), 150)}
-                />
+                {selectedCustomer ? (
+                  <div className="flex h-8 w-full items-center overflow-hidden rounded-md border border-zinc-200 bg-zinc-50 px-3 text-sm">
+                    <span className="truncate font-medium">
+                      {selectedCustomer.company || selectedCustomer.name}
+                    </span>
+                    {selectedCustomer.company && selectedCustomer.name && (
+                      <span className="ml-1.5 truncate text-xs text-zinc-400">
+                        · {selectedCustomer.name}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <input
+                    className="input h-8 w-full"
+                    placeholder="Search customer — business name, contact, phone, email…"
+                    value={custName}
+                    onChange={(e) => {
+                      pickCustomer(e.target.value);
+                      setCustMenuOpen(true);
+                    }}
+                    onFocus={() => setCustMenuOpen(true)}
+                    onBlur={() => setTimeout(() => setCustMenuOpen(false), 150)}
+                  />
+                )}
                 {custMenuOpen && custMatches.length > 0 && (
                   <ul className="absolute z-40 mt-1 max-h-60 w-80 overflow-auto rounded-md border border-zinc-200 bg-white text-sm shadow-lg">
                     {custMatches.map((c) => (
@@ -1305,8 +1345,31 @@ export default function RegisterPage() {
                 {custOpen ? "Hide" : "Details"}
               </button>
             </div>
+            {!!selectedCustomer?.locations?.length && (
+              <select
+                className="input mt-2 h-8 text-sm"
+                value={custLocationId}
+                onChange={(e) => pickLocation(e.target.value)}
+                aria-label="Ship-to location"
+              >
+                <option value="">Main — {selectedCustomer.address || "no address on file"}</option>
+                {selectedCustomer.locations.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.label}
+                    {l.address ? ` — ${l.address}` : ""}
+                  </option>
+                ))}
+              </select>
+            )}
             {custId && (
-              <p className="mt-1 text-[11px] text-green-600">Existing customer — details on file</p>
+              <p className="mt-1 text-[11px] text-green-600">
+                Existing customer — details on file
+                {custLocationId && selectedCustomer?.locations
+                  ? ` · billing to ${
+                      selectedCustomer.locations.find((l) => l.id === custLocationId)?.label ?? ""
+                    }`
+                  : ""}
+              </p>
             )}
             {!!selectedCustomer && selectedCustomer.storeCreditCents > 0 && (
               <p className="mt-1 text-[11px] text-indigo-600">

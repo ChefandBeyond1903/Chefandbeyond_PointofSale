@@ -322,11 +322,26 @@ export async function POST(req: NextRequest) {
       // auto-create. Blank fields on an existing record get filled in.
       let customerId: string | null = null;
       let cSnap = { name: "", company: "", email: "", phone: "", address: "" };
+      let locationLabel = "";
       if (body.customerId) {
         const c = await tx.customer.findUnique({ where: { id: body.customerId } });
         if (!c) throw new HttpError(400, "Customer not found");
         customerId = c.id;
         cSnap = { name: c.name, company: c.company, email: c.email, phone: c.phone, address: c.address };
+        // Charging to a specific ship-to location: its address/contact win.
+        if (body.customerLocationId) {
+          const loc = await tx.customerLocation.findUnique({
+            where: { id: body.customerLocationId },
+          });
+          if (!loc || loc.customerId !== c.id) {
+            throw new HttpError(400, "That location isn't on this customer.");
+          }
+          locationLabel = loc.label;
+          if (loc.address) cSnap.address = loc.address;
+          if (loc.contact) cSnap.name = loc.contact;
+          if (loc.phone) cSnap.phone = loc.phone;
+          if (loc.email) cSnap.email = loc.email;
+        }
       } else if (body.customer) {
         const inp = body.customer;
         // Match / create within the selling store only — each store keeps its
@@ -401,6 +416,7 @@ export async function POST(req: NextRequest) {
           customerEmailSnapshot: cSnap.email,
           customerPhoneSnapshot: cSnap.phone,
           customerAddressSnapshot: cSnap.address,
+          customerLocationSnapshot: locationLabel,
           items: {
             create: computed.lines.map((l) => ({
               productId: l.productId,

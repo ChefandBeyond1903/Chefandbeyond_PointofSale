@@ -192,10 +192,30 @@ model Customer {
   updatedAt         DateTime           @updatedAt
   sales             Sale[]
   quotes            Quote[]
+  locations         CustomerLocation[]
   storeCreditLedger StoreCreditEntry[]
 
   @@index([storeId])
   @@index([name])
+}
+
+/// A ship-to / billing location for a customer that has more than one — e.g. a
+/// chain with a Downtown and an Airport site. Charging a sale to a location
+/// snapshots its address/contact onto the invoice.
+model CustomerLocation {
+  id         String   @id @default(cuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  label      String
+  address    String   @default("")
+  contact    String   @default("")
+  phone      String   @default("")
+  email      String   @default("")
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([customerId])
 }
 
 /// One movement of a customer's store-credit balance.
@@ -342,6 +362,8 @@ model Sale {
   customerEmailSnapshot   String    @default("")
   customerPhoneSnapshot   String    @default("")
   customerAddressSnapshot String    @default("")
+  // The chosen ship-to location's label, when the customer has more than one.
+  customerLocationSnapshot String   @default("")
 
   // The operator who was signed in and rang the sale.
   cashierId     String
@@ -418,6 +440,8 @@ model Quote {
   customerEmailSnapshot   String    @default("")
   customerPhoneSnapshot   String    @default("")
   customerAddressSnapshot String    @default("")
+  // The chosen ship-to location's label, when the customer has more than one.
+  customerLocationSnapshot String   @default("")
 
   createdById String
   createdBy   User   @relation("QuoteCreatedBy", fields: [createdById], references: [id])

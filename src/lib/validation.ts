@@ -266,6 +266,8 @@ export const saleCreateSchema = z.object({
   // Bill the invoice to a customer: either an existing id, or details to
   // match/auto-create by name.
   customerId: z.string().min(1).optional(),
+  // One of that customer's ship-to locations, when they have several.
+  customerLocationId: z.string().min(1).optional(),
   customer: saleCustomerSchema.optional(),
 });
 
@@ -279,8 +281,20 @@ export const quoteCreateSchema = z.object({
   note: z.string().trim().max(2000).default(""),
   storeId: z.string().min(1).optional(),
   customerId: z.string().min(1).optional(),
+  customerLocationId: z.string().min(1).optional(),
   customer: saleCustomerSchema.partial().optional(),
 });
+
+// A customer's ship-to / billing location.
+export const customerLocationSchema = z.object({
+  label: z.string().trim().min(1).max(120),
+  address: z.string().trim().max(400).default(""),
+  contact: z.string().trim().max(160).default(""),
+  phone: z.string().trim().max(60).default(""),
+  email: z.string().trim().max(200).default(""),
+  active: z.boolean().default(true),
+});
+export const customerLocationUpdateSchema = customerLocationSchema.partial();
 
 // Approve / reject / reopen a quote, or (set internally once the register
 // finishes the resulting sale) mark it converted.

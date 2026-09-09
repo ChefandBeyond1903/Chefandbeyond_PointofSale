@@ -11,7 +11,7 @@ import { InvoiceModal } from "@/components/InvoiceModal";
 import { SaleStatusPill } from "@/components/SaleStatusPill";
 import { ListHeader, SearchBox, FilterToggle } from "@/components/ListToolbar";
 import { LoadingRow, EmptyRow } from "@/components/TableState";
-import type { Customer, StoreCreditEntry } from "@/lib/types";
+import type { Customer, CustomerLocation, StoreCreditEntry } from "@/lib/types";
 
 const TERMS = ["Net 15", "Net 30", "Net 45", "Net 60", "Net 90"] as const;
 
@@ -76,23 +76,64 @@ export function CustomersView({
   const [creditReason, setCreditReason] = useState("");
   const [creditBusy, setCreditBusy] = useState(false);
 
-  // The open customer's sales / invoice history.
+  // The open customer's sales / invoice history and ship-to locations.
   const [custSales, setCustSales] = useState<NonNullable<Customer["sales"]>>([]);
+  const [custLocations, setCustLocations] = useState<CustomerLocation[]>([]);
+  const [locForm, setLocForm] = useState({ label: "", address: "", contact: "", phone: "" });
+  const [locBusy, setLocBusy] = useState(false);
 
   const loadCustSales = useCallback(async (id: string) => {
     try {
       const r = await api<{ customer: Customer }>(`/api/customers/${id}`);
       setCustSales(r.customer.sales ?? []);
+      setCustLocations(r.customer.locations ?? []);
     } catch {
       setCustSales([]);
+      setCustLocations([]);
     }
   }, []);
+
+  async function addLocation() {
+    if (!draft?.id || !locForm.label.trim()) return;
+    setLocBusy(true);
+    setError(null);
+    try {
+      await api(`/api/customers/${draft.id}/locations`, {
+        method: "POST",
+        body: JSON.stringify({
+          label: locForm.label.trim(),
+          address: locForm.address.trim(),
+          contact: locForm.contact.trim(),
+          phone: locForm.phone.trim(),
+        }),
+      });
+      setLocForm({ label: "", address: "", contact: "", phone: "" });
+      loadCustSales(draft.id);
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not add the location");
+    } finally {
+      setLocBusy(false);
+    }
+  }
+
+  async function removeLocation(locId: string) {
+    if (!draft?.id || !confirm("Remove this location?")) return;
+    try {
+      await api(`/api/customers/${draft.id}/locations/${locId}`, { method: "DELETE" });
+      loadCustSales(draft.id);
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not remove the location");
+    }
+  }
 
   useEffect(() => {
     if (!draft?.id || !canManage) {
       setCredit(null);
       setLedger([]);
       setCustSales([]);
+      setCustLocations([]);
       return;
     }
     api<{ storeCreditCents: number; ledger: StoreCreditEntry[] }>(
@@ -632,6 +673,78 @@ export function CustomersView({
                       ))}
                     </ul>
                   )}
+                </div>
+              )}
+
+              {draft.id && (
+                <div className="rounded-md border border-zinc-200 p-3">
+                  <p className="mb-2 text-sm font-medium">
+                    Locations
+                    <span className="ml-2 font-normal text-zinc-400">{custLocations.length}</span>
+                  </p>
+                  <p className="mb-2 text-[11px] text-zinc-400">
+                    For a business with more than one site. When charging on the register you pick
+                    which one — its address goes on the invoice.
+                  </p>
+                  {custLocations.length > 0 && (
+                    <ul className="mb-2 divide-y divide-zinc-100 text-sm">
+                      {custLocations.map((l) => (
+                        <li key={l.id} className="flex items-start justify-between gap-2 py-1.5">
+                          <span className="min-w-0">
+                            <span className="font-medium">{l.label}</span>
+                            {(l.address || l.contact || l.phone) && (
+                              <span className="block truncate text-xs text-zinc-400">
+                                {[l.contact, formatPhone(l.phone), l.address]
+                                  .filter(Boolean)
+                                  .join(" · ")}
+                              </span>
+                            )}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => removeLocation(l.id)}
+                            className="btn-ghost shrink-0 px-1.5 py-0 text-[11px] text-red-500"
+                          >
+                            Remove
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <input
+                      className="input h-8"
+                      placeholder="Label (e.g. Downtown)"
+                      value={locForm.label}
+                      onChange={(e) => setLocForm({ ...locForm, label: e.target.value })}
+                    />
+                    <input
+                      className="input h-8"
+                      placeholder="Contact (optional)"
+                      value={locForm.contact}
+                      onChange={(e) => setLocForm({ ...locForm, contact: e.target.value })}
+                    />
+                    <input
+                      className="input h-8"
+                      placeholder="Phone (optional)"
+                      value={locForm.phone}
+                      onChange={(e) => setLocForm({ ...locForm, phone: e.target.value })}
+                    />
+                    <input
+                      className="input h-8"
+                      placeholder="Address"
+                      value={locForm.address}
+                      onChange={(e) => setLocForm({ ...locForm, address: e.target.value })}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addLocation}
+                    disabled={locBusy || !locForm.label.trim()}
+                    className="btn-secondary mt-2 h-8 text-xs"
+                  >
+                    {locBusy ? "Adding…" : "Add location"}
+                  </button>
                 </div>
               )}
 

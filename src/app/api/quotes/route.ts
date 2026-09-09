@@ -75,6 +75,7 @@ export async function POST(req: NextRequest) {
     // name/contact kept only as text on the quote (no Customer row created
     // for what might still be rejected).
     let cust = { id: null as string | null, name: "", email: "", phone: "", address: "", company: "" };
+    let locationLabel = "";
     if (body.customerId) {
       const c = await prisma.customer.findUnique({ where: { id: body.customerId } });
       if (!c) throw new HttpError(400, "Customer not found");
@@ -84,6 +85,19 @@ export async function POST(req: NextRequest) {
       cust = { id: c.id, name: c.name, email: c.email, phone: c.phone, address: c.address, company: c.company };
       const notExpired = !c.taxExemptExpiresAt || c.taxExemptExpiresAt >= new Date();
       if (c.taxExempt && notExpired) taxRateBps = 0;
+      if (body.customerLocationId) {
+        const loc = await prisma.customerLocation.findUnique({
+          where: { id: body.customerLocationId },
+        });
+        if (!loc || loc.customerId !== c.id) {
+          throw new HttpError(400, "That location isn't on this customer.");
+        }
+        locationLabel = loc.label;
+        if (loc.address) cust.address = loc.address;
+        if (loc.contact) cust.name = loc.contact;
+        if (loc.phone) cust.phone = loc.phone;
+        if (loc.email) cust.email = loc.email;
+      }
     } else if (body.customer) {
       cust = {
         id: null,
@@ -181,6 +195,7 @@ export async function POST(req: NextRequest) {
           customerEmailSnapshot: cust.email,
           customerPhoneSnapshot: cust.phone,
           customerAddressSnapshot: cust.address,
+          customerLocationSnapshot: locationLabel,
           createdById: actor.id,
           items: {
             create: computed.lines.map((l) => ({

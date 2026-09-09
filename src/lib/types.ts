@@ -95,6 +95,18 @@ export interface Customer {
     createdAt: string;
   }[];
   storeCreditLedger?: StoreCreditEntry[];
+  /** Extra ship-to / billing locations, when this customer has more than one. */
+  locations?: CustomerLocation[];
+}
+
+export interface CustomerLocation {
+  id: string;
+  label: string;
+  address: string;
+  contact: string;
+  phone: string;
+  email: string;
+  active?: boolean;
 }
 
 export interface StoreCreditEntry {
@@ -420,6 +432,7 @@ export interface Sale {
   customerEmailSnapshot?: string;
   customerPhoneSnapshot?: string;
   customerAddressSnapshot?: string;
+  customerLocationSnapshot?: string;
   items: SaleItem[];
 }
 
@@ -458,6 +471,7 @@ export interface Quote {
   customerEmailSnapshot?: string;
   customerPhoneSnapshot?: string;
   customerAddressSnapshot?: string;
+  customerLocationSnapshot?: string;
   createdById?: string;
   createdBy?: { id: string; name: string };
   convertedSaleId?: string | null;
