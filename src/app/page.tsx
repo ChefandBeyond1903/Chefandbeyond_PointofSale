@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney, formatBps, taxOn } from "@/lib/money";
 import { MoneyInput } from "@/components/MoneyInput";
@@ -26,6 +27,12 @@ import type {
   ShiftStats,
   Store,
 } from "@/lib/types";
+
+// Camera scanner pulls in @zxing — load it only when actually opened.
+const ScannerModal = dynamic(
+  () => import("@/components/ScannerModal").then((m) => m.ScannerModal),
+  { ssr: false },
+);
 
 type DiscMode = "AMOUNT" | "PERCENT";
 
@@ -104,6 +111,7 @@ export default function RegisterPage() {
   const [flashId, setFlashId] = useState<string | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
 
   const [cart, setCart] = useState<CartLine[]>([]);
   const [shippingCents, setShippingCents] = useState(0);
@@ -881,6 +889,34 @@ export default function RegisterPage() {
     }
   }
 
+  // A scanned (or typed) barcode / SKU -> add that product to the cart.
+  // Checks what's already loaded, then asks the server.
+  async function resolveScan(code: string): Promise<{ ok: boolean; message: string }> {
+    const c = code.trim();
+    if (!c) return { ok: false, message: "Nothing scanned." };
+    const match = (p: Product) =>
+      p.barcode === c || p.sku.toLowerCase() === c.toLowerCase();
+    let hit =
+      favorites.find(match) ??
+      (allProducts ?? []).find(match) ??
+      (searchHits ?? []).find(match) ??
+      null;
+    if (!hit) {
+      try {
+        const r = await api<{ products: Product[] }>(
+          `/api/products?q=${encodeURIComponent(c)}&take=10`,
+        );
+        hit = r.products.find(match) ?? null;
+      } catch {
+        return { ok: false, message: "Lookup failed — try again." };
+      }
+    }
+    if (!hit) return { ok: false, message: `No product for "${c}".` };
+    if (!hit.active) return { ok: false, message: `"${hit.name}" is archived.` };
+    addToCart(hit);
+    return { ok: true, message: hit.name };
+  }
+
   function setLineSerial(productId: string, serialNumber: string) {
     setCart((cur) => cur.map((l) => (l.product.id === productId ? { ...l, serialNumber } : l)));
   }
@@ -1056,7 +1092,7 @@ export default function RegisterPage() {
           <input
             ref={searchRef}
             className="input min-w-0"
-            placeholder="Search name, SKU, or scan barcode…"
+            placeholder="Search name or SKU…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onSearchKeyDown}
@@ -1064,11 +1100,31 @@ export default function RegisterPage() {
           />
           <button
             type="button"
+            onClick={() => setScanOpen(true)}
+            className="btn-secondary shrink-0"
+            title="Scan a barcode with the camera"
+            aria-label="Scan barcode"
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 18 18"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              aria-hidden="true"
+            >
+              <path d="M2 5V3.5A1.5 1.5 0 0 1 3.5 2H5M13 2h1.5A1.5 1.5 0 0 1 16 3.5V5M16 13v1.5a1.5 1.5 0 0 1-1.5 1.5H13M5 16H3.5A1.5 1.5 0 0 1 2 14.5V13M5 5.5v7M8 5.5v7M11 5.5v7M13.5 5.5v7" />
+            </svg>
+          </button>
+          <button
+            type="button"
             onClick={() => setCatalogOpen((o) => !o)}
             aria-expanded={catalogOpen}
             className="btn-secondary shrink-0"
           >
-            {catalogOpen ? "Hide catalog" : "Open catalog"}
+            {catalogOpen ? "Hide" : "Catalog"}
           </button>
         </div>
 
@@ -1751,6 +1807,8 @@ export default function RegisterPage() {
           closeLabel="New sale"
         />
       )}
+
+      {scanOpen && <ScannerModal onScan={resolveScan} onClose={() => setScanOpen(false)} />}
 
       {quickAddOpen && (
         <QuickAddProductModal
