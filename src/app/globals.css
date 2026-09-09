@@ -118,19 +118,26 @@ body {
 .cbpos-labels {
   display: grid;
   grid-template-columns: repeat(var(--label-cols, 3), var(--label-w, 2.25in));
-  gap: 0.08in;
+  column-gap: var(--gap-x, 0.1in);
+  row-gap: var(--gap-y, 0.1in);
   justify-content: center;
+}
+/* Positioned to line up with a real Avery sheet (US Letter). */
+.cbpos-labels-aligned {
+  justify-content: start;
+  padding-top: var(--sheet-top, 0.5in);
+  padding-left: var(--sheet-left, 0.1875in);
 }
 .cbpos-label {
   width: var(--label-w, 2.25in);
   height: var(--label-h, 1.25in);
-  padding: 0.06in 0.1in;
+  padding: 0.05in 0.1in;
   border: 1px dashed #d4d4d8;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.03in;
+  gap: 0.02in;
   overflow: hidden;
   text-align: center;
   color: #000;
@@ -147,7 +154,8 @@ body {
 }
 .cbpos-label-barcode {
   width: 100%;
-  height: 0.42in;
+  flex: 1 1 auto;
+  min-height: 0.3in;
 }
 .cbpos-label-barcode svg {
   width: 100%;
@@ -170,7 +178,13 @@ body {
     display: none !important;
   }
 
-  /* Bulk barcode labels: print only the sheet, edge to edge, no label borders. */
+  /* Zero the page margin so an Avery sheet's own margins line up. Receipts
+     and the P&L already carry their own inner padding / inset positioning. */
+  @page {
+    margin: 0;
+  }
+
+  /* Bulk barcode labels: print only the sheet, its Avery margins intact. */
   body:has(#label-sheet) * {
     visibility: hidden;
   }
@@ -180,12 +194,10 @@ body {
   }
   body:has(#label-sheet) #label-sheet {
     position: absolute;
-    inset: 0;
+    top: 0;
+    left: 0;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
-  }
-  body:has(#label-sheet) .cbpos-labels {
-    gap: 0;
   }
   body:has(#label-sheet) .cbpos-label {
     border: none !important;
