@@ -111,7 +111,18 @@ export function BillModal({
     setLines((cur) => cur.map((l) => ({ ...l, now: String(Math.max(0, l.ordered - l.received)) })));
   }
 
-  const total = lines.reduce((s, l) => s + (parseInt(l.now || "0", 10) || 0) * l.costCents, 0);
+  const itemsTotal = lines.reduce((s, l) => s + (parseInt(l.now || "0", 10) || 0) * l.costCents, 0);
+  // Shipping, drop-ship fee, tax, and any "other cost" expenses logged on the
+  // PO are one-time charges — the first bill against this PO picks them up
+  // automatically; a later partial receipt doesn't repeat them.
+  const isFirstBill = (po?.bills?.length ?? 0) === 0;
+  const poExtraChargesCents =
+    (po?.shippingCents ?? 0) +
+    (po?.dropShipFeeCents ?? 0) +
+    (po?.taxCents ?? 0) +
+    (po?.expenses?.reduce((s, e) => s + e.amountCents, 0) ?? 0);
+  const extraChargesCents = isFirstBill ? poExtraChargesCents : 0;
+  const total = itemsTotal + extraChargesCents;
 
   async function submit() {
     const payload = lines
@@ -181,6 +192,14 @@ export function BillModal({
                 </>
               )}
             </p>
+
+            {!isFirstBill && poExtraChargesCents > 0 && (
+              <p className="mb-4 text-xs text-zinc-400">
+                This PO&rsquo;s shipping, drop-ship fee, tax, and other logged costs (
+                {formatMoney(poExtraChargesCents)}) were already added to its first bill — not
+                repeated here.
+              </p>
+            )}
 
             {isAdmin && (
               <div className="mb-4">
@@ -311,6 +330,26 @@ export function BillModal({
                     })}
                   </tbody>
                   <tfoot>
+                    {extraChargesCents > 0 && (
+                      <>
+                        <tr>
+                          <td colSpan={5} className="pt-2 text-right text-zinc-500">
+                            Items
+                          </td>
+                          <td className="pt-2 text-right tabular-nums text-zinc-500">
+                            {formatMoney(itemsTotal)}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td colSpan={5} className="py-1 text-right text-zinc-500">
+                            Shipping, drop-ship fee, tax &amp; other logged costs
+                          </td>
+                          <td className="py-1 text-right tabular-nums text-zinc-500">
+                            {formatMoney(extraChargesCents)}
+                          </td>
+                        </tr>
+                      </>
+                    )}
                     <tr>
                       <td colSpan={5} className="py-2 text-right font-medium">
                         Bill total

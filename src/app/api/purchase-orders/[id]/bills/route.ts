@@ -12,7 +12,11 @@ type Params = { params: Promise<{ id: string }> };
 async function loadPoScoped(id: string, actor: Awaited<ReturnType<typeof requireScopedUser>>) {
   const po = await prisma.purchaseOrder.findUnique({
     where: { id },
-    select: { id: true, vendor: true, storeId: true, shipTo: true, status: true, items: true },
+    select: {
+      id: true, vendor: true, storeId: true, shipTo: true, status: true, items: true,
+      shippingCents: true, dropShipFeeCents: true, taxCents: true,
+      expenses: { select: { amountCents: true } },
+    },
   });
   const scoped = scopeStoreId(actor);
   if (!po || (scoped && po.storeId !== scoped)) {
@@ -87,12 +91,21 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     const billDate = body.billDate ? parseDateInput(body.billDate) : new Date();
     const dueDate = body.dueDate ? parseDateInput(body.dueDate) : null;
-    const subtotalCents = lines.reduce((s, l) => s + l.receiveQty * l.unitCostCents, 0);
+    const itemsCents = lines.reduce((s, l) => s + l.receiveQty * l.unitCostCents, 0);
+    // Shipping, drop-ship fee, tax, and any "other cost" expenses logged on
+    // the PO are one-time charges for the whole order — fold them into the
+    // first bill recorded against it so they aren't asked for again, and
+    // don't double them up on a later partial receipt.
+    const extraChargesCents =
+      po.shippingCents + po.dropShipFeeCents + po.taxCents +
+      po.expenses.reduce((s, e) => s + e.amountCents, 0);
 
     // The bill inherits the PO's vendor — make sure it's in the directory.
     await ensureVendor(po.vendor);
 
     const bill = await prisma.$transaction(async (tx) => {
+      const priorBillCount = await tx.bill.count({ where: { poId: po.id } });
+      const subtotalCents = itemsCents + (priorBillCount === 0 ? extraChargesCents : 0);
       const created = await tx.bill.create({
         data: {
           billNumber: body.billNumber,
