@@ -62,7 +62,13 @@ export async function POST(req: NextRequest) {
     const f = purchaseOrderFormSchema.parse(await req.json());
 
     const poNumber = await uniquePoNumber(f.poNumber);
-    const subtotalCents = computeSubtotalCents(f.categoryLines, f.itemLines, f.shippingCents);
+    const subtotalCents = computeSubtotalCents(
+      f.categoryLines,
+      f.itemLines,
+      f.shippingCents,
+      f.dropShipFeeCents,
+      f.taxCents,
+    );
 
     const po = await prisma.purchaseOrder.create({
       data: {
@@ -71,6 +77,8 @@ export async function POST(req: NextRequest) {
         status: f.status,
         subtotalCents,
         shippingCents: f.shippingCents,
+        dropShipFeeCents: f.dropShipFeeCents,
+        taxCents: f.taxCents,
         storeId: user.storeId ?? null,
         email: f.email,
         ccBcc: f.ccBcc,

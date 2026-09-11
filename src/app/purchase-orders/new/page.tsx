@@ -5,5 +5,5 @@ import { PurchaseOrderForm } from "../PurchaseOrderForm";
 export default async function NewPurchaseOrderPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/purchase-orders/new");
-  return <PurchaseOrderForm />;
+  return <PurchaseOrderForm role={user.role} />;
 }

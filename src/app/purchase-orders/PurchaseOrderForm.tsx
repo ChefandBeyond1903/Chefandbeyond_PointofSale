@@ -75,14 +75,37 @@ function move<T>(arr: T[], from: number, to: number): T[] {
   return next;
 }
 
-export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readOnly?: boolean }) {
+export function PurchaseOrderForm({
+  id,
+  readOnly = false,
+  role,
+}: {
+  id?: string;
+  readOnly?: boolean;
+  role?: "CASHIER" | "MANAGER" | "ADMIN";
+}) {
   const router = useRouter();
   const isEdit = !!id;
+  const isAdmin = role === "ADMIN";
+  // Cashiers can raise a PO but don't manage operating expenses.
+  const canAddExpense = role === "ADMIN" || role === "MANAGER";
 
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [products, setProducts] = useState<ProductLite[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [expenseCategories, setExpenseCategories] = useState<string[]>([]);
+  const [loggedExpenses, setLoggedExpenses] = useState<
+    { id: string; category: string; amountCents: number }[]
+  >([]);
+  const [expForm, setExpForm] = useState({
+    category: "",
+    amountCents: 0,
+    memo: "",
+    storeId: "",
+  });
+  const [expBusy, setExpBusy] = useState(false);
+  const [expError, setExpError] = useState<string | null>(null);
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -105,6 +128,8 @@ export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readO
   const [messageToVendor, setMessageToVendor] = useState("");
   const [memo, setMemo] = useState("");
   const [shippingCents, setShippingCents] = useState(0);
+  const [dropShipFeeCents, setDropShipFeeCents] = useState(0);
+  const [taxCents, setTaxCents] = useState(0);
   const [itemLines, setItemLines] = useState<ItemRow[]>([blankItem(), blankItem()]);
 
   const [itemOpen, setItemOpen] = useState(true);
@@ -135,6 +160,8 @@ export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readO
     setMessageToVendor(po.messageToVendor);
     setMemo(po.memo);
     setShippingCents(po.shippingCents ?? 0);
+    setDropShipFeeCents(po.dropShipFeeCents ?? 0);
+    setTaxCents(po.taxCents ?? 0);
     setItemLines(
       (po.items ?? []).map((l) => ({
         key: uid(),
@@ -163,6 +190,11 @@ export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readO
         setProducts(p.products);
         setStores(s.stores);
         setCustomers(c.customers);
+        if (canAddExpense) {
+          api<{ categories: string[] }>("/api/expense-categories")
+            .then((r) => setExpenseCategories(r.categories))
+            .catch(() => {});
+        }
         if (isEdit) {
           const res = await api<{ purchaseOrder: PurchaseOrder }>(`/api/purchase-orders/${id}`);
           applyPo(res.purchaseOrder);
@@ -173,7 +205,7 @@ export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readO
         setLoading(false);
       }
     })();
-  }, [id, isEdit, applyPo]);
+  }, [id, isEdit, applyPo, canAddExpense]);
 
   // Vendor selection auto-fills the email. The mailing address is always
   // Chef and Beyond's, so it is left untouched here.
@@ -229,7 +261,7 @@ export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readO
     () => itemLines.reduce((s, l) => s + Math.round(l.quantity * l.rateCents), 0),
     [itemLines],
   );
-  const grandTotal = itemTotal + shippingCents;
+  const grandTotal = itemTotal + shippingCents + dropShipFeeCents + taxCents;
 
   // Pick a store or customer for "Ship to"; fill in their address (still editable).
   function onShipToPick(name: string) {
@@ -268,6 +300,8 @@ export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readO
       messageToVendor,
       memo,
       shippingCents,
+      dropShipFeeCents,
+      taxCents,
       // These header fields and the category-line section were removed from the
       // form; send empties so a save clears any legacy values.
       messageToCustomer: "",
@@ -324,6 +358,48 @@ export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readO
     }
   }
 
+  // Logs a one-off cost from this vendor's invoice as an operating expense —
+  // separate from the PO's own subtotal, so it comes out of net profit under
+  // Reports > Operating expenses rather than inflating this order's cost.
+  async function addExtraExpense(e: React.FormEvent) {
+    e.preventDefault();
+    if (!expForm.category) return setExpError("Pick a category");
+    if (expForm.amountCents <= 0) return setExpError("Enter an amount");
+    setExpBusy(true);
+    setExpError(null);
+    try {
+      const res = await api<{ expense: { id: string; category: string; amountCents: number } }>(
+        "/api/expenses",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            category: expForm.category,
+            payee: vendor.trim(),
+            amountCents: expForm.amountCents,
+            memo: expForm.memo.trim() || `PO ${poNumber}`,
+            status: "PAID",
+            ...(isAdmin && expForm.storeId ? { storeId: expForm.storeId } : {}),
+          }),
+        },
+      );
+      setLoggedExpenses((rows) => [...rows, res.expense]);
+      setExpForm({ category: "", amountCents: 0, memo: "", storeId: expForm.storeId });
+    } catch (err) {
+      setExpError(err instanceof ApiError ? err.message : "Could not save the expense");
+    } finally {
+      setExpBusy(false);
+    }
+  }
+
+  async function removeExtraExpense(expId: string) {
+    try {
+      await api(`/api/expenses/${expId}`, { method: "DELETE" });
+      setLoggedExpenses((rows) => rows.filter((r) => r.id !== expId));
+    } catch (err) {
+      setExpError(err instanceof ApiError ? err.message : "Could not delete the expense");
+    }
+  }
+
   function clearForm() {
     if (!confirm("Clear the form?")) return;
     if (isEdit) {
@@ -350,6 +426,8 @@ export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readO
     setMessageToVendor("");
     setMemo("");
     setShippingCents(0);
+    setDropShipFeeCents(0);
+    setTaxCents(0);
     setItemLines([blankItem(), blankItem()]);
   }
 
@@ -614,6 +692,22 @@ export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readO
                 className="input h-8 w-28 text-right"
               />
             </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-zinc-500">Drop-ship fee</span>
+              <MoneyInput
+                cents={dropShipFeeCents}
+                onCentsChange={setDropShipFeeCents}
+                className="input h-8 w-28 text-right"
+              />
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-zinc-500">Tax</span>
+              <MoneyInput
+                cents={taxCents}
+                onCentsChange={setTaxCents}
+                className="input h-8 w-28 text-right"
+              />
+            </div>
             <div className="flex items-center justify-between border-t border-zinc-200 pt-1.5 font-semibold">
               <span>Total</span>
               <span>{formatMoney(grandTotal)}</span>
@@ -759,6 +853,95 @@ export function PurchaseOrderForm({ id, readOnly = false }: { id?: string; readO
           </tbody>
         </table>
       </LineSection>
+
+      {/* ============ EXTRA EXPENSE (not part of this PO) ============ */}
+      {canAddExpense && !readOnly && (
+        <section className="no-print card mt-4 p-4">
+          <h3 className="mb-1 font-semibold">Other cost on this invoice</h3>
+          <p className="mb-3 text-xs text-zinc-400">
+            Anything the vendor billed beyond items, shipping, drop-ship fee, and tax — log it
+            as an operating expense so it comes out of net profit under Reports, instead of
+            changing this PO&rsquo;s total.
+          </p>
+          {expError && (
+            <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{expError}</p>
+          )}
+          <form onSubmit={addExtraExpense} className="grid gap-3 sm:grid-cols-5">
+            <div className="sm:col-span-2">
+              <label className="label">Category</label>
+              <select
+                className="input"
+                value={expForm.category}
+                onChange={(e) => setExpForm({ ...expForm, category: e.target.value })}
+              >
+                <option value="">— Pick —</option>
+                {expenseCategories.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">Amount</label>
+              <MoneyInput
+                cents={expForm.amountCents}
+                onCentsChange={(c) => setExpForm({ ...expForm, amountCents: c })}
+              />
+            </div>
+            <div className={isAdmin ? "" : "sm:col-span-2"}>
+              <label className="label">Memo (optional)</label>
+              <input
+                className="input"
+                placeholder={`PO ${poNumber}`}
+                value={expForm.memo}
+                onChange={(e) => setExpForm({ ...expForm, memo: e.target.value })}
+              />
+            </div>
+            {isAdmin && (
+              <div>
+                <label className="label">Store</label>
+                <select
+                  className="input"
+                  value={expForm.storeId}
+                  onChange={(e) => setExpForm({ ...expForm, storeId: e.target.value })}
+                >
+                  <option value="">Company-wide</option>
+                  {stores.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div className="flex items-end">
+              <button className="btn-secondary w-full whitespace-nowrap" disabled={expBusy}>
+                {expBusy ? "Saving…" : "Add expense"}
+              </button>
+            </div>
+          </form>
+          {loggedExpenses.length > 0 && (
+            <ul className="mt-3 divide-y divide-zinc-100 text-sm">
+              {loggedExpenses.map((r) => (
+                <li key={r.id} className="flex items-center justify-between py-1.5">
+                  <span>{r.category}</span>
+                  <span className="flex items-center gap-3">
+                    {formatMoney(r.amountCents)}
+                    <button
+                      type="button"
+                      onClick={() => removeExtraExpense(r.id)}
+                      className="text-xs text-red-500 hover:underline"
+                    >
+                      Remove
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
 
       {/* ============ FOOTER ============ */}
       <section className="card mt-4 grid gap-4 p-4 md:grid-cols-3">

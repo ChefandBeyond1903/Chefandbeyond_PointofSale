@@ -34,10 +34,12 @@ export function computeSubtotalCents(
   categoryLines: CategoryLine[],
   itemLines: ItemLine[],
   shippingCents = 0,
+  dropShipFeeCents = 0,
+  taxCents = 0,
 ): number {
   const cat = categoryLines.reduce((s, l) => s + l.amountCents, 0);
   const item = itemLines.reduce((s, l) => s + itemAmountCents(l), 0);
-  return cat + item + shippingCents;
+  return cat + item + shippingCents + dropShipFeeCents + taxCents;
 }
 
 /** Nested `create` payloads for the two line tables. */

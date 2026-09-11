@@ -63,12 +63,19 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     }
     if (f.tags !== undefined) data.tags = JSON.stringify(f.tags);
     if (f.shippingCents !== undefined) data.shippingCents = f.shippingCents;
+    if (f.dropShipFeeCents !== undefined) data.dropShipFeeCents = f.dropShipFeeCents;
+    if (f.taxCents !== undefined) data.taxCents = f.taxCents;
     if (f.poDate !== undefined) data.poDate = f.poDate ? parseDateInput(f.poDate) : new Date();
     if (f.dueDate !== undefined) data.dueDate = f.dueDate ? parseDateInput(f.dueDate) : null;
 
     const replacingLines = f.categoryLines !== undefined || f.itemLines !== undefined;
-    // The subtotal folds in shipping, so a shipping-only change also recomputes.
-    const recompute = replacingLines || f.shippingCents !== undefined;
+    // The subtotal folds in shipping/drop-ship/tax, so changing any of those
+    // also recomputes it.
+    const recompute =
+      replacingLines ||
+      f.shippingCents !== undefined ||
+      f.dropShipFeeCents !== undefined ||
+      f.taxCents !== undefined;
 
     const po = await prisma.$transaction(async (tx) => {
       if (recompute) {
@@ -111,7 +118,15 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           });
         }
         const shippingCents = f.shippingCents ?? current.shippingCents;
-        data.subtotalCents = computeSubtotalCents(catLines, itemLines, shippingCents);
+        const dropShipFeeCents = f.dropShipFeeCents ?? current.dropShipFeeCents;
+        const taxCents = f.taxCents ?? current.taxCents;
+        data.subtotalCents = computeSubtotalCents(
+          catLines,
+          itemLines,
+          shippingCents,
+          dropShipFeeCents,
+          taxCents,
+        );
       }
 
       return tx.purchaseOrder.update({

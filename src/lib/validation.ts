@@ -530,6 +530,8 @@ export const purchaseOrderFormSchema = z.object({
   messageToVendor: z.string().trim().max(2000).default(""),
   memo: z.string().trim().max(2000).default(""),
   shippingCents: z.number().int().min(0).default(0),
+  dropShipFeeCents: z.number().int().min(0).default(0),
+  taxCents: z.number().int().min(0).default(0),
   categoryLines: z.array(poCategoryLineSchema).default([]),
   itemLines: z.array(poItemLineSchema).default([]),
 });
@@ -559,6 +561,8 @@ export const purchaseOrderPatchSchema = z.object({
   messageToVendor: z.string().trim().max(2000).optional(),
   memo: z.string().trim().max(2000).optional(),
   shippingCents: z.number().int().min(0).optional(),
+  dropShipFeeCents: z.number().int().min(0).optional(),
+  taxCents: z.number().int().min(0).optional(),
   categoryLines: z.array(poCategoryLineSchema).optional(),
   itemLines: z.array(poItemLineSchema).optional(),
 });

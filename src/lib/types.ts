@@ -321,6 +321,8 @@ export interface PurchaseOrder {
   status: PurchaseOrderStatus;
   subtotalCents: number;
   shippingCents: number;
+  dropShipFeeCents: number;
+  taxCents: number;
   note: string | null;
   storeId?: string | null;
 
