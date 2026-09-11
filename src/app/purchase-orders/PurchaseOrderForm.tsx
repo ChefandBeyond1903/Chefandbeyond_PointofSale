@@ -358,6 +358,21 @@ export function PurchaseOrderForm({
     }
   }
 
+  async function addExpenseCategory() {
+    const name = prompt("New expense category:");
+    if (!name || !name.trim()) return;
+    try {
+      const r = await api<{ categories: string[] }>("/api/expense-categories", {
+        method: "POST",
+        body: JSON.stringify({ name: name.trim() }),
+      });
+      setExpenseCategories(r.categories);
+      setExpForm((f) => ({ ...f, category: name.trim() }));
+    } catch (err) {
+      setExpError(err instanceof ApiError ? err.message : "Could not add category");
+    }
+  }
+
   // Logs a one-off cost from this vendor's invoice as an operating expense —
   // separate from the PO's own subtotal, so it comes out of net profit under
   // Reports > Operating expenses rather than inflating this order's cost.
@@ -869,18 +884,28 @@ export function PurchaseOrderForm({
           <form onSubmit={addExtraExpense} className="grid gap-3 sm:grid-cols-5">
             <div className="sm:col-span-2">
               <label className="label">Category</label>
-              <select
-                className="input"
-                value={expForm.category}
-                onChange={(e) => setExpForm({ ...expForm, category: e.target.value })}
-              >
-                <option value="">— Pick —</option>
-                {expenseCategories.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
+              <div className="flex gap-1">
+                <select
+                  className="input"
+                  value={expForm.category}
+                  onChange={(e) => setExpForm({ ...expForm, category: e.target.value })}
+                >
+                  <option value="">— Pick —</option>
+                  {expenseCategories.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={addExpenseCategory}
+                  className="btn-secondary shrink-0 whitespace-nowrap px-2"
+                  title="Add a new category"
+                >
+                  + New
+                </button>
+              </div>
             </div>
             <div>
               <label className="label">Amount</label>
