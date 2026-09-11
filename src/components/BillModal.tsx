@@ -14,7 +14,7 @@ type Line = {
   hasProduct: boolean;
   ordered: number;
   received: number;
-  now: string; // receive-now qty
+  now: string; // receive-now / bill-now qty
   costCents: number;
 };
 
@@ -26,16 +26,25 @@ function toISO(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-/** Receive items against a PO and record a vendor bill (partial receipts OK). */
+/**
+ * Receive items against a PO, or copy it to a vendor bill — kept as two
+ * separate actions (not combined) because a vendor sometimes invoices, and
+ * wants paying, before the goods actually ship.
+ */
 export function BillModal({
   poId,
+  mode,
   onClose,
   onDone,
 }: {
   poId: string;
+  mode: "receive" | "bill";
   onClose: () => void;
   onDone?: () => void;
 }) {
+  const receiveItems = mode === "receive";
+  const recordBill = mode === "bill";
+
   const [po, setPo] = useState<PurchaseOrder | null>(null);
   const [lines, setLines] = useState<Line[]>([]);
   const [err, setErr] = useState<string | null>(null);
@@ -54,11 +63,6 @@ export function BillModal({
   const [dueTouched, setDueTouched] = useState(false);
   const [memo, setMemo] = useState("");
 
-  // A vendor sometimes invoices — and wants paying — before the goods ship,
-  // so recording a bill and receiving items can happen at different times.
-  const [recordBill, setRecordBill] = useState(true);
-  const [receiveItems, setReceiveItems] = useState(true);
-
   const load = useCallback(async () => {
     try {
       const [res, meRes] = await Promise.all([
@@ -68,9 +72,6 @@ export function BillModal({
       const purchaseOrder = res.purchaseOrder;
       setPo(purchaseOrder);
       setStoreId(purchaseOrder.storeId ?? "");
-      // Already billed (e.g. an earlier bill-only entry)? Default to just
-      // receiving this time, rather than re-billing.
-      if ((purchaseOrder.bills?.length ?? 0) > 0) setRecordBill(false);
       setLines(
         (purchaseOrder.items ?? []).map((it) => ({
           id: it.id,
@@ -122,7 +123,7 @@ export function BillModal({
   const itemsTotal = lines.reduce((s, l) => s + (parseInt(l.now || "0", 10) || 0) * l.costCents, 0);
   // Shipping, drop-ship fee, tax, and any "other cost" expenses logged on the
   // PO are one-time charges — the first bill against this PO picks them up
-  // automatically; a later partial receipt doesn't repeat them.
+  // automatically; a later bill or receipt doesn't repeat them.
   const isFirstBill = (po?.bills?.length ?? 0) === 0;
   const poExtraChargesCents =
     (po?.shippingCents ?? 0) +
@@ -133,10 +134,6 @@ export function BillModal({
   const total = itemsTotal + extraChargesCents;
 
   async function submit() {
-    if (!recordBill && !receiveItems) {
-      setErr("Choose to record a bill, receive items, or both.");
-      return;
-    }
     const payload = lines
       .map((l) => ({
         itemId: l.id,
@@ -168,7 +165,7 @@ export function BillModal({
       onDone?.();
       onClose();
     } catch (e) {
-      setErr(e instanceof ApiError ? e.message : "Could not record the bill");
+      setErr(e instanceof ApiError ? e.message : "Could not save");
     } finally {
       setBusy(false);
     }
@@ -186,63 +183,31 @@ export function BillModal({
           <>
             <div className="mb-1 flex items-center justify-between">
               <h2 className="text-lg font-semibold">
-                {recordBill && receiveItems
-                  ? "Receive & bill"
-                  : recordBill
-                    ? "Enter bill"
-                    : "Receive items"}{" "}
-                · <span className="font-mono">{po.poNumber}</span>
+                {recordBill ? "Copy to bill" : "Receive items"} ·{" "}
+                <span className="font-mono">{po.poNumber}</span>
               </h2>
               <button onClick={onClose} className="btn-ghost px-2 py-1 text-sm">
                 ✕
               </button>
             </div>
-            <p className="mb-3 text-sm text-zinc-500">
+            <p className="mb-4 text-sm text-zinc-500">
               {po.vendor} —{" "}
-              {!receiveItems ? (
-                <>logs a vendor bill against this PO without changing received quantities yet.</>
+              {recordBill ? (
+                <>records a vendor bill for this PO without changing received quantities.</>
               ) : isAdmin ? (
-                <>
-                  received quantities post to the store chosen below
-                  {recordBill ? " and the bill is added to Bills." : ". No bill is recorded."}
-                </>
+                <>received quantities post to the store chosen below. No bill is recorded here.</>
               ) : (
                 <>
                   received quantities post to{" "}
                   <span className="font-medium text-zinc-700">
                     {po.shipTo?.trim() ? `${po.shipTo.trim()}’s` : "the ordering store’s"}
                   </span>{" "}
-                  inventory (the &ldquo;Ship to&rdquo; store)
-                  {recordBill ? " and the bill is added to Bills." : ". No bill is recorded."}
+                  inventory (the &ldquo;Ship to&rdquo; store). No bill is recorded here.
                 </>
               )}
             </p>
 
-            <div className="mb-4 flex flex-wrap gap-4 text-sm">
-              <label className="flex items-center gap-1.5">
-                <input
-                  type="checkbox"
-                  checked={recordBill}
-                  onChange={(e) => setRecordBill(e.target.checked)}
-                />
-                Record a bill (invoice from the vendor)
-              </label>
-              <label className="flex items-center gap-1.5">
-                <input
-                  type="checkbox"
-                  checked={receiveItems}
-                  onChange={(e) => setReceiveItems(e.target.checked)}
-                />
-                Receive items now
-              </label>
-            </div>
-            <p className="mb-4 text-xs text-zinc-400">
-              A vendor invoice sometimes arrives — and needs paying — before the goods ship.
-              Uncheck &ldquo;Receive items now&rdquo; to just log the bill; come back and receive
-              once the shipment lands.
-            </p>
-
-            {!isFirstBill && poExtraChargesCents > 0 && (
+            {recordBill && !isFirstBill && poExtraChargesCents > 0 && (
               <p className="mb-4 text-xs text-zinc-400">
                 This PO&rsquo;s shipping, drop-ship fee, tax, and other logged costs (
                 {formatMoney(poExtraChargesCents)}) were already added to its first bill — not
@@ -275,56 +240,56 @@ export function BillModal({
             {err && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{err}</p>}
 
             {recordBill && (
-            <div className="mb-4 grid gap-3 sm:grid-cols-4">
-              <div>
-                <label className="label">Bill no.</label>
-                <input
-                  className="input"
-                  placeholder="Vendor invoice #"
-                  value={billNumber}
-                  onChange={(e) => setBillNumber(e.target.value)}
-                />
+              <div className="mb-4 grid gap-3 sm:grid-cols-4">
+                <div>
+                  <label className="label">Bill no.</label>
+                  <input
+                    className="input"
+                    placeholder="Vendor invoice #"
+                    value={billNumber}
+                    onChange={(e) => setBillNumber(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="label">Bill date</label>
+                  <input
+                    type="date"
+                    className="input"
+                    value={billDate}
+                    onChange={(e) => setBillDate(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="label">Terms</label>
+                  <select
+                    className="input"
+                    value={terms}
+                    onChange={(e) => {
+                      setDueTouched(false);
+                      setTerms(e.target.value);
+                    }}
+                  >
+                    <option value="">— None —</option>
+                    {BILL_TERMS.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Due date</label>
+                  <input
+                    type="date"
+                    className="input"
+                    value={dueDate}
+                    onChange={(e) => {
+                      setDueTouched(true);
+                      setDueDate(e.target.value);
+                    }}
+                  />
+                </div>
               </div>
-              <div>
-                <label className="label">Bill date</label>
-                <input
-                  type="date"
-                  className="input"
-                  value={billDate}
-                  onChange={(e) => setBillDate(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="label">Terms</label>
-                <select
-                  className="input"
-                  value={terms}
-                  onChange={(e) => {
-                    setDueTouched(false);
-                    setTerms(e.target.value);
-                  }}
-                >
-                  <option value="">— None —</option>
-                  {BILL_TERMS.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="label">Due date</label>
-                <input
-                  type="date"
-                  className="input"
-                  value={dueDate}
-                  onChange={(e) => {
-                    setDueTouched(true);
-                    setDueDate(e.target.value);
-                  }}
-                />
-              </div>
-            </div>
             )}
 
             {lines.length === 0 ? (
@@ -403,7 +368,7 @@ export function BillModal({
                     )}
                     <tr>
                       <td colSpan={5} className="py-2 text-right font-medium">
-                        Bill total
+                        {recordBill ? "Bill total" : "Total"}
                       </td>
                       <td className="py-2 text-right text-base font-bold">{formatMoney(total)}</td>
                     </tr>
@@ -416,15 +381,15 @@ export function BillModal({
             )}
 
             {recordBill && (
-            <div className="mt-4">
-              <label className="label">Memo</label>
-              <textarea
-                className="input"
-                rows={2}
-                value={memo}
-                onChange={(e) => setMemo(e.target.value)}
-              />
-            </div>
+              <div className="mt-4">
+                <label className="label">Memo</label>
+                <textarea
+                  className="input"
+                  rows={2}
+                  value={memo}
+                  onChange={(e) => setMemo(e.target.value)}
+                />
+              </div>
             )}
 
             {isAdmin && receiveItems && !storeId && (
@@ -436,21 +401,10 @@ export function BillModal({
               </button>
               <button
                 onClick={submit}
-                disabled={
-                  busy ||
-                  lines.length === 0 ||
-                  (!recordBill && !receiveItems) ||
-                  (isAdmin && receiveItems && !storeId)
-                }
+                disabled={busy || lines.length === 0 || (isAdmin && receiveItems && !storeId)}
                 className="btn-primary flex-1"
               >
-                {busy
-                  ? "Saving…"
-                  : recordBill && receiveItems
-                    ? "Receive & save bill"
-                    : recordBill
-                      ? "Save bill"
-                      : "Receive items"}
+                {busy ? "Saving…" : recordBill ? "Save bill" : "Receive items"}
               </button>
             </div>
           </>

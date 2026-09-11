@@ -37,7 +37,9 @@ export function PurchaseOrdersView({ canManage = true }: { canManage?: boolean }
   const [error, setError] = useState<string | null>(null);
 
   const [openSaleId, setOpenSaleId] = useState<string | null>(null);
-  const [receiveId, setReceiveId] = useState<string | null>(null);
+  const [billModal, setBillModal] = useState<{ poId: string; mode: "receive" | "bill" } | null>(
+    null,
+  );
   const [fromInvoiceOpen, setFromInvoiceOpen] = useState(false);
   const [invoiceNo, setInvoiceNo] = useState("");
   const [resolving, setResolving] = useState(false);
@@ -217,21 +219,31 @@ export function PurchaseOrdersView({ canManage = true }: { canManage?: boolean }
                     {new Date(po.createdAt).toLocaleDateString()}
                     {po.createdBy ? ` · ${po.createdBy.name}` : ""}
                   </td>
-                  <td className="px-4 py-2.5 text-right">
-                    {canManage &&
-                      (po.items ?? []).length > 0 &&
-                      po.status !== "CANCELLED" &&
-                      po.status !== "RECEIVED" && (
+                  <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                    {canManage && (po.items ?? []).length > 0 && po.status !== "CANCELLED" && (
+                      <>
+                        {po.status !== "RECEIVED" && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setBillModal({ poId: po.id, mode: "receive" });
+                            }}
+                            className="btn-secondary h-7 text-xs"
+                          >
+                            Receive
+                          </button>
+                        )}
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            setReceiveId(po.id);
+                            setBillModal({ poId: po.id, mode: "bill" });
                           }}
-                          className="btn-secondary h-7 text-xs"
+                          className="btn-secondary ml-1.5 h-7 text-xs"
                         >
-                          Receive
+                          Copy to bill
                         </button>
-                      )}
+                      </>
+                    )}
                   </td>
                 </tr>
               ))
@@ -249,10 +261,11 @@ export function PurchaseOrdersView({ canManage = true }: { canManage?: boolean }
         />
       )}
 
-      {receiveId && (
+      {billModal && (
         <BillModal
-          poId={receiveId}
-          onClose={() => setReceiveId(null)}
+          poId={billModal.poId}
+          mode={billModal.mode}
+          onClose={() => setBillModal(null)}
           onDone={load}
         />
       )}
