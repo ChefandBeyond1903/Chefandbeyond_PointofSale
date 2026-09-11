@@ -62,6 +62,7 @@ export async function GET() {
           storeId: true,
           storeNameSnapshot: true,
           totalCents: true,
+          shippingCents: true,
           paymentMethod: true,
           items: {
             select: {
@@ -157,6 +158,7 @@ export async function GET() {
               status: true,
               subtotalCents: true,
               discountCents: true,
+              shippingCents: true,
               totalCents: true,
               items: { select: { unitCostCents: true, quantity: true } },
             },
@@ -194,6 +196,8 @@ export async function GET() {
         p.revenueCents += it.unitPriceCents * it.quantity - it.discountCents;
         byProductMap.set(it.productId, p);
       }
+      // Shipping has no cost of goods behind it — the whole charge is profit.
+      net += s.shippingCents;
       const profit = net - cost;
 
       const add = (w: Win) => {
@@ -238,7 +242,7 @@ export async function GET() {
         continue;
       }
       const frac = Math.min(1, r.amountCents / s.totalCents);
-      const exTaxNet = s.subtotalCents - s.discountCents;
+      const exTaxNet = s.subtotalCents - s.discountCents + s.shippingCents;
       const cogs = s.items.reduce((a, it) => a + it.unitCostCents * it.quantity, 0);
       const margin = frac * (exTaxNet - cogs);
       monthRefundedProfitCents += Math.round(r.restocked ? margin : margin + frac * cogs);

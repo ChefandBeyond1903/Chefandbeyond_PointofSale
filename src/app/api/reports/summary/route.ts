@@ -56,6 +56,7 @@ export async function GET(req: NextRequest) {
           subtotalCents: true,
           taxCents: true,
           discountCents: true,
+          shippingCents: true,
           totalCents: true,
           customerNameSnapshot: true,
           cashierId: true,
@@ -141,6 +142,7 @@ export async function GET(req: NextRequest) {
                 status: true,
                 subtotalCents: true,
                 discountCents: true,
+                shippingCents: true,
                 totalCents: true,
                 items: { select: { unitCostCents: true, quantity: true } },
               },
@@ -158,7 +160,7 @@ export async function GET(req: NextRequest) {
         continue;
       }
       const frac = Math.min(1, r.amountCents / s.totalCents);
-      const exTaxNet = s.subtotalCents - s.discountCents; // revenue before tax, after discount
+      const exTaxNet = s.subtotalCents - s.discountCents + s.shippingCents; // revenue before tax, after discount
       const cogs = s.items.reduce((a, it) => a + it.unitCostCents * it.quantity, 0);
       const margin = frac * (exTaxNet - cogs);
       // Restocked: only the margin is lost. Not restocked: the cost of the goods
@@ -249,6 +251,8 @@ export async function GET(req: NextRequest) {
         p.revenueCents += it.lineTotalCents;
         byProduct.set(it.productId, p);
       }
+      // Shipping has no cost of goods behind it — the whole charge is profit.
+      saleNet += s.shippingCents;
       netCents += saleNet;
       costCents += saleCost;
 
