@@ -110,8 +110,9 @@ export async function POST(req: NextRequest) {
         },
       });
       // Customers belong to the store that created them — you can't ring a sale
-      // against another store's customer.
-      if (c && storeId && c.storeId && c.storeId !== storeId) {
+      // against another store's customer. Admins can sell to any customer from
+      // any store's register.
+      if (actor?.role !== "ADMIN" && c && storeId && c.storeId && c.storeId !== storeId) {
         throw new HttpError(400, "That customer belongs to another store.");
       }
       if (c) {

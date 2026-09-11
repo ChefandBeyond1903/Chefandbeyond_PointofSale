@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
     if (body.customerId) {
       const c = await prisma.customer.findUnique({ where: { id: body.customerId } });
       if (!c) throw new HttpError(400, "Customer not found");
-      if (storeId && c.storeId && c.storeId !== storeId) {
+      if (actor.role !== "ADMIN" && storeId && c.storeId && c.storeId !== storeId) {
         throw new HttpError(400, "That customer belongs to another store.");
       }
       cust = { id: c.id, name: c.name, email: c.email, phone: c.phone, address: c.address, company: c.company };
