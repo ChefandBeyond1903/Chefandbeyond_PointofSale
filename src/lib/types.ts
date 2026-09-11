@@ -354,7 +354,7 @@ export interface PurchaseOrder {
   categoryLines?: PurchaseOrderCategoryLine[];
   bills?: { id: string; billNumber: string; status: string; subtotalCents: number }[];
   expenses?: { id: string; category: string; amountCents: number; memo: string; status: ExpenseStatus }[];
-  _count?: { items: number };
+  _count?: { items: number; bills?: number };
 }
 
 /** One vendor's slice of an invoice, ready to become a PO. */

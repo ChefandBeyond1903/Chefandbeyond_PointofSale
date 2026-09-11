@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
         sale: { select: { id: true, number: true } },
         createdBy: { select: { id: true, name: true } },
         items: { select: { quantity: true, receivedQuantity: true } },
-        _count: { select: { items: true } },
+        _count: { select: { items: true, bills: true } },
       },
     });
     return ok({ purchaseOrders });

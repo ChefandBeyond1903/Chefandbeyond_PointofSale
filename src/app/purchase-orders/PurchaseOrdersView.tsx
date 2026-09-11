@@ -233,15 +233,17 @@ export function PurchaseOrdersView({ canManage = true }: { canManage?: boolean }
                             Receive
                           </button>
                         )}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setBillModal({ poId: po.id, mode: "bill" });
-                          }}
-                          className="btn-secondary ml-1.5 h-7 text-xs"
-                        >
-                          Copy to bill
-                        </button>
+                        {(po._count?.bills ?? 0) === 0 && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setBillModal({ poId: po.id, mode: "bill" });
+                            }}
+                            className="btn-secondary ml-1.5 h-7 text-xs"
+                          >
+                            Copy to bill
+                          </button>
+                        )}
                       </>
                     )}
                   </td>
