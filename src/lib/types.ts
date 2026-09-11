@@ -283,6 +283,7 @@ export interface Expense {
   status: ExpenseStatus;
   storeId: string | null;
   store?: { id: string; name: string } | null;
+  poId?: string | null;
   createdBy?: { id: string; name: string } | null;
   createdAt: string;
 }
@@ -351,6 +352,7 @@ export interface PurchaseOrder {
   items?: PurchaseOrderItem[];
   categoryLines?: PurchaseOrderCategoryLine[];
   bills?: { id: string; billNumber: string; status: string; subtotalCents: number }[];
+  expenses?: { id: string; category: string; amountCents: number; memo: string; status: ExpenseStatus }[];
   _count?: { items: number };
 }
 

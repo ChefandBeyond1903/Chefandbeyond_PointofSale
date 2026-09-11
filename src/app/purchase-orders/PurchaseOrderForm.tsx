@@ -162,6 +162,9 @@ export function PurchaseOrderForm({
     setShippingCents(po.shippingCents ?? 0);
     setDropShipFeeCents(po.dropShipFeeCents ?? 0);
     setTaxCents(po.taxCents ?? 0);
+    setLoggedExpenses(
+      (po.expenses ?? []).map((e) => ({ id: e.id, category: e.category, amountCents: e.amountCents })),
+    );
     setItemLines(
       (po.items ?? []).map((l) => ({
         key: uid(),
@@ -261,7 +264,11 @@ export function PurchaseOrderForm({
     () => itemLines.reduce((s, l) => s + Math.round(l.quantity * l.rateCents), 0),
     [itemLines],
   );
-  const grandTotal = itemTotal + shippingCents + dropShipFeeCents + taxCents;
+  const loggedExpensesTotal = useMemo(
+    () => loggedExpenses.reduce((s, e) => s + e.amountCents, 0),
+    [loggedExpenses],
+  );
+  const grandTotal = itemTotal + shippingCents + dropShipFeeCents + taxCents + loggedExpensesTotal;
 
   // Pick a store or customer for "Ship to"; fill in their address (still editable).
   function onShipToPick(name: string) {
@@ -373,11 +380,13 @@ export function PurchaseOrderForm({
     }
   }
 
-  // Logs a one-off cost from this vendor's invoice as an operating expense —
-  // separate from the PO's own subtotal, so it comes out of net profit under
-  // Reports > Operating expenses rather than inflating this order's cost.
+  // Logs a one-off cost from this vendor's invoice as an operating expense
+  // linked to this PO — it comes out of net profit under Reports > Operating
+  // expenses, and its amount is folded into this PO's own total (see
+  // recomputePoSubtotalCents).
   async function addExtraExpense(e: React.FormEvent) {
     e.preventDefault();
+    if (!id) return setExpError("Save the purchase order first");
     if (!expForm.category) return setExpError("Pick a category");
     if (expForm.amountCents <= 0) return setExpError("Enter an amount");
     setExpBusy(true);
@@ -393,6 +402,7 @@ export function PurchaseOrderForm({
             amountCents: expForm.amountCents,
             memo: expForm.memo.trim() || `PO ${poNumber}`,
             status: "PAID",
+            poId: id,
             ...(isAdmin && expForm.storeId ? { storeId: expForm.storeId } : {}),
           }),
         },
@@ -723,6 +733,12 @@ export function PurchaseOrderForm({
                 className="input h-8 w-28 text-right"
               />
             </div>
+            {loggedExpensesTotal > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="text-zinc-500">Other cost (below)</span>
+                <span>{formatMoney(loggedExpensesTotal)}</span>
+              </div>
+            )}
             <div className="flex items-center justify-between border-t border-zinc-200 pt-1.5 font-semibold">
               <span>Total</span>
               <span>{formatMoney(grandTotal)}</span>
@@ -869,15 +885,22 @@ export function PurchaseOrderForm({
         </table>
       </LineSection>
 
-      {/* ============ EXTRA EXPENSE (not part of this PO) ============ */}
+      {/* ============ EXTRA EXPENSE (logged against this PO) ============ */}
       {canAddExpense && !readOnly && (
         <section className="no-print card mt-4 p-4">
           <h3 className="mb-1 font-semibold">Other cost on this invoice</h3>
           <p className="mb-3 text-xs text-zinc-400">
             Anything the vendor billed beyond items, shipping, drop-ship fee, and tax — log it
-            as an operating expense so it comes out of net profit under Reports, instead of
-            changing this PO&rsquo;s total.
+            as an operating expense. It stays on this PO, adds to its total, and comes out of
+            net profit under Reports &gt; Operating expenses.
           </p>
+          {!id ? (
+            <p className="rounded bg-amber-50 px-3 py-2 text-sm text-amber-700">
+              Save this purchase order first, then come back here to log an extra cost against
+              it.
+            </p>
+          ) : (
+          <>
           {expError && (
             <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{expError}</p>
           )}
@@ -964,6 +987,8 @@ export function PurchaseOrderForm({
                 </li>
               ))}
             </ul>
+          )}
+          </>
           )}
         </section>
       )}

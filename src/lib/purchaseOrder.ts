@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { purchaseOrderFormSchema } from "@/lib/validation";
 
@@ -70,6 +71,36 @@ export function lineCreateData(categoryLines: CategoryLine[], itemLines: ItemLin
       })),
     },
   };
+}
+
+/**
+ * Recomputes and stores a PO's subtotal from its items, category lines,
+ * shipping/drop-ship/tax charges, and any operating expenses logged against
+ * it — so the PO's Total reflects an extra cost the moment it's added or
+ * removed, everywhere subtotalCents is shown (this form, the list, Bills).
+ */
+export async function recomputePoSubtotalCents(
+  db: Prisma.TransactionClient,
+  poId: string,
+): Promise<void> {
+  const po = await db.purchaseOrder.findUnique({
+    where: { id: poId },
+    select: {
+      shippingCents: true,
+      dropShipFeeCents: true,
+      taxCents: true,
+      items: { select: { lineCostCents: true } },
+      categoryLines: { select: { amountCents: true } },
+      expenses: { select: { amountCents: true } },
+    },
+  });
+  if (!po) return;
+  const itemsSum = po.items.reduce((s, l) => s + l.lineCostCents, 0);
+  const catSum = po.categoryLines.reduce((s, l) => s + l.amountCents, 0);
+  const expensesSum = po.expenses.reduce((s, e) => s + e.amountCents, 0);
+  const subtotalCents =
+    itemsSum + catSum + po.shippingCents + po.dropShipFeeCents + po.taxCents + expensesSum;
+  await db.purchaseOrder.update({ where: { id: poId }, data: { subtotalCents } });
 }
 
 export function parseTags(raw: string): string[] {

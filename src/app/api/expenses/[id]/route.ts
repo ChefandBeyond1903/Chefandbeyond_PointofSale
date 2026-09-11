@@ -4,6 +4,7 @@ import { HttpError } from "@/lib/auth";
 import { requireScopedRole, scopeStoreId } from "@/lib/scope";
 import { expenseUpdateSchema } from "@/lib/validation";
 import { parseDateInput } from "@/lib/date";
+import { recomputePoSubtotalCents } from "@/lib/purchaseOrder";
 import { ok, toErrorResponse } from "@/lib/api";
 
 type Params = { params: Promise<{ id: string }> };
@@ -18,23 +19,25 @@ const expenseSelect = {
   status: true,
   storeId: true,
   store: { select: { id: true, name: true } },
+  poId: true,
   createdBy: { select: { id: true, name: true } },
   createdAt: true,
 } as const;
 
 async function loadInScope(id: string, actor: Awaited<ReturnType<typeof requireScopedRole>>) {
-  const row = await prisma.expense.findUnique({ where: { id }, select: { storeId: true } });
+  const row = await prisma.expense.findUnique({ where: { id }, select: { storeId: true, poId: true } });
   const scoped = scopeStoreId(actor);
   if (!row || (scoped && row.storeId !== scoped)) {
     throw new HttpError(404, "Expense not found");
   }
+  return row;
 }
 
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const actor = await requireScopedRole("MANAGER", "ADMIN");
     const { id } = await params;
-    await loadInScope(id, actor);
+    const existing = await loadInScope(id, actor);
     const f = expenseUpdateSchema.parse(await req.json());
 
     const data: Record<string, unknown> = {};
@@ -49,7 +52,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       data.storeId = f.storeId || null;
     }
 
-    const expense = await prisma.expense.update({ where: { id }, data, select: expenseSelect });
+    const expense = await prisma.$transaction(async (tx) => {
+      const row = await tx.expense.update({ where: { id }, data, select: expenseSelect });
+      // The amount may have changed on an expense logged against a PO — keep
+      // that PO's total in sync.
+      if (existing.poId) await recomputePoSubtotalCents(tx, existing.poId);
+      return row;
+    });
     return ok({ expense });
   } catch (err) {
     return toErrorResponse(err);
@@ -60,8 +69,11 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
     const actor = await requireScopedRole("MANAGER", "ADMIN");
     const { id } = await params;
-    await loadInScope(id, actor);
-    await prisma.expense.delete({ where: { id } });
+    const existing = await loadInScope(id, actor);
+    await prisma.$transaction(async (tx) => {
+      await tx.expense.delete({ where: { id } });
+      if (existing.poId) await recomputePoSubtotalCents(tx, existing.poId);
+    });
     return ok({ ok: true });
   } catch (err) {
     return toErrorResponse(err);

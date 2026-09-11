@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireScopedUser, requireScopedRole, scopeStoreId } from "@/lib/scope";
 import { expenseCreateSchema } from "@/lib/validation";
 import { parseDateInput } from "@/lib/date";
+import { recomputePoSubtotalCents } from "@/lib/purchaseOrder";
 import { ok, toErrorResponse } from "@/lib/api";
 
 const expenseSelect = {
@@ -16,6 +17,7 @@ const expenseSelect = {
   status: true,
   storeId: true,
   store: { select: { id: true, name: true } },
+  poId: true,
   createdBy: { select: { id: true, name: true } },
   createdAt: true,
 } as const;
@@ -62,18 +64,24 @@ export async function POST(req: NextRequest) {
     const storeId =
       actor.role === "ADMIN" ? (f.storeId ?? null) : (actor.storeId ?? null);
 
-    const expense = await prisma.expense.create({
-      data: {
-        category: f.category,
-        payee: f.payee,
-        amountCents: f.amountCents,
-        expenseDate: f.expenseDate ? parseDateInput(f.expenseDate) : new Date(),
-        memo: f.memo,
-        status: f.status,
-        storeId,
-        createdById: actor.id,
-      },
-      select: expenseSelect,
+    const expense = await prisma.$transaction(async (tx) => {
+      const row = await tx.expense.create({
+        data: {
+          category: f.category,
+          payee: f.payee,
+          amountCents: f.amountCents,
+          expenseDate: f.expenseDate ? parseDateInput(f.expenseDate) : new Date(),
+          memo: f.memo,
+          status: f.status,
+          storeId,
+          poId: f.poId ?? null,
+          createdById: actor.id,
+        },
+        select: expenseSelect,
+      });
+      // Logged against a PO's "other cost" form — fold it into that PO's total.
+      if (f.poId) await recomputePoSubtotalCents(tx, f.poId);
+      return row;
     });
     return ok({ expense }, 201);
   } catch (err) {

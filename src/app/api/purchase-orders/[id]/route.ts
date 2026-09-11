@@ -35,6 +35,10 @@ export async function GET(_req: NextRequest, { params }: Params) {
           orderBy: { createdAt: "asc" },
           select: { id: true, billNumber: true, status: true, subtotalCents: true },
         },
+        expenses: {
+          orderBy: { createdAt: "asc" },
+          select: { id: true, category: true, amountCents: true, memo: true, status: true },
+        },
       },
     });
     if (!po) throw new HttpError(404, "Purchase order not found");
@@ -81,7 +85,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       if (recompute) {
         const current = await tx.purchaseOrder.findUnique({
           where: { id },
-          include: { categoryLines: true, items: true },
+          include: { categoryLines: true, items: true, expenses: { select: { amountCents: true } } },
         });
         if (!current) throw new HttpError(404, "Purchase order not found");
 
@@ -120,13 +124,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         const shippingCents = f.shippingCents ?? current.shippingCents;
         const dropShipFeeCents = f.dropShipFeeCents ?? current.dropShipFeeCents;
         const taxCents = f.taxCents ?? current.taxCents;
-        data.subtotalCents = computeSubtotalCents(
-          catLines,
-          itemLines,
-          shippingCents,
-          dropShipFeeCents,
-          taxCents,
-        );
+        // Plus any operating expenses logged against this PO's "other cost" form.
+        const expensesCents = current.expenses.reduce((s, e) => s + e.amountCents, 0);
+        data.subtotalCents =
+          computeSubtotalCents(catLines, itemLines, shippingCents, dropShipFeeCents, taxCents) +
+          expensesCents;
       }
 
       return tx.purchaseOrder.update({

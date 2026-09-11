@@ -111,6 +111,9 @@ export const expenseCreateSchema = z.object({
   // Admin only: which store the expense belongs to. A manager's expenses are
   // pinned to their own store.
   storeId: z.string().trim().min(1).optional().or(z.literal("")).transform((v) => (v ? v : undefined)),
+  // Set when this expense was logged from a purchase order's "other cost"
+  // form, so it still shows up on that PO.
+  poId: z.string().trim().min(1).optional(),
 });
 
 export const expenseUpdateSchema = z.object({

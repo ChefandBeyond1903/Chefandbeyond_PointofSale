@@ -538,6 +538,7 @@ model PurchaseOrder {
   items         PurchaseOrderItem[]
   categoryLines PurchaseOrderCategoryLine[]
   bills         Bill[]
+  expenses      Expense[]
 
   @@index([vendor])
   @@index([status])
@@ -622,9 +623,10 @@ model BillItem {
   @@index([productId])
 }
 
-/// An operating expense — rent, utilities, insurance, and the like. Not tied to
-/// a purchase order or a product; recorded so the P&L can show net profit after
-/// all costs.
+/// An operating expense — rent, utilities, insurance, and the like. Usually
+/// not tied to a purchase order or a product; recorded so the P&L can show
+/// net profit after all costs. Optionally linked to the PO it was logged
+/// from (e.g. a drop-ship fee variance found on the vendor's actual bill).
 model Expense {
   id          String   @id @default(cuid())
   category    String
@@ -637,6 +639,9 @@ model Expense {
   storeId String?
   store   Store?  @relation(fields: [storeId], references: [id])
 
+  poId String?
+  po   PurchaseOrder? @relation(fields: [poId], references: [id], onDelete: SetNull)
+
   createdById String
   createdBy   User     @relation(fields: [createdById], references: [id])
   createdAt   DateTime @default(now())
@@ -646,6 +651,7 @@ model Expense {
   @@index([storeId])
   @@index([expenseDate])
   @@index([status])
+  @@index([poId])
 }
 
 /// A custom expense category added by a manager. The ready-made categories live
