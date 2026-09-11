@@ -218,6 +218,7 @@ export type PurchaseOrderStatus =
   | "OPEN"
   | "CLOSED"
   | "SENT"
+  | "NOT_RECEIVED"
   | "PARTIAL"
   | "RECEIVED"
   | "CANCELLED";

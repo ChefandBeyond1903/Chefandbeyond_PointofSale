@@ -54,6 +54,11 @@ export function BillModal({
   const [dueTouched, setDueTouched] = useState(false);
   const [memo, setMemo] = useState("");
 
+  // A vendor sometimes invoices — and wants paying — before the goods ship,
+  // so recording a bill and receiving items can happen at different times.
+  const [recordBill, setRecordBill] = useState(true);
+  const [receiveItems, setReceiveItems] = useState(true);
+
   const load = useCallback(async () => {
     try {
       const [res, meRes] = await Promise.all([
@@ -63,6 +68,9 @@ export function BillModal({
       const purchaseOrder = res.purchaseOrder;
       setPo(purchaseOrder);
       setStoreId(purchaseOrder.storeId ?? "");
+      // Already billed (e.g. an earlier bill-only entry)? Default to just
+      // receiving this time, rather than re-billing.
+      if ((purchaseOrder.bills?.length ?? 0) > 0) setRecordBill(false);
       setLines(
         (purchaseOrder.items ?? []).map((it) => ({
           id: it.id,
@@ -121,10 +129,14 @@ export function BillModal({
     (po?.dropShipFeeCents ?? 0) +
     (po?.taxCents ?? 0) +
     (po?.expenses?.reduce((s, e) => s + e.amountCents, 0) ?? 0);
-  const extraChargesCents = isFirstBill ? poExtraChargesCents : 0;
+  const extraChargesCents = recordBill && isFirstBill ? poExtraChargesCents : 0;
   const total = itemsTotal + extraChargesCents;
 
   async function submit() {
+    if (!recordBill && !receiveItems) {
+      setErr("Choose to record a bill, receive items, or both.");
+      return;
+    }
     const payload = lines
       .map((l) => ({
         itemId: l.id,
@@ -133,7 +145,7 @@ export function BillModal({
       }))
       .filter((l) => l.receiveQty !== 0);
     if (payload.length === 0) {
-      setErr("Enter a quantity to receive on at least one line.");
+      setErr(`Enter a quantity to ${receiveItems ? "receive" : "bill"} on at least one line.`);
       return;
     }
     setBusy(true);
@@ -142,6 +154,8 @@ export function BillModal({
       await api(`/api/purchase-orders/${poId}/bills`, {
         method: "POST",
         body: JSON.stringify({
+          recordBill,
+          receiveItems,
           billNumber: billNumber.trim(),
           billDate,
           dueDate: dueDate || null,
@@ -172,25 +186,60 @@ export function BillModal({
           <>
             <div className="mb-1 flex items-center justify-between">
               <h2 className="text-lg font-semibold">
-                Receive &amp; bill · <span className="font-mono">{po.poNumber}</span>
+                {recordBill && receiveItems
+                  ? "Receive & bill"
+                  : recordBill
+                    ? "Enter bill"
+                    : "Receive items"}{" "}
+                · <span className="font-mono">{po.poNumber}</span>
               </h2>
               <button onClick={onClose} className="btn-ghost px-2 py-1 text-sm">
                 ✕
               </button>
             </div>
-            <p className="mb-4 text-sm text-zinc-500">
+            <p className="mb-3 text-sm text-zinc-500">
               {po.vendor} —{" "}
-              {isAdmin ? (
-                <>received quantities post to the store chosen below and the bill is added to Bills.</>
+              {!receiveItems ? (
+                <>logs a vendor bill against this PO without changing received quantities yet.</>
+              ) : isAdmin ? (
+                <>
+                  received quantities post to the store chosen below
+                  {recordBill ? " and the bill is added to Bills." : ". No bill is recorded."}
+                </>
               ) : (
                 <>
                   received quantities post to{" "}
                   <span className="font-medium text-zinc-700">
                     {po.shipTo?.trim() ? `${po.shipTo.trim()}’s` : "the ordering store’s"}
                   </span>{" "}
-                  inventory (the &ldquo;Ship to&rdquo; store) and the bill is added to Bills.
+                  inventory (the &ldquo;Ship to&rdquo; store)
+                  {recordBill ? " and the bill is added to Bills." : ". No bill is recorded."}
                 </>
               )}
+            </p>
+
+            <div className="mb-4 flex flex-wrap gap-4 text-sm">
+              <label className="flex items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  checked={recordBill}
+                  onChange={(e) => setRecordBill(e.target.checked)}
+                />
+                Record a bill (invoice from the vendor)
+              </label>
+              <label className="flex items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  checked={receiveItems}
+                  onChange={(e) => setReceiveItems(e.target.checked)}
+                />
+                Receive items now
+              </label>
+            </div>
+            <p className="mb-4 text-xs text-zinc-400">
+              A vendor invoice sometimes arrives — and needs paying — before the goods ship.
+              Uncheck &ldquo;Receive items now&rdquo; to just log the bill; come back and receive
+              once the shipment lands.
             </p>
 
             {!isFirstBill && poExtraChargesCents > 0 && (
@@ -201,7 +250,7 @@ export function BillModal({
               </p>
             )}
 
-            {isAdmin && (
+            {isAdmin && receiveItems && (
               <div className="mb-4">
                 <label className="label">Receive into store</label>
                 <select
@@ -225,6 +274,7 @@ export function BillModal({
 
             {err && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{err}</p>}
 
+            {recordBill && (
             <div className="mb-4 grid gap-3 sm:grid-cols-4">
               <div>
                 <label className="label">Bill no.</label>
@@ -275,6 +325,7 @@ export function BillModal({
                 />
               </div>
             </div>
+            )}
 
             {lines.length === 0 ? (
               <p className="text-sm text-zinc-400">This purchase order has no item lines.</p>
@@ -286,7 +337,7 @@ export function BillModal({
                       <th className="py-1.5">Item</th>
                       <th className="py-1.5 text-right">Ordered</th>
                       <th className="py-1.5 text-right">In</th>
-                      <th className="py-1.5 text-right">Receive</th>
+                      <th className="py-1.5 text-right">{receiveItems ? "Receive" : "Bill qty"}</th>
                       <th className="py-1.5 text-right">Unit cost</th>
                       <th className="py-1.5 text-right">Amount</th>
                     </tr>
@@ -364,6 +415,7 @@ export function BillModal({
               </div>
             )}
 
+            {recordBill && (
             <div className="mt-4">
               <label className="label">Memo</label>
               <textarea
@@ -373,8 +425,9 @@ export function BillModal({
                 onChange={(e) => setMemo(e.target.value)}
               />
             </div>
+            )}
 
-            {isAdmin && !storeId && (
+            {isAdmin && receiveItems && !storeId && (
               <p className="mt-4 text-xs text-amber-600">Choose a store to receive into.</p>
             )}
             <div className="mt-5 flex gap-2">
@@ -383,10 +436,21 @@ export function BillModal({
               </button>
               <button
                 onClick={submit}
-                disabled={busy || lines.length === 0 || (isAdmin && !storeId)}
+                disabled={
+                  busy ||
+                  lines.length === 0 ||
+                  (!recordBill && !receiveItems) ||
+                  (isAdmin && receiveItems && !storeId)
+                }
                 className="btn-primary flex-1"
               >
-                {busy ? "Saving…" : "Receive & save bill"}
+                {busy
+                  ? "Saving…"
+                  : recordBill && receiveItems
+                    ? "Receive & save bill"
+                    : recordBill
+                      ? "Save bill"
+                      : "Receive items"}
               </button>
             </div>
           </>

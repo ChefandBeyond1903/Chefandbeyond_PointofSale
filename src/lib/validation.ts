@@ -80,25 +80,34 @@ const dateInput = z
   .refine((s) => !s || !Number.isNaN(Date.parse(s)), "Invalid date");
 
 // Receive items against a purchase order and record a vendor bill.
-export const billCreateSchema = z.object({
-  billNumber: z.string().trim().max(120).default(""),
-  billDate: dateInput.optional(),
-  dueDate: dateInput.optional().nullable(),
-  terms: z.string().trim().max(40).default(""),
-  memo: z.string().trim().max(2000).default(""),
-  // Admin only: which store the received stock lands in. Others receive into
-  // the PO's own store.
-  storeId: z.string().min(1).optional(),
-  lines: z
-    .array(
-      z.object({
-        itemId: z.string().min(1),
-        receiveQty: z.number().int(), // may be negative to correct an over-receipt
-        unitCostCents: z.number().int().min(0),
-      }),
-    )
-    .min(1),
-});
+export const billCreateSchema = z
+  .object({
+    billNumber: z.string().trim().max(120).default(""),
+    billDate: dateInput.optional(),
+    dueDate: dateInput.optional().nullable(),
+    terms: z.string().trim().max(40).default(""),
+    memo: z.string().trim().max(2000).default(""),
+    // Admin only: which store the received stock lands in. Others receive into
+    // the PO's own store.
+    storeId: z.string().min(1).optional(),
+    // A vendor sometimes invoices (and wants paying) before the goods arrive —
+    // these can happen independently: record the bill now with items received
+    // later, or receive items now against a bill already recorded earlier.
+    recordBill: z.boolean().default(true),
+    receiveItems: z.boolean().default(true),
+    lines: z
+      .array(
+        z.object({
+          itemId: z.string().min(1),
+          receiveQty: z.number().int(), // may be negative to correct an over-receipt
+          unitCostCents: z.number().int().min(0),
+        }),
+      )
+      .min(1),
+  })
+  .refine((v) => v.recordBill || v.receiveItems, {
+    message: "Choose to record a bill, receive items, or both.",
+  });
 
 // An operating expense (rent, utilities, …) recorded for the P&L.
 export const expenseCreateSchema = z.object({
@@ -484,7 +493,9 @@ export const purchaseOrderUpdateSchema = z.object({
 
 // ---- Full purchase-order form (standalone entry / edit) ----
 
-const PO_STATUS = z.enum(["OPEN", "CLOSED", "SENT", "PARTIAL", "RECEIVED", "CANCELLED"]);
+const PO_STATUS = z.enum([
+  "OPEN", "CLOSED", "SENT", "NOT_RECEIVED", "PARTIAL", "RECEIVED", "CANCELLED",
+]);
 
 const poCategoryLineSchema = z.object({
   category: z.string().trim().max(200).default(""),

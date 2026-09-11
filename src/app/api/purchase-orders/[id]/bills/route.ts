@@ -45,7 +45,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
   }
 }
 
-// Receive items on this PO and record a vendor bill for them.
+// Record a bill against this PO, receive its items, or both — a vendor
+// sometimes invoices (and wants paying) before the goods actually ship, so
+// the two need to be able to happen at different times.
 export async function POST(req: NextRequest, { params }: Params) {
   try {
     const actor = await requireScopedRole("CASHIER", "MANAGER", "ADMIN");
@@ -70,7 +72,9 @@ export async function POST(req: NextRequest, { params }: Params) {
       });
       if (shipToStore) storeId = shipToStore.id;
     }
-    if (!storeId) {
+    // A store is only required when actually posting stock somewhere — a
+    // bill-only entry (invoiced before the goods ship) doesn't need one.
+    if (body.receiveItems && !storeId) {
       throw new HttpError(
         400,
         "Choose a store to receive into — this purchase order isn't tied to one.",
@@ -86,7 +90,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       })
       .filter((l) => l.receiveQty !== 0);
     if (lines.length === 0) {
-      throw new HttpError(400, "Enter a quantity to receive on at least one line.");
+      throw new HttpError(400, "Enter a quantity on at least one line.");
     }
 
     const billDate = body.billDate ? parseDateInput(body.billDate) : new Date();
@@ -95,76 +99,89 @@ export async function POST(req: NextRequest, { params }: Params) {
     // Shipping, drop-ship fee, tax, and any "other cost" expenses logged on
     // the PO are one-time charges for the whole order — fold them into the
     // first bill recorded against it so they aren't asked for again, and
-    // don't double them up on a later partial receipt.
+    // don't double them up on a later bill or receipt.
     const extraChargesCents =
       po.shippingCents + po.dropShipFeeCents + po.taxCents +
       po.expenses.reduce((s, e) => s + e.amountCents, 0);
 
     // The bill inherits the PO's vendor — make sure it's in the directory.
-    await ensureVendor(po.vendor);
+    if (body.recordBill) await ensureVendor(po.vendor);
 
     const bill = await prisma.$transaction(async (tx) => {
-      const priorBillCount = await tx.bill.count({ where: { poId: po.id } });
-      const subtotalCents = itemsCents + (priorBillCount === 0 ? extraChargesCents : 0);
-      const created = await tx.bill.create({
-        data: {
-          billNumber: body.billNumber,
-          vendor: po.vendor,
-          billDate,
-          dueDate,
-          terms: body.terms,
-          memo: body.memo,
-          subtotalCents,
-          storeId,
-          poId: po.id,
-          createdById: actor.id,
-          items: {
-            create: lines.map((l) => ({
-              nameSnapshot: l.it.nameSnapshot,
-              skuSnapshot: l.it.skuSnapshot,
-              quantity: l.receiveQty,
-              unitCostCents: l.unitCostCents,
-              lineCostCents: l.receiveQty * l.unitCostCents,
-              poItemId: l.it.id,
-              productId: l.it.productId,
-            })),
+      let created = null;
+      if (body.recordBill) {
+        const priorBillCount = await tx.bill.count({ where: { poId: po.id } });
+        const subtotalCents = itemsCents + (priorBillCount === 0 ? extraChargesCents : 0);
+        created = await tx.bill.create({
+          data: {
+            billNumber: body.billNumber,
+            vendor: po.vendor,
+            billDate,
+            dueDate,
+            terms: body.terms,
+            memo: body.memo,
+            subtotalCents,
+            storeId,
+            poId: po.id,
+            createdById: actor.id,
+            items: {
+              create: lines.map((l) => ({
+                nameSnapshot: l.it.nameSnapshot,
+                skuSnapshot: l.it.skuSnapshot,
+                quantity: l.receiveQty,
+                unitCostCents: l.unitCostCents,
+                lineCostCents: l.receiveQty * l.unitCostCents,
+                poItemId: l.it.id,
+                productId: l.it.productId,
+              })),
+            },
           },
-        },
-        include: { items: true, po: { select: { id: true, poNumber: true } } },
-      });
-
-      for (const l of lines) {
-        await tx.purchaseOrderItem.update({
-          where: { id: l.it.id },
-          data: { receivedQuantity: { increment: l.receiveQty } },
+          include: { items: true, po: { select: { id: true, poNumber: true } } },
         });
-        if (l.it.productId) {
-          await tx.storeInventory.upsert({
-            where: { productId_storeId: { productId: l.it.productId, storeId } },
-            create: { productId: l.it.productId, storeId, quantity: l.receiveQty },
-            update: { quantity: { increment: l.receiveQty } },
-          });
-          // Roll the received unit cost onto the product (latest cost wins).
-          // Negative lines are corrections — don't disturb the cost.
-          if (l.receiveQty > 0) {
-            await tx.product.update({
-              where: { id: l.it.productId },
-              data: { costCents: l.unitCostCents },
-            });
-          }
-        }
       }
 
-      const fresh = await tx.purchaseOrder.findUnique({
-        where: { id },
-        select: { status: true, items: { select: { quantity: true, receivedQuantity: true } } },
-      });
-      const items = fresh?.items ?? [];
-      const anyReceived = items.some((i) => i.receivedQuantity > 0);
-      const allReceived =
-        items.length > 0 && items.every((i) => i.receivedQuantity >= i.quantity);
-      const status = allReceived ? "RECEIVED" : anyReceived ? "PARTIAL" : (fresh?.status ?? po.status);
-      await tx.purchaseOrder.update({ where: { id }, data: { status } });
+      if (body.receiveItems) {
+        for (const l of lines) {
+          await tx.purchaseOrderItem.update({
+            where: { id: l.it.id },
+            data: { receivedQuantity: { increment: l.receiveQty } },
+          });
+          if (l.it.productId && storeId) {
+            await tx.storeInventory.upsert({
+              where: { productId_storeId: { productId: l.it.productId, storeId } },
+              create: { productId: l.it.productId, storeId, quantity: l.receiveQty },
+              update: { quantity: { increment: l.receiveQty } },
+            });
+            // Roll the received unit cost onto the product (latest cost wins).
+            // Negative lines are corrections — don't disturb the cost.
+            if (l.receiveQty > 0) {
+              await tx.product.update({
+                where: { id: l.it.productId },
+                data: { costCents: l.unitCostCents },
+              });
+            }
+          }
+        }
+
+        const fresh = await tx.purchaseOrder.findUnique({
+          where: { id },
+          select: { status: true, items: { select: { quantity: true, receivedQuantity: true } } },
+        });
+        const items = fresh?.items ?? [];
+        const anyReceived = items.some((i) => i.receivedQuantity > 0);
+        const allReceived =
+          items.length > 0 && items.every((i) => i.receivedQuantity >= i.quantity);
+        const status = allReceived ? "RECEIVED" : anyReceived ? "PARTIAL" : (fresh?.status ?? po.status);
+        await tx.purchaseOrder.update({ where: { id }, data: { status } });
+      } else if (body.recordBill) {
+        // Billed before anything shipped — nothing physically received yet,
+        // so flag it for the "Not received" tab. If some quantity already
+        // arrived (an earlier receipt), leave that further-along status alone.
+        const anyReceived = po.items.some((i) => i.receivedQuantity > 0);
+        if (!anyReceived) {
+          await tx.purchaseOrder.update({ where: { id }, data: { status: "NOT_RECEIVED" } });
+        }
+      }
 
       return created;
     });
