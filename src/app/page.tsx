@@ -92,6 +92,13 @@ function lineNetCents(l: CartLine): number {
   return Math.max(0, linePricedCents(l) - resolveLineDiscount(l));
 }
 
+/** Any store has some on hand — untracked items (services, etc.) always pass. */
+function hasStockSomewhere(p: Product): boolean {
+  if (!p.trackStock) return true;
+  if (p.storeStock && p.storeStock.length > 0) return p.storeStock.some((s) => s.quantity > 0);
+  return p.stock > 0;
+}
+
 export default function RegisterPage() {
   const router = useRouter();
   const [favorites, setFavorites] = useState<Product[]>([]);
@@ -484,21 +491,29 @@ export default function RegisterPage() {
   const isSearching = query.trim().length > 0;
 
   const filtered = useMemo(() => {
+    // Picking a category browses everything in stock somewhere, not just
+    // favorites — favorites only govern the no-category default view.
     const source = isSearching
       ? (searchHits ?? [])
-      : browseAll
+      : activeCategory || browseAll
         ? (allProducts ?? [])
         : favorites;
-    return source.filter((p) => !activeCategory || p.categoryId === activeCategory);
+    const byCategory = source.filter((p) => !activeCategory || p.categoryId === activeCategory);
+    return activeCategory ? byCategory.filter(hasStockSomewhere) : byCategory;
   }, [isSearching, searchHits, browseAll, allProducts, favorites, activeCategory]);
 
   // Categories starred to show as icon tiles on the register's home view.
   const favoriteCategories = useMemo(() => categories.filter((c) => c.favorite), [categories]);
 
-  // Just shows that category's favorite products — not the full catalog's
-  // category-chip list (that's still one tap away via "Open catalog").
+  // Picking a category (tile or chip) browses every in-stock item in it,
+  // across every store — not just favorites. Loads the full catalog on
+  // first use since favorites alone aren't enough to filter from.
+  function pickCategory(id: string | null) {
+    setActiveCategory(id);
+    if (id && !allProducts) loadAllProducts();
+  }
   function tapFavoriteCategory(id: string) {
-    setActiveCategory((cur) => (cur === id ? null : id));
+    pickCategory(activeCategory === id ? null : id);
   }
 
   // An admin has no assigned store and picks one to sell from; everyone else
@@ -1154,19 +1169,19 @@ export default function RegisterPage() {
           </div>
         )}
 
-        {/* A favorite category is showing (tile tapped, catalog not opened) —
-           just its favorite products, no category-chip list. */}
-        {activeCategory && !catalogOpen && !isSearching && (
+        {/* A category is active — every in-stock item in it, across every
+           store, not just favorites. */}
+        {activeCategory && !isSearching && (
           <div className="mb-3 flex items-center justify-between text-sm">
             <span className="text-zinc-500">
-              Favorites in{" "}
+              In stock in{" "}
               <span className="font-medium text-zinc-800">
                 {categories.find((c) => c.id === activeCategory)?.name ?? ""}
               </span>
             </span>
             <button
               type="button"
-              onClick={() => setActiveCategory(null)}
+              onClick={() => pickCategory(null)}
               className="btn-ghost text-xs"
             >
               Clear
@@ -1174,12 +1189,13 @@ export default function RegisterPage() {
           </div>
         )}
 
-        {/* Category filters only when the catalog is explicitly open — a search
-           should show its results, not a wall of category chips. */}
-        {catalogOpen && (
+        {/* The full category-chip list only when the catalog is explicitly
+           open — the register otherwise shows just the favorite categories
+           above. A search should show its results, not a wall of chips. */}
+        {catalogOpen && !isSearching && (
           <div className="mb-3 flex flex-wrap gap-1.5">
             <button
-              onClick={() => setActiveCategory(null)}
+              onClick={() => pickCategory(null)}
               className={activeCategory === null ? "btn-primary" : "btn-secondary"}
             >
               All
@@ -1187,20 +1203,18 @@ export default function RegisterPage() {
             {categories.map((c) => (
               <button
                 key={c.id}
-                onClick={() => setActiveCategory(c.id)}
+                onClick={() => pickCategory(c.id)}
                 className={activeCategory === c.id ? "btn-primary" : "btn-secondary"}
               >
                 {c.name}
               </button>
             ))}
-            {!isSearching && (
-              <button
-                onClick={toggleBrowseAll}
-                className={browseAll ? "btn-primary" : "btn-secondary"}
-              >
-                {browseAll ? "Favorites only" : "Browse all"}
-              </button>
-            )}
+            <button
+              onClick={toggleBrowseAll}
+              className={browseAll ? "btn-primary" : "btn-secondary"}
+            >
+              {browseAll ? "Favorites only" : "Browse all"}
+            </button>
           </div>
         )}
 
