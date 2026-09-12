@@ -13,6 +13,7 @@ import { CategoryIcon } from "@/components/CategoryIcon";
 import { dueDateFromTerms } from "@/lib/terms";
 import { phoneDigits, formatPhone } from "@/lib/phone";
 import { PhoneInput } from "@/components/PhoneInput";
+import { matchesSearch } from "@/lib/search";
 import type {
   Category,
   Company,
@@ -464,7 +465,11 @@ export default function RegisterPage() {
     }
   }
 
-  // Search runs against the whole catalog on the server (debounced).
+  // Search runs against the whole catalog, client-side, so it can be fuzzy
+  // (ignores spaces/punctuation — "chefbase" finds "Chef Base" — and falls
+  // back to a plural's singular — "40 lbs" finds "40 lb"), which a plain DB
+  // substring match can't do. Loads the full catalog once, then filters
+  // instantly on every keystroke.
   useEffect(() => {
     const q = query.trim();
     if (!q) {
@@ -472,21 +477,17 @@ export default function RegisterPage() {
       setSearching(false);
       return;
     }
-    setSearching(true);
-    const t = setTimeout(async () => {
-      try {
-        const r = await api<{ products: Product[] }>(
-          `/api/products?q=${encodeURIComponent(q)}&take=80${storeQs}`,
-        );
-        setSearchHits(r.products);
-      } catch {
-        setSearchHits([]);
-      } finally {
-        setSearching(false);
-      }
-    }, 250);
-    return () => clearTimeout(t);
-  }, [query, storeQs]);
+    if (!allProducts) {
+      setSearching(true);
+      loadAllProducts();
+      return;
+    }
+    // allProducts never carries description (kept lean for the register) —
+    // search covers name/SKU/barcode, which is what a model-number or name
+    // lookup needs.
+    setSearchHits(allProducts.filter((p) => matchesSearch(q, [p.name, p.sku, p.barcode])));
+    setSearching(false);
+  }, [query, allProducts, loadAllProducts]);
 
   const isSearching = query.trim().length > 0;
 
@@ -552,7 +553,12 @@ export default function RegisterPage() {
   useEffect(() => {
     if (!isAdmin) return;
     loadCatalog();
-    if (browseAll) loadAllProducts();
+    // allProducts also backs category browsing and search, not just
+    // "Browse all" — keep it in step with the newly picked store whenever
+    // it's already loaded. Deliberately not a dependency: reloading it here
+    // changes it, which would re-fire this effect in a loop.
+    if (browseAll || allProducts) loadAllProducts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, sellStoreId, loadCatalog, loadAllProducts, browseAll]);
 
   // A selected tax-exempt customer (cert not past its expiry) zeroes the tax
