@@ -133,6 +133,9 @@ export interface Product {
   trackStock: boolean;
   /** On-hand at the requesting user's store (total across stores for an admin). */
   stock: number;
+  /** Every physical store's on-hand (Website excluded) — informational only,
+   *  shown on the register next to the item. */
+  storeStock?: { storeId: string; storeName: string; quantity: number }[];
   active: boolean;
   favorite: boolean;
   vendor: string;

@@ -1237,9 +1237,16 @@ export default function RegisterPage() {
                     <span className="mt-auto text-sm font-semibold text-indigo-600">
                       {formatMoney(p.priceCents)}
                     </span>
-                    {p.trackStock && (
+                    {p.trackStock && (!p.storeStock || p.storeStock.length === 0) && (
                       <span className={`text-[11px] ${low ? "text-red-500" : "text-zinc-400"}`}>
                         {p.stock} in stock
+                      </span>
+                    )}
+                    {p.trackStock && p.storeStock && p.storeStock.length > 0 && (
+                      <span className="w-full text-[11px] text-zinc-400">
+                        {p.storeStock
+                          .map((s) => `${s.storeName.replace(/^Chef and Beyond - /, "")}: ${s.quantity}`)
+                          .join(" · ")}
                       </span>
                     )}
                   </button>
