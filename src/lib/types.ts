@@ -149,9 +149,10 @@ export interface Product {
   trackStock: boolean;
   /** On-hand at the requesting user's store (total across stores for an admin). */
   stock: number;
-  /** Present only when `stock` is 0 and another store has some — lets the
-   *  register offer selling from there instead. */
-  otherStock?: { storeId: string; storeName: string; quantity: number }[];
+  /** Every active store's on-hand for this product (present when there's more
+   *  than one store) — lets the register show and let the cashier pick which
+   *  store to sell from, never chosen automatically. */
+  storeStock?: { storeId: string; storeName: string; quantity: number }[];
   active: boolean;
   favorite: boolean;
   vendor: string;

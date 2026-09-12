@@ -91,34 +91,28 @@ export async function GET(req: NextRequest) {
         byProductStore.set(g.productId, m);
       }
     }
-    // Other stores' on-hand, for when the selling store is out — lets the
-    // register offer selling from another store's stock instead. Store names
-    // are only needed for that fallback, so skip the lookup otherwise.
-    const otherStoresById =
-      stockStoreId && rows.some((r) => r.trackStock)
-        ? new Map(
-            (await prisma.store.findMany({ where: { active: true }, select: { id: true, name: true } })).map(
-              (s) => [s.id, s.name],
-            ),
-          )
-        : null;
+    // Every active store's on-hand, so the register can show "Nashville 3 ·
+    // Clarksville 0" and let the cashier pick where to sell from — never
+    // picked automatically. Only worth the extra query when something here
+    // actually tracks stock.
+    const allStores = rows.some((r) => r.trackStock)
+      ? await prisma.store.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } })
+      : [];
 
     const products = rows.map((p) => {
       const storeMap = byProductStore.get(p.id);
       const stock = stockStoreId
         ? (storeMap?.get(stockStoreId) ?? 0)
         : [...(storeMap?.values() ?? [])].reduce((a, b) => a + b, 0);
-      const otherStock =
-        otherStoresById && stock <= 0 && p.trackStock && storeMap
-          ? [...storeMap.entries()]
-              .filter(([sid, qty]) => sid !== stockStoreId && qty > 0)
-              .map(([sid, qty]) => ({
-                storeId: sid,
-                storeName: otherStoresById.get(sid) ?? "",
-                quantity: qty,
-              }))
+      const storeStock =
+        p.trackStock && allStores.length > 1
+          ? allStores.map((s) => ({
+              storeId: s.id,
+              storeName: s.name,
+              quantity: storeMap?.get(s.id) ?? 0,
+            }))
           : [];
-      return { ...p, stock, ...(otherStock.length ? { otherStock } : {}) };
+      return { ...p, stock, ...(storeStock.length ? { storeStock } : {}) };
     });
     return ok({ products });
   } catch (err) {
