@@ -499,7 +499,12 @@ export default function RegisterPage() {
         ? (allProducts ?? [])
         : favorites;
     const byCategory = source.filter((p) => !activeCategory || p.categoryId === activeCategory);
-    return activeCategory ? byCategory.filter(hasStockSomewhere) : byCategory;
+    const inStock = activeCategory ? byCategory.filter(hasStockSomewhere) : byCategory;
+    // Search results: in-stock items first, keeping relevance order within
+    // each group (sort is stable).
+    return isSearching
+      ? [...inStock].sort((a, b) => Number(!hasStockSomewhere(a)) - Number(!hasStockSomewhere(b)))
+      : inStock;
   }, [isSearching, searchHits, browseAll, allProducts, favorites, activeCategory]);
 
   // Categories starred to show as icon tiles on the register's home view.
