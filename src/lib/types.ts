@@ -712,6 +712,28 @@ export interface SalesByVendorReport {
   };
 }
 
+export interface PurchasesByVendorReport {
+  range: { from: string; to: string };
+  scope: {
+    allStores: boolean;
+    storeName: string | null;
+    noStoreAssigned: boolean;
+  };
+  stores: { id: string; name: string }[];
+  rows: {
+    vendor: string;
+    billCount: number;
+    paidCents: number;
+    rebateBps: number;
+    rebateCents: number;
+  }[];
+  totals: {
+    billCount: number;
+    paidCents: number;
+    rebateCents: number;
+  };
+}
+
 export interface InventoryValuationItem {
   productId: string;
   name: string;
