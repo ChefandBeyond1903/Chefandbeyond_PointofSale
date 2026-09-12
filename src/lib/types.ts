@@ -54,6 +54,7 @@ export interface Vendor {
   address: string;
   notes: string;
   freightMinimumCents: number;
+  rebateBps: number;
   createdAt?: string;
   productCount?: number;
   /** Distinct products from this vendor with on-hand stock > 0 (caller's store scope). */
@@ -685,6 +686,30 @@ export interface ReportSummary {
     balanceCents: number;
     overdue: boolean;
   }[];
+}
+
+export interface SalesByVendorReport {
+  range: { from: string; to: string };
+  scope: {
+    allStores: boolean;
+    storeName: string | null;
+    noStoreAssigned: boolean;
+  };
+  stores: { id: string; name: string }[];
+  rows: {
+    vendor: string;
+    quantity: number;
+    revenueCents: number;
+    costCents: number;
+    rebateBps: number;
+    rebateCents: number;
+  }[];
+  totals: {
+    quantity: number;
+    revenueCents: number;
+    costCents: number;
+    rebateCents: number;
+  };
 }
 
 export interface InventoryValuationItem {

@@ -7,6 +7,7 @@ import { InvoiceModal } from "@/components/InvoiceModal";
 import { ReceiptModal } from "@/components/ReceiptModal";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { PnlPrintModal } from "@/components/PnlPrintModal";
+import { SalesByVendorReport } from "./SalesByVendorReport";
 import { resolvePreset, type DateRange, type DateRangePresetKey } from "@/lib/dateRange";
 import type {
   Bill,
@@ -24,6 +25,7 @@ export function ReportsView({
   isAdmin?: boolean;
   limited?: boolean;
 }) {
+  const [tab, setTab] = useState<"overview" | "vendor">("overview");
   const [range, setRange] = useState<DateRange>(() => resolvePreset("this_month"));
   const [rangeLabel, setRangeLabel] = useState("This month");
   const [rangeKey, setRangeKey] = useState<DateRangePresetKey | "custom">("this_month");
@@ -114,43 +116,71 @@ export function ReportsView({
     <div className="w-full flex-1 p-4">
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <h1 className="text-xl font-semibold">Reports</h1>
-        <span className="text-sm text-zinc-400">
-          {data?.scope.allStores ? "All stores" : (data?.scope.storeName ?? "")}
-        </span>
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          {isAdmin && data && (
-            <select
-              className="input h-8 w-auto min-w-56"
-              value={storeId}
-              onChange={(e) => setStoreId(e.target.value)}
-            >
-              <option value="">All stores (combined)</option>
-              {data.stores.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          )}
-          <DateRangePicker
-            defaultPreset="this_month"
-            onChange={(r, l, k) => {
-              setRange(r);
-              setRangeLabel(l);
-              setRangeKey(k);
-            }}
-          />
-          {!limited && (
+        {!limited && (
+          <div className="flex gap-1 rounded-md bg-zinc-100 p-1 text-sm">
             <button
-              onClick={() => setPnlPrintOpen(true)}
-              className="btn-secondary h-8 whitespace-nowrap"
+              onClick={() => setTab("overview")}
+              className={`rounded px-2.5 py-1 font-medium ${
+                tab === "overview" ? "bg-white shadow-sm" : "text-zinc-500"
+              }`}
             >
-              Print P&amp;L
+              Overview
             </button>
-          )}
-        </div>
+            <button
+              onClick={() => setTab("vendor")}
+              className={`rounded px-2.5 py-1 font-medium ${
+                tab === "vendor" ? "bg-white shadow-sm" : "text-zinc-500"
+              }`}
+            >
+              Sales by vendor
+            </button>
+          </div>
+        )}
+        {tab === "overview" && (
+          <>
+            <span className="text-sm text-zinc-400">
+              {data?.scope.allStores ? "All stores" : (data?.scope.storeName ?? "")}
+            </span>
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              {isAdmin && data && (
+                <select
+                  className="input h-8 w-auto min-w-56"
+                  value={storeId}
+                  onChange={(e) => setStoreId(e.target.value)}
+                >
+                  <option value="">All stores (combined)</option>
+                  {data.stores.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <DateRangePicker
+                defaultPreset="this_month"
+                onChange={(r, l, k) => {
+                  setRange(r);
+                  setRangeLabel(l);
+                  setRangeKey(k);
+                }}
+              />
+              {!limited && (
+                <button
+                  onClick={() => setPnlPrintOpen(true)}
+                  className="btn-secondary h-8 whitespace-nowrap"
+                >
+                  Print P&amp;L
+                </button>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
+      {tab === "vendor" ? (
+        <SalesByVendorReport isAdmin={isAdmin} />
+      ) : (
+      <>
       {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       {loading || !data ? (
         <p className="text-sm text-zinc-500">Loading…</p>
@@ -375,6 +405,8 @@ export function ReportsView({
 
           {!limited && <ProfitLoss data={data} />}
         </div>
+      )}
+      </>
       )}
 
       {openInvoiceId && (

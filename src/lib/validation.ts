@@ -200,6 +200,8 @@ export const vendorCreateSchema = z.object({
   address: z.string().trim().max(400).default(""),
   notes: z.string().trim().max(1000).default(""),
   freightMinimumCents: z.number().int().min(0).max(1_000_000_00).default(0),
+  // Rebate this vendor pays back, in basis points (250 = 2.50%).
+  rebateBps: z.number().int().min(0).max(10_000).default(0),
 });
 
 export const vendorUpdateSchema = z.object({
@@ -210,6 +212,7 @@ export const vendorUpdateSchema = z.object({
   address: z.string().trim().max(400).optional(),
   notes: z.string().trim().max(1000).optional(),
   freightMinimumCents: z.number().int().min(0).max(1_000_000_00).optional(),
+  rebateBps: z.number().int().min(0).max(10_000).optional(),
 });
 
 export const saleItemSchema = z.object({

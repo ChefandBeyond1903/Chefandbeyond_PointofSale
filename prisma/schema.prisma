@@ -148,6 +148,9 @@ model Vendor {
   // Order total (in cents) this vendor requires for free freight. 0 = none.
   // Ordering below this only warns; it never blocks the purchase order.
   freightMinimumCents Int      @default(0)
+  // Rebate this vendor pays back, in basis points (250 = 2.50%) of sales.
+  // Shown on the Sales by Vendor report.
+  rebateBps           Int      @default(0)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 }

@@ -21,6 +21,7 @@ type Draft = {
   address: string;
   notes: string;
   freightMinimumCents: number;
+  rebatePct: string;
 };
 
 const emptyDraft: Draft = {
@@ -31,6 +32,7 @@ const emptyDraft: Draft = {
   address: "",
   notes: "",
   freightMinimumCents: 0,
+  rebatePct: "",
 };
 
 export function VendorsView({ canManage = true }: { canManage?: boolean }) {
@@ -81,6 +83,7 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
       address: draft.address,
       notes: draft.notes,
       freightMinimumCents: draft.freightMinimumCents,
+      rebateBps: Math.round((parseFloat(draft.rebatePct) || 0) * 100),
     };
     try {
       if (draft.id) {
@@ -139,6 +142,7 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
               <th className="px-4 py-2.5">Email</th>
               <th className="px-4 py-2.5">Phone</th>
               <th className="px-4 py-2.5 text-right">Free-freight min.</th>
+              <th className="px-4 py-2.5 text-right">Rebate</th>
               <th className="px-4 py-2.5 text-right">In stock</th>
               <th className="px-4 py-2.5 text-right">Products</th>
               <th className="px-4 py-2.5"></th>
@@ -146,9 +150,9 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
           </thead>
           <tbody className="divide-y divide-zinc-100">
             {loading ? (
-              <LoadingRow colSpan={8} />
+              <LoadingRow colSpan={9} />
             ) : pg.total === 0 ? (
-              <EmptyRow colSpan={8}>
+              <EmptyRow colSpan={9}>
                 {vendors.length === 0
                   ? "No vendors yet. Add one to start."
                   : "No vendors match your search."}
@@ -162,6 +166,9 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
                   <td className="px-4 py-2.5 text-zinc-500">{v.phone || "—"}</td>
                   <td className="px-4 py-2.5 text-right text-zinc-500">
                     {v.freightMinimumCents > 0 ? formatMoney(v.freightMinimumCents) : "—"}
+                  </td>
+                  <td className="px-4 py-2.5 text-right text-zinc-500">
+                    {v.rebateBps > 0 ? `${(v.rebateBps / 100).toString()}%` : "—"}
                   </td>
                   <td className="px-4 py-2.5 text-right font-medium">
                     {v.inStockProductCount ?? 0}
@@ -187,6 +194,7 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
                               address: v.address,
                               notes: v.notes,
                               freightMinimumCents: v.freightMinimumCents,
+                              rebatePct: v.rebateBps ? String(v.rebateBps / 100) : "",
                             })
                           }
                           className="btn-ghost text-xs"
@@ -272,16 +280,34 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
                   onChange={(e) => setDraft({ ...draft, address: e.target.value })}
                 />
               </div>
-              <div>
-                <label className="label">Free-freight minimum</label>
-                <MoneyInput
-                  cents={draft.freightMinimumCents}
-                  onCentsChange={(c) => setDraft({ ...draft, freightMinimumCents: c })}
-                />
-                <p className="mt-0.5 text-[11px] text-zinc-400">
-                  Order total needed for free freight. Leave 0 if none — ordering below it only
-                  warns, it never blocks the PO.
-                </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Free-freight minimum</label>
+                  <MoneyInput
+                    cents={draft.freightMinimumCents}
+                    onCentsChange={(c) => setDraft({ ...draft, freightMinimumCents: c })}
+                  />
+                  <p className="mt-0.5 text-[11px] text-zinc-400">
+                    Order total needed for free freight. Leave 0 if none — ordering below it only
+                    warns, it never blocks the PO.
+                  </p>
+                </div>
+                <div>
+                  <label className="label">Rebate %</label>
+                  <input
+                    className="input"
+                    inputMode="decimal"
+                    placeholder="0"
+                    value={draft.rebatePct}
+                    onChange={(e) =>
+                      setDraft({ ...draft, rebatePct: e.target.value.replace(/[^0-9.]/g, "") })
+                    }
+                  />
+                  <p className="mt-0.5 text-[11px] text-zinc-400">
+                    Rebate this vendor pays back, e.g. 2.5 for 2.5%. Shown on Reports &gt; Sales
+                    by vendor.
+                  </p>
+                </div>
               </div>
               <div>
                 <label className="label">Notes</label>
