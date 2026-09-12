@@ -297,30 +297,6 @@ model StoreInventory {
   @@index([storeId])
 }
 
-/// A cross-store fulfillment: a sale rung at toStore drew its stock down at
-/// fromStore instead (that store was out). fromStore still needs to
-/// physically ship the item — status starts PENDING and fromStore marks it
-/// SHIPPED once sent. IDs are plain strings (no relation), matching how
-/// Product.vendor / PurchaseOrder.vendor are looked up by id elsewhere.
-model Transfer {
-  id          String    @id @default(cuid())
-  productId   String
-  productName String    @default("")
-  quantity    Int
-  fromStoreId String
-  toStoreId   String
-  saleId      String?
-  saleNumber  Int?
-  status      String    @default("PENDING") // "PENDING" | "SHIPPED"
-  shippedAt   DateTime?
-  createdAt   DateTime  @default(now())
-
-  @@index([fromStoreId])
-  @@index([toStoreId])
-  @@index([status])
-  @@index([saleId])
-}
-
 /// A sale/invoice. status:
 ///   "COMPLETED" — money collected; this is a real sale on `paidAt`.
 ///   "INVOICED"  — goods went out to a terms customer, not yet paid. It's a

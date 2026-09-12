@@ -223,10 +223,6 @@ export const saleItemSchema = z.object({
   // Manual per-unit price set at the register (up or down). Omit to use the
   // product's catalog price.
   unitPriceCents: z.number().int().min(0).max(100_000_00).optional(),
-  // Sell from another store's stock (out at the selling store) — draws that
-  // store's inventory down instead and logs a Transfer. Ignored on quotes/
-  // held sales, which don't move stock.
-  fulfillStoreId: z.string().min(1).optional(),
 });
 
 export const saleCustomerSchema = z.object({

@@ -44,7 +44,6 @@ const NAV: NavGroup[] = [
       { href: "/purchase-orders", label: "Purchase Orders", roles: ALL },
       { href: "/bills", label: "Bills", roles: STAFF_UP },
       { href: "/inventory", label: "Inventory", roles: ALL },
-      { href: "/transfers", label: "Transfers", roles: ALL },
     ],
   },
   {
@@ -104,31 +103,8 @@ export function Nav({ user }: { user: SessionUser }) {
     bills: 0,
     users: 0,
   });
-  // Transfers this store itself needs to ship — an action-needed count, not
-  // a "new since you looked" one, so it doesn't clear just by visiting.
-  const [pendingTransfers, setPendingTransfers] = useState(0);
 
   const isAdmin = user.role === "ADMIN";
-
-  const refreshPendingTransfers = useCallback(async () => {
-    try {
-      const r = await api<{ transfers: unknown[] }>("/api/transfers?status=PENDING&mine=1");
-      setPendingTransfers(r.transfers.length);
-    } catch {
-      /* non-fatal — leave the last known count */
-    }
-  }, []);
-
-  useEffect(() => {
-    refreshPendingTransfers();
-    const id = setInterval(refreshPendingTransfers, 60_000);
-    const onFocus = () => refreshPendingTransfers();
-    window.addEventListener("focus", onFocus);
-    return () => {
-      clearInterval(id);
-      window.removeEventListener("focus", onFocus);
-    };
-  }, [refreshPendingTransfers]);
 
   const refreshNewCounts = useCallback(async () => {
     if (!isAdmin) return;
@@ -226,9 +202,7 @@ export function Nav({ user }: { user: SessionUser }) {
   }
   // Hide the badge while the user is actually on that section.
   function badgeFor(href: string) {
-    if (isActive(href)) return 0;
-    if (href === "/transfers") return pendingTransfers;
-    if (!isAdmin) return 0;
+    if (!isAdmin || isActive(href)) return 0;
     const watched = WATCHED.find((w) => w.href === href);
     return watched ? newCounts[watched.key] : 0;
   }

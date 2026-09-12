@@ -67,10 +67,6 @@ interface CartLine {
   discMode: DiscMode;
   // Optional serial number(s) for a serialised item.
   serialNumber?: string;
-  // Set when this store was out and the item is being sold from another
-  // store's stock instead (deducted there automatically; see Transfers).
-  fulfillStoreId?: string;
-  fulfillStoreName?: string;
 }
 
 /** Catalog list value of the line (before any manual price change). */
@@ -621,10 +617,7 @@ export default function RegisterPage() {
     };
   }, [cart, effectiveTaxRateBps, shippingCents]);
 
-  // fulfillStore is only set when the cashier explicitly tapped a specific
-  // store's quantity — never chosen automatically. A plain tap (no store)
-  // sells from wherever the line's already assigned, or the selling store.
-  function addToCart(product: Product, fulfillStore?: { storeId: string; storeName: string }) {
+  function addToCart(product: Product) {
     setError(null);
     // Clear the search so the results grid collapses and the ticket is right
     // there — no scrolling past a long list of hits.
@@ -636,13 +629,7 @@ export default function RegisterPage() {
       const idx = cur.findIndex((l) => l.product.id === product.id);
       if (idx >= 0) {
         const next = [...cur];
-        next[idx] = {
-          ...next[idx],
-          quantity: next[idx].quantity + 1,
-          ...(fulfillStore
-            ? { fulfillStoreId: fulfillStore.storeId, fulfillStoreName: fulfillStore.storeName }
-            : {}),
-        };
+        next[idx] = { ...next[idx], quantity: next[idx].quantity + 1 };
         return next;
       }
       return [
@@ -654,8 +641,6 @@ export default function RegisterPage() {
           discountCents: 0,
           discPercent: 0,
           discMode: "AMOUNT" as const,
-          fulfillStoreId: fulfillStore?.storeId,
-          fulfillStoreName: fulfillStore?.storeName,
         },
       ];
     });
@@ -944,7 +929,6 @@ export default function RegisterPage() {
         discountCents: resolveLineDiscount(l),
         unitPriceCents: l.unitPriceCents,
         ...(l.serialNumber?.trim() ? { serialNumber: l.serialNumber.trim() } : {}),
-        ...(l.fulfillStoreId ? { fulfillStoreId: l.fulfillStoreId } : {}),
       })),
       orderDiscountCents: totals.orderDiscountResolved,
       shippingCents: totals.shipping,
@@ -1229,9 +1213,10 @@ export default function RegisterPage() {
                 const low = p.trackStock && p.stock <= 0;
                 const inCart = cart.find((l) => l.product.id === p.id)?.quantity ?? 0;
                 return (
-                  <div
+                  <button
                     key={p.id}
-                    className={`card relative flex min-w-0 flex-col items-start gap-1 p-3 transition-transform hover:-translate-y-0.5 hover:shadow-md ${
+                    onClick={() => addToCart(p)}
+                    className={`card relative flex min-w-0 flex-col items-start gap-1 p-3 text-left transition-transform hover:-translate-y-0.5 hover:shadow-md ${
                       inCart > 0 ? "ring-2 ring-green-500" : ""
                     }`}
                   >
@@ -1245,46 +1230,19 @@ export default function RegisterPage() {
                         Added ✓
                       </span>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => addToCart(p)}
-                      className="flex w-full min-w-0 flex-col items-start gap-1 text-left"
-                    >
-                      <span className="line-clamp-2 w-full break-words text-sm font-medium">
-                        {p.name}
+                    <span className="line-clamp-2 w-full break-words text-sm font-medium">
+                      {p.name}
+                    </span>
+                    <span className="w-full break-all text-xs text-zinc-400">{p.sku}</span>
+                    <span className="mt-auto text-sm font-semibold text-indigo-600">
+                      {formatMoney(p.priceCents)}
+                    </span>
+                    {p.trackStock && (
+                      <span className={`text-[11px] ${low ? "text-red-500" : "text-zinc-400"}`}>
+                        {p.stock} in stock
                       </span>
-                      <span className="w-full break-all text-xs text-zinc-400">{p.sku}</span>
-                      <span className="text-sm font-semibold text-indigo-600">
-                        {formatMoney(p.priceCents)}
-                      </span>
-                      {p.trackStock && (!p.storeStock || p.storeStock.length === 0) && (
-                        <span className={`text-[11px] ${low ? "text-red-500" : "text-zinc-400"}`}>
-                          {p.stock} in stock
-                        </span>
-                      )}
-                    </button>
-                    {p.trackStock && p.storeStock && p.storeStock.length > 0 && (
-                      <div className="mt-1 flex w-full flex-wrap gap-1">
-                        {p.storeStock.map((s) => (
-                          <button
-                            key={s.storeId}
-                            type="button"
-                            title={`Sell from ${s.storeName}`}
-                            onClick={() =>
-                              addToCart(p, { storeId: s.storeId, storeName: s.storeName })
-                            }
-                            className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                              s.quantity > 0
-                                ? "bg-zinc-100 text-zinc-600 hover:bg-indigo-100 hover:text-indigo-700"
-                                : "bg-zinc-50 text-zinc-300"
-                            }`}
-                          >
-                            {s.storeName}: {s.quantity}
-                          </button>
-                        ))}
-                      </div>
                     )}
-                  </div>
+                  </button>
                 );
               })}
               {filtered.length === 0 && (
@@ -1585,11 +1543,6 @@ export default function RegisterPage() {
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">{line.product.name}</p>
-                        {line.fulfillStoreName && (
-                          <p className="text-xs font-medium text-amber-600">
-                            Out of stock here — selling from {line.fulfillStoreName}
-                          </p>
-                        )}
                         <p className="text-xs text-zinc-400">
                           List {formatMoney(line.product.priceCents)} ea
                           {(priceChanged || lineDisc > 0) && (

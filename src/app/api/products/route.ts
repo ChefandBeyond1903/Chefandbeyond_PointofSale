@@ -72,48 +72,25 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    // On-hand per store in one grouped query. Non-admins are pinned to their
-    // own store; an admin has no assigned store and instead picks one on the
-    // register (?storeId=), falling back to every store combined when none
-    // is picked.
+    // On-hand in one grouped query. Non-admins are pinned to their own store;
+    // an admin has no assigned store and instead picks one on the register
+    // (?storeId=), falling back to every store combined when none is picked.
     const scopedStore = scopeStoreId(actor);
     const stockStoreId = scopedStore ?? storeIdParam ?? null;
-    const byProductStore = new Map<string, Map<string, number>>();
+    const stockByProduct = new Map<string, number>();
     if (rows.length) {
       const grouped = await prisma.storeInventory.groupBy({
-        by: ["productId", "storeId"],
+        by: ["productId"],
         _sum: { quantity: true },
-        where: { productId: { in: rows.map((r) => r.id) } },
+        where: {
+          productId: { in: rows.map((r) => r.id) },
+          ...(stockStoreId ? { storeId: stockStoreId } : {}),
+        },
       });
-      for (const g of grouped) {
-        const m = byProductStore.get(g.productId) ?? new Map<string, number>();
-        m.set(g.storeId, g._sum.quantity ?? 0);
-        byProductStore.set(g.productId, m);
-      }
+      for (const g of grouped) stockByProduct.set(g.productId, g._sum.quantity ?? 0);
     }
-    // Every active store's on-hand, so the register can show "Nashville 3 ·
-    // Clarksville 0" and let the cashier pick where to sell from — never
-    // picked automatically. Only worth the extra query when something here
-    // actually tracks stock.
-    const allStores = rows.some((r) => r.trackStock)
-      ? await prisma.store.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } })
-      : [];
 
-    const products = rows.map((p) => {
-      const storeMap = byProductStore.get(p.id);
-      const stock = stockStoreId
-        ? (storeMap?.get(stockStoreId) ?? 0)
-        : [...(storeMap?.values() ?? [])].reduce((a, b) => a + b, 0);
-      const storeStock =
-        p.trackStock && allStores.length > 1
-          ? allStores.map((s) => ({
-              storeId: s.id,
-              storeName: s.name,
-              quantity: storeMap?.get(s.id) ?? 0,
-            }))
-          : [];
-      return { ...p, stock, ...(storeStock.length ? { storeStock } : {}) };
-    });
+    const products = rows.map((p) => ({ ...p, stock: stockByProduct.get(p.id) ?? 0 }));
     return ok({ products });
   } catch (err) {
     return toErrorResponse(err);

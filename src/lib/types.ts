@@ -12,22 +12,6 @@ export interface SessionUser {
   storeTaxRateBps?: number | null;
 }
 
-export interface Transfer {
-  id: string;
-  productId: string;
-  productName: string;
-  quantity: number;
-  fromStoreId: string;
-  fromStoreName: string;
-  toStoreId: string;
-  toStoreName: string;
-  saleId: string | null;
-  saleNumber: number | null;
-  status: "PENDING" | "SHIPPED";
-  shippedAt: string | null;
-  createdAt: string;
-}
-
 export interface Store {
   id: string;
   name: string;
@@ -149,10 +133,6 @@ export interface Product {
   trackStock: boolean;
   /** On-hand at the requesting user's store (total across stores for an admin). */
   stock: number;
-  /** Every active store's on-hand for this product (present when there's more
-   *  than one store) — lets the register show and let the cashier pick which
-   *  store to sell from, never chosen automatically. */
-  storeStock?: { storeId: string; storeName: string; quantity: number }[];
   active: boolean;
   favorite: boolean;
   vendor: string;
