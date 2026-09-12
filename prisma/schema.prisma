@@ -584,6 +584,11 @@ model Bill {
   status        String    @default("OPEN")
   paidAt        DateTime?
   subtotalCents Int       @default(0)
+  // Whether creating this bill also received its items (bumped
+  // PurchaseOrderItem.receivedQuantity / store inventory). A "Copy to bill"
+  // entry made before the goods shipped is false — deleting or editing it
+  // must not touch receiving, unlike a normal receive-and-bill.
+  receivedItems Boolean   @default(true)
 
   storeId String?
   store   Store?         @relation(fields: [storeId], references: [id])

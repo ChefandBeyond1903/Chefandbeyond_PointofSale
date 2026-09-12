@@ -84,7 +84,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
               lineCostCents: line.quantity * line.unitCostCents,
             },
           });
-          if (deltaQty !== 0) {
+          // A "Copy to bill" entry (receivedItems: false) never bumped
+          // receiving in the first place — editing its quantity shouldn't
+          // either.
+          if (deltaQty !== 0 && current.receivedItems) {
             qtyChanged = true;
             // Keep the PO's received count and store stock in step with the fix.
             if (it.poItemId) {
@@ -137,11 +140,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         const anyReceived = items.some((i) => i.receivedQuantity > 0);
         const allReceived =
           items.length > 0 && items.every((i) => i.receivedQuantity >= i.quantity);
+        const resettable =
+          po?.status === "PARTIAL" || po?.status === "RECEIVED" || po?.status === "NOT_RECEIVED";
         const status = allReceived
           ? "RECEIVED"
           : anyReceived
             ? "PARTIAL"
-            : po?.status === "PARTIAL" || po?.status === "RECEIVED"
+            : resettable
               ? "OPEN"
               : (po?.status ?? "OPEN");
         await tx.purchaseOrder.update({ where: { id: current.poId }, data: { status } });
@@ -156,8 +161,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 }
 
-// Deleting a bill reverses its receipt: PO line receivedQuantity and store
-// inventory both move back by the billed amounts.
+// Deleting a bill reverses its receipt — PO line receivedQuantity and store
+// inventory both move back by the billed amounts — but only if creating this
+// bill actually received those items in the first place (see
+// Bill.receivedItems); a "Copy to bill" entry made before the goods shipped
+// never touched receiving, so undoing it must leave receiving alone.
 export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
     const actor = await requireScopedRole("MANAGER", "ADMIN");
@@ -171,19 +179,21 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     if (!bill) throw new HttpError(404, "Bill not found");
 
     await prisma.$transaction(async (tx) => {
-      for (const it of bill.items) {
-        if (it.poItemId) {
-          await tx.purchaseOrderItem.update({
-            where: { id: it.poItemId },
-            data: { receivedQuantity: { decrement: it.quantity } },
-          });
-        }
-        if (it.productId && bill.storeId) {
-          await tx.storeInventory.upsert({
-            where: { productId_storeId: { productId: it.productId, storeId: bill.storeId } },
-            create: { productId: it.productId, storeId: bill.storeId, quantity: -it.quantity },
-            update: { quantity: { decrement: it.quantity } },
-          });
+      if (bill.receivedItems) {
+        for (const it of bill.items) {
+          if (it.poItemId) {
+            await tx.purchaseOrderItem.update({
+              where: { id: it.poItemId },
+              data: { receivedQuantity: { decrement: it.quantity } },
+            });
+          }
+          if (it.productId && bill.storeId) {
+            await tx.storeInventory.upsert({
+              where: { productId_storeId: { productId: it.productId, storeId: bill.storeId } },
+              create: { productId: it.productId, storeId: bill.storeId, quantity: -it.quantity },
+              update: { quantity: { decrement: it.quantity } },
+            });
+          }
         }
       }
 
@@ -198,13 +208,17 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
         const anyReceived = items.some((i) => i.receivedQuantity > 0);
         const allReceived =
           items.length > 0 && items.every((i) => i.receivedQuantity >= i.quantity);
+        const resettable =
+          fresh?.status === "PARTIAL" ||
+          fresh?.status === "RECEIVED" ||
+          fresh?.status === "NOT_RECEIVED";
         const status = allReceived
           ? "RECEIVED"
           : anyReceived
             ? "PARTIAL"
-            : (fresh?.status === "PARTIAL" || fresh?.status === "RECEIVED"
-                ? "OPEN"
-                : (fresh?.status ?? "OPEN"));
+            : resettable
+              ? "OPEN"
+              : (fresh?.status ?? "OPEN");
         await tx.purchaseOrder.update({ where: { id: bill.poId }, data: { status } });
       }
     });

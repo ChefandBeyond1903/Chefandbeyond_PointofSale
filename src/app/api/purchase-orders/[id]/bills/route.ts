@@ -123,6 +123,7 @@ export async function POST(req: NextRequest, { params }: Params) {
             subtotalCents,
             storeId,
             poId: po.id,
+            receivedItems: body.receiveItems,
             createdById: actor.id,
             items: {
               create: lines.map((l) => ({
