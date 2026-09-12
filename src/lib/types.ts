@@ -12,6 +12,22 @@ export interface SessionUser {
   storeTaxRateBps?: number | null;
 }
 
+export interface Transfer {
+  id: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  fromStoreId: string;
+  fromStoreName: string;
+  toStoreId: string;
+  toStoreName: string;
+  saleId: string | null;
+  saleNumber: number | null;
+  status: "PENDING" | "SHIPPED";
+  shippedAt: string | null;
+  createdAt: string;
+}
+
 export interface Store {
   id: string;
   name: string;
@@ -133,6 +149,9 @@ export interface Product {
   trackStock: boolean;
   /** On-hand at the requesting user's store (total across stores for an admin). */
   stock: number;
+  /** Present only when `stock` is 0 and another store has some — lets the
+   *  register offer selling from there instead. */
+  otherStock?: { storeId: string; storeName: string; quantity: number }[];
   active: boolean;
   favorite: boolean;
   vendor: string;

@@ -67,6 +67,10 @@ interface CartLine {
   discMode: DiscMode;
   // Optional serial number(s) for a serialised item.
   serialNumber?: string;
+  // Set when this store was out and the item is being sold from another
+  // store's stock instead (deducted there automatically; see Transfers).
+  fulfillStoreId?: string;
+  fulfillStoreName?: string;
 }
 
 /** Catalog list value of the line (before any manual price change). */
@@ -632,6 +636,13 @@ export default function RegisterPage() {
         next[idx] = { ...next[idx], quantity: next[idx].quantity + 1 };
         return next;
       }
+      // Out of stock here but another store has it — sell from there instead
+      // (deducted there automatically; the fulfilling store sees it on the
+      // Transfers tab and ships it).
+      const fulfill =
+        product.trackStock && product.stock <= 0 && product.otherStock?.length
+          ? product.otherStock.reduce((a, b) => (b.quantity > a.quantity ? b : a))
+          : null;
       return [
         ...cur,
         {
@@ -641,6 +652,8 @@ export default function RegisterPage() {
           discountCents: 0,
           discPercent: 0,
           discMode: "AMOUNT" as const,
+          fulfillStoreId: fulfill?.storeId,
+          fulfillStoreName: fulfill?.storeName,
         },
       ];
     });
@@ -929,6 +942,7 @@ export default function RegisterPage() {
         discountCents: resolveLineDiscount(l),
         unitPriceCents: l.unitPriceCents,
         ...(l.serialNumber?.trim() ? { serialNumber: l.serialNumber.trim() } : {}),
+        ...(l.fulfillStoreId ? { fulfillStoreId: l.fulfillStoreId } : {}),
       })),
       orderDiscountCents: totals.orderDiscountResolved,
       shippingCents: totals.shipping,
@@ -1543,6 +1557,11 @@ export default function RegisterPage() {
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">{line.product.name}</p>
+                        {line.fulfillStoreName && (
+                          <p className="text-xs font-medium text-amber-600">
+                            Out of stock here — selling from {line.fulfillStoreName}
+                          </p>
+                        )}
                         <p className="text-xs text-zinc-400">
                           List {formatMoney(line.product.priceCents)} ea
                           {(priceChanged || lineDisc > 0) && (

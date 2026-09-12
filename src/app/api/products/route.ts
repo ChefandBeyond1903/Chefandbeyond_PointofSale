@@ -72,25 +72,54 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    // On-hand in one grouped query. Non-admins are pinned to their own store;
-    // an admin has no assigned store and instead picks one on the register
-    // (?storeId=), falling back to every store combined when none is picked.
+    // On-hand per store in one grouped query. Non-admins are pinned to their
+    // own store; an admin has no assigned store and instead picks one on the
+    // register (?storeId=), falling back to every store combined when none
+    // is picked.
     const scopedStore = scopeStoreId(actor);
     const stockStoreId = scopedStore ?? storeIdParam ?? null;
-    const stockByProduct = new Map<string, number>();
+    const byProductStore = new Map<string, Map<string, number>>();
     if (rows.length) {
       const grouped = await prisma.storeInventory.groupBy({
-        by: ["productId"],
+        by: ["productId", "storeId"],
         _sum: { quantity: true },
-        where: {
-          productId: { in: rows.map((r) => r.id) },
-          ...(stockStoreId ? { storeId: stockStoreId } : {}),
-        },
+        where: { productId: { in: rows.map((r) => r.id) } },
       });
-      for (const g of grouped) stockByProduct.set(g.productId, g._sum.quantity ?? 0);
+      for (const g of grouped) {
+        const m = byProductStore.get(g.productId) ?? new Map<string, number>();
+        m.set(g.storeId, g._sum.quantity ?? 0);
+        byProductStore.set(g.productId, m);
+      }
     }
+    // Other stores' on-hand, for when the selling store is out — lets the
+    // register offer selling from another store's stock instead. Store names
+    // are only needed for that fallback, so skip the lookup otherwise.
+    const otherStoresById =
+      stockStoreId && rows.some((r) => r.trackStock)
+        ? new Map(
+            (await prisma.store.findMany({ where: { active: true }, select: { id: true, name: true } })).map(
+              (s) => [s.id, s.name],
+            ),
+          )
+        : null;
 
-    const products = rows.map((p) => ({ ...p, stock: stockByProduct.get(p.id) ?? 0 }));
+    const products = rows.map((p) => {
+      const storeMap = byProductStore.get(p.id);
+      const stock = stockStoreId
+        ? (storeMap?.get(stockStoreId) ?? 0)
+        : [...(storeMap?.values() ?? [])].reduce((a, b) => a + b, 0);
+      const otherStock =
+        otherStoresById && stock <= 0 && p.trackStock && storeMap
+          ? [...storeMap.entries()]
+              .filter(([sid, qty]) => sid !== stockStoreId && qty > 0)
+              .map(([sid, qty]) => ({
+                storeId: sid,
+                storeName: otherStoresById.get(sid) ?? "",
+                quantity: qty,
+              }))
+          : [];
+      return { ...p, stock, ...(otherStock.length ? { otherStock } : {}) };
+    });
     return ok({ products });
   } catch (err) {
     return toErrorResponse(err);

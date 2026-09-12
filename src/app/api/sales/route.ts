@@ -150,7 +150,13 @@ export async function POST(req: NextRequest) {
     // Merge duplicate product lines defensively.
     const merged = new Map<
       string,
-      { quantity: number; discountCents: number; unitPriceCents?: number; serialNumber: string }
+      {
+        quantity: number;
+        discountCents: number;
+        unitPriceCents?: number;
+        serialNumber: string;
+        fulfillStoreId?: string;
+      }
     >();
     for (const item of body.items) {
       const prev = merged.get(item.productId);
@@ -158,6 +164,7 @@ export async function POST(req: NextRequest) {
         prev.quantity += item.quantity;
         prev.discountCents += item.discountCents;
         if (item.unitPriceCents !== undefined) prev.unitPriceCents = item.unitPriceCents;
+        if (item.fulfillStoreId !== undefined) prev.fulfillStoreId = item.fulfillStoreId;
         if (item.serialNumber) {
           prev.serialNumber = prev.serialNumber
             ? `${prev.serialNumber}, ${item.serialNumber}`
@@ -169,6 +176,7 @@ export async function POST(req: NextRequest) {
           discountCents: item.discountCents,
           unitPriceCents: item.unitPriceCents,
           serialNumber: item.serialNumber ?? "",
+          fulfillStoreId: item.fulfillStoreId,
         });
       }
     }
@@ -177,6 +185,21 @@ export async function POST(req: NextRequest) {
     const products = await prisma.product.findMany({ where: { id: { in: productIds } } });
     if (products.length !== productIds.length) {
       throw new HttpError(400, "One or more products no longer exist");
+    }
+
+    // A line sold from another store's stock (that store was out) — validate
+    // the chosen store is real before touching any inventory.
+    const fulfillStoreIds = [
+      ...new Set([...merged.values()].map((l) => l.fulfillStoreId).filter((id): id is string => !!id)),
+    ];
+    if (fulfillStoreIds.length > 0) {
+      const validStores = await prisma.store.findMany({
+        where: { id: { in: fulfillStoreIds }, active: true },
+        select: { id: true },
+      });
+      if (validStores.length !== fulfillStoreIds.length) {
+        throw new HttpError(400, "One of the chosen fulfillment stores doesn't exist.");
+      }
     }
 
     // A product with no cost can't be sold — the margin would be unknowable.
@@ -476,16 +499,34 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      // Draw stock down from the selling store's inventory (may go negative).
+      // Draw stock down from the selling store's inventory (may go negative)
+      // — or, when the cashier chose to fulfill from another store that had
+      // it in stock, from that store instead, logging a Transfer so the
+      // fulfilling store knows to ship it.
       if (storeId) {
         for (const p of products) {
           if (!p.trackStock) continue;
           const line = merged.get(p.id)!;
+          const fromStoreId: string =
+            line.fulfillStoreId && line.fulfillStoreId !== storeId ? line.fulfillStoreId : storeId;
           await tx.storeInventory.upsert({
-            where: { productId_storeId: { productId: p.id, storeId } },
-            create: { productId: p.id, storeId, quantity: -line.quantity },
+            where: { productId_storeId: { productId: p.id, storeId: fromStoreId } },
+            create: { productId: p.id, storeId: fromStoreId, quantity: -line.quantity },
             update: { quantity: { decrement: line.quantity } },
           });
+          if (fromStoreId !== storeId) {
+            await tx.transfer.create({
+              data: {
+                productId: p.id,
+                productName: p.name,
+                quantity: line.quantity,
+                fromStoreId,
+                toStoreId: storeId,
+                saleId: created.id,
+                saleNumber: number,
+              },
+            });
+          }
         }
       }
 
