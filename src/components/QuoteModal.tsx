@@ -5,8 +5,20 @@ import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney, formatBps } from "@/lib/money";
 import { InvoiceModal } from "@/components/InvoiceModal";
+import { QuoteReceiptModal } from "@/components/QuoteReceiptModal";
 import { QuoteStatusPill } from "@/components/QuoteStatusPill";
+import { MoneyInput } from "@/components/MoneyInput";
 import type { QuoteDetail } from "@/lib/types";
+
+type ProductLite = { id: string; name: string; sku: string; priceCents: number };
+type EditLine = {
+  productId: string;
+  name: string;
+  sku: string;
+  quantity: number;
+  unitPriceCents: number;
+  discountCents: number;
+};
 
 /**
  * Shows one quote and its status actions. Approve/reject are recorded here;
@@ -31,6 +43,16 @@ export function QuoteModal({
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [viewSaleId, setViewSaleId] = useState<string | null>(null);
+  const [printing, setPrinting] = useState(false);
+
+  // Editing the quote's note / line items (swap a product, change qty/price).
+  const [editOpen, setEditOpen] = useState(false);
+  const [editBusy, setEditBusy] = useState(false);
+  const [editNote, setEditNote] = useState("");
+  const [products, setProducts] = useState<ProductLite[]>([]);
+  const [editItems, setEditItems] = useState<EditLine[]>([]);
+  const [itemsTouched, setItemsTouched] = useState(false);
+  const [itemMenuIdx, setItemMenuIdx] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -75,6 +97,112 @@ export function QuoteModal({
       setErr(e instanceof ApiError ? e.message : "Could not delete the quote");
     } finally {
       setBusy(false);
+    }
+  }
+
+  function openEdit() {
+    if (!detail) return;
+    setEditNote(detail.quote.note ?? "");
+    setEditItems(
+      detail.quote.items.map((it) => ({
+        productId: it.productId,
+        name: it.nameSnapshot,
+        sku: it.skuSnapshot,
+        quantity: it.quantity,
+        unitPriceCents: it.unitPriceCents,
+        discountCents: it.discountCents,
+      })),
+    );
+    setItemsTouched(false);
+    setItemMenuIdx(null);
+    if (products.length === 0) {
+      api<{ products: ProductLite[] }>("/api/products?take=5000")
+        .then((r) => setProducts(r.products))
+        .catch(() => {});
+    }
+    setEditOpen(true);
+  }
+
+  function itemMatches(text: string): ProductLite[] {
+    const terms = text.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (!terms.length) return [];
+    return products
+      .filter((p) => {
+        const hay = `${p.name} ${p.sku}`.toLowerCase();
+        return terms.every((t) => hay.includes(t));
+      })
+      .slice(0, 30);
+  }
+
+  function updateItemText(idx: number, text: string) {
+    setItemsTouched(true);
+    setEditItems((cur) => cur.map((l, i) => (i === idx ? { ...l, name: text, productId: "" } : l)));
+  }
+
+  function replaceItemProduct(idx: number, p: ProductLite) {
+    setItemsTouched(true);
+    setEditItems((cur) =>
+      cur.map((l, i) =>
+        i === idx ? { ...l, productId: p.id, name: p.name, sku: p.sku, unitPriceCents: p.priceCents } : l,
+      ),
+    );
+    setItemMenuIdx(null);
+  }
+
+  function setItemField<K extends "quantity" | "unitPriceCents">(
+    idx: number,
+    field: K,
+    value: EditLine[K],
+  ) {
+    setItemsTouched(true);
+    setEditItems((cur) => cur.map((l, i) => (i === idx ? { ...l, [field]: value } : l)));
+  }
+
+  function removeItem(idx: number) {
+    setItemsTouched(true);
+    setEditItems((cur) => cur.filter((_, i) => i !== idx));
+  }
+
+  function addBlankItem() {
+    setItemsTouched(true);
+    setEditItems((cur) => [
+      ...cur,
+      { productId: "", name: "", sku: "", quantity: 1, unitPriceCents: 0, discountCents: 0 },
+    ]);
+    setItemMenuIdx(editItems.length);
+  }
+
+  async function saveEdit() {
+    if (itemsTouched) {
+      if (editItems.length === 0) {
+        setErr("A quote needs at least one item.");
+        return;
+      }
+      if (editItems.some((l) => !l.productId)) {
+        setErr("Pick a product from the list for every item.");
+        return;
+      }
+    }
+    setEditBusy(true);
+    setErr(null);
+    try {
+      const payload: Record<string, unknown> = { note: editNote };
+      if (itemsTouched) {
+        payload.items = editItems.map((l) => ({
+          productId: l.productId,
+          quantity: l.quantity,
+          unitPriceCents: l.unitPriceCents,
+          discountCents: l.discountCents,
+        }));
+      }
+      await api(`/api/quotes/${quoteId}`, { method: "PATCH", body: JSON.stringify(payload) });
+      setEditOpen(false);
+      await load();
+      onChanged?.();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Could not save the quote");
+    } finally {
+      setEditBusy(false);
     }
   }
 
@@ -125,6 +253,17 @@ export function QuoteModal({
                 ) : null}
               </div>
               <div className="flex items-center gap-2">
+                {canManage && quote.status !== "CONVERTED" && (
+                  <button onClick={openEdit} className="btn-ghost px-3 py-1 text-sm">
+                    Edit
+                  </button>
+                )}
+                <button
+                  onClick={() => setPrinting(true)}
+                  className="btn-secondary px-3 py-1 text-sm"
+                >
+                  Print / Save as PDF
+                </button>
                 {isAdmin && quote.status !== "CONVERTED" && (
                   <button
                     onClick={deleteQuote}
@@ -141,6 +280,112 @@ export function QuoteModal({
             </div>
 
             {err && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{err}</p>}
+
+            {editOpen && (
+              <div className="mb-4 rounded-md border border-zinc-300 bg-zinc-50 p-3">
+                <p className="mb-2 text-sm font-medium">Edit quote</p>
+
+                <div className="space-y-2">
+                  {editItems.map((it, idx) => (
+                    <div key={idx} className="rounded-md border border-zinc-200 bg-white p-2">
+                      <div className="relative">
+                        <input
+                          className="input h-8"
+                          placeholder="Name or model no."
+                          value={it.name}
+                          onChange={(e) => updateItemText(idx, e.target.value)}
+                          onFocus={() => setItemMenuIdx(idx)}
+                          onBlur={() =>
+                            setTimeout(
+                              () => setItemMenuIdx((cur) => (cur === idx ? null : cur)),
+                              150,
+                            )
+                          }
+                        />
+                        {itemMenuIdx === idx && itemMatches(it.name).length > 0 && (
+                          <ul className="absolute z-40 mt-1 max-h-48 w-full overflow-auto rounded-md border border-zinc-200 bg-white text-sm shadow-lg">
+                            {itemMatches(it.name).map((p) => (
+                              <li key={p.id}>
+                                <button
+                                  type="button"
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    replaceItemProduct(idx, p);
+                                  }}
+                                  className="block w-full px-3 py-1.5 text-left hover:bg-indigo-50"
+                                >
+                                  <span className="font-medium">{p.name}</span>
+                                  <span className="ml-2 text-xs text-zinc-400">{p.sku}</span>
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                      <div className="mt-1.5 flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          min={1}
+                          className="input h-8 w-16 text-right"
+                          value={it.quantity}
+                          onChange={(e) =>
+                            setItemField(idx, "quantity", Math.max(1, parseInt(e.target.value, 10) || 1))
+                          }
+                        />
+                        <MoneyInput
+                          cents={it.unitPriceCents}
+                          onCentsChange={(c) => setItemField(idx, "unitPriceCents", c)}
+                          className="input h-8 w-24 text-right"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeItem(idx)}
+                          className="btn-ghost ml-auto h-8 px-2 text-xs text-red-500"
+                          title="Remove this item"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      {!it.productId && it.name && (
+                        <p className="mt-1 text-[11px] text-amber-600">
+                          Pick a match from the list above.
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <button type="button" onClick={addBlankItem} className="btn-ghost mt-2 h-8 text-xs">
+                  + Add item
+                </button>
+                <p className="mt-1 text-[11px] text-zinc-400">
+                  No item may go below its minimum resale price. Unlike an invoice, a quote may
+                  include a product with no cost on file yet.
+                </p>
+
+                <textarea
+                  className="input mt-3"
+                  rows={2}
+                  placeholder="Note (prints on the quote)"
+                  value={editNote}
+                  onChange={(e) => setEditNote(e.target.value)}
+                />
+
+                <div className="mt-2 flex gap-2">
+                  <button onClick={() => setEditOpen(false)} className="btn-ghost h-8 text-xs">
+                    Cancel
+                  </button>
+                  <button onClick={saveEdit} disabled={editBusy} className="btn-primary h-8 text-xs">
+                    {editBusy ? "Saving…" : "Save"}
+                  </button>
+                </div>
+                {quote.status === "APPROVED" && (
+                  <p className="mt-2 text-[11px] text-amber-700">
+                    Saving item changes moves this quote back to Open — it&apos;ll need approving
+                    again.
+                  </p>
+                )}
+              </div>
+            )}
 
             {quote.note ? (
               <p className="mb-3 whitespace-pre-line rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
@@ -290,6 +535,10 @@ export function QuoteModal({
           canManage={canManage}
           isAdmin={isAdmin}
         />
+      )}
+
+      {printing && quote && (
+        <QuoteReceiptModal quote={quote} onClose={() => setPrinting(false)} />
       )}
     </div>
   );

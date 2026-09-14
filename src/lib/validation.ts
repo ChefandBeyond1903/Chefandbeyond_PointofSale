@@ -318,6 +318,15 @@ export const quoteStatusSchema = z.object({
   convertedSaleId: z.string().min(1).optional(),
 });
 
+// Edit an open/approved/rejected quote's note and/or line items (swap a
+// product, change quantity/price). Omit items to leave them untouched — same
+// shape as saleEditSchema's item editing. Bill-to isn't editable here; a
+// wrong customer means starting a new quote.
+export const quoteEditSchema = z.object({
+  note: z.string().trim().max(2000).optional(),
+  items: z.array(saleItemSchema).min(1).optional(),
+});
+
 export const salePaymentSchema = z.object({
   paymentMethod: paymentMethodSchema,
   // The customer's check number, when paymentMethod is CHECK.

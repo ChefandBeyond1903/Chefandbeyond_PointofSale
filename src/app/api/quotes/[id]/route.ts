@@ -2,7 +2,9 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { HttpError } from "@/lib/auth";
 import { requireScopedUser, requireScopedRole, scopeStoreId } from "@/lib/scope";
-import { quoteStatusSchema } from "@/lib/validation";
+import { quoteStatusSchema, quoteEditSchema } from "@/lib/validation";
+import { computeSale, type PricedInput } from "@/lib/sale";
+import { formatMoney } from "@/lib/money";
 import { ok, toErrorResponse } from "@/lib/api";
 
 type Params = { params: Promise<{ id: string }> };
@@ -45,8 +47,11 @@ export async function GET(_req: NextRequest, { params }: Params) {
   }
 }
 
-// Approve / reject / reopen a quote, or — set internally by the register once
-// the resulting sale is created — mark it converted.
+// Two things happen through this PATCH:
+//  - a body with `status` approves/rejects/reopens the quote, or — set
+//    internally by the register once the resulting sale is created — marks
+//    it converted;
+//  - anything else edits the quote's note and/or line items.
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const actor = await requireScopedUser();
@@ -56,7 +61,133 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const scoped = scopeStoreId(actor);
     if (scoped && quote.storeId !== scoped) throw new HttpError(404, "Quote not found");
 
-    const body = quoteStatusSchema.parse(await req.json());
+    const raw = await req.json();
+    if (!raw || typeof raw !== "object" || !("status" in raw)) {
+      // --- edit: note and/or line items ---
+      if (quote.status === "CONVERTED") {
+        throw new HttpError(400, "This quote has already been converted to an invoice.");
+      }
+      const fields = quoteEditSchema.parse(raw);
+      const data: Record<string, unknown> = {};
+      if (fields.note !== undefined) data.note = fields.note;
+
+      if (fields.items) {
+        // Merge duplicate product lines defensively, same as creating a quote.
+        const merged = new Map<
+          string,
+          { quantity: number; discountCents: number; unitPriceCents?: number }
+        >();
+        for (const item of fields.items) {
+          const prev = merged.get(item.productId);
+          if (prev) {
+            prev.quantity += item.quantity;
+            prev.discountCents += item.discountCents;
+            if (item.unitPriceCents !== undefined) prev.unitPriceCents = item.unitPriceCents;
+          } else {
+            merged.set(item.productId, {
+              quantity: item.quantity,
+              discountCents: item.discountCents,
+              unitPriceCents: item.unitPriceCents,
+            });
+          }
+        }
+
+        const productIds = [...merged.keys()];
+        const products = await prisma.product.findMany({ where: { id: { in: productIds } } });
+        if (products.length !== productIds.length) {
+          throw new HttpError(400, "One or more products no longer exist");
+        }
+
+        const priced: PricedInput[] = [];
+        let listSubtotalCents = 0;
+        for (const p of products) {
+          const line = merged.get(p.id)!;
+          if (!p.active) throw new HttpError(400, `"${p.name}" is not available for sale`);
+          listSubtotalCents += p.priceCents * line.quantity;
+          priced.push({
+            productId: p.id,
+            name: p.name,
+            unitPriceCents: line.unitPriceCents ?? p.priceCents,
+            quantity: line.quantity,
+            lineDiscountCents: line.discountCents,
+          });
+        }
+
+        // Tax rate: re-derive from the store (and any tax-exempt customer),
+        // same estimate logic as creating the quote. No extra order discount
+        // here — each line already carries whatever discount it had.
+        const store = quote.storeId
+          ? await prisma.store.findUnique({ where: { id: quote.storeId } })
+          : null;
+        let taxRateBps = store?.taxRateBps ?? 0;
+        if (quote.customerId) {
+          const c = await prisma.customer.findUnique({
+            where: { id: quote.customerId },
+            select: { taxExempt: true, taxExemptExpiresAt: true },
+          });
+          if (c) {
+            const notExpired = !c.taxExemptExpiresAt || c.taxExemptExpiresAt >= new Date();
+            if (c.taxExempt && notExpired) taxRateBps = 0;
+          }
+        }
+
+        const computed = computeSale(priced, 0, taxRateBps, quote.shippingCents);
+
+        // UMRP floor — same hard stop as creating a quote.
+        const umrpById = new Map(products.map((p) => [p.id, p.umrpCents]));
+        for (const l of computed.lines) {
+          const umrp = umrpById.get(l.productId) ?? 0;
+          if (umrp <= 0) continue;
+          const netCents = l.unitPriceCents * l.quantity - l.discountCents;
+          if (netCents < umrp * l.quantity) {
+            const eachCents = Math.floor(netCents / l.quantity);
+            throw new HttpError(
+              400,
+              `"${l.nameSnapshot}" can't be quoted below its minimum price of ${formatMoney(umrp)} ` +
+                `each (this quote works out to ${formatMoney(eachCents)}). Reduce the discount.`,
+            );
+          }
+        }
+
+        const skuById = new Map(products.map((p) => [p.id, p.sku]));
+        data.subtotalCents = computed.subtotalCents;
+        data.listSubtotalCents = listSubtotalCents;
+        data.discountCents = computed.discountCents;
+        data.taxCents = computed.taxCents;
+        data.taxRateBps = computed.taxRateBps;
+        data.totalCents = computed.totalCents;
+        data.items = {
+          deleteMany: {},
+          create: computed.lines.map((l) => ({
+            productId: l.productId,
+            nameSnapshot: l.nameSnapshot,
+            skuSnapshot: skuById.get(l.productId) ?? "",
+            unitPriceCents: l.unitPriceCents,
+            quantity: l.quantity,
+            discountCents: l.discountCents,
+            taxRateBps: l.taxRateBps,
+            lineTotalCents: l.lineTotalCents,
+          })),
+        };
+        // A price/item change invalidates a prior approval.
+        if (quote.status === "APPROVED") data.status = "OPEN";
+      }
+
+      const updated = await prisma.quote.update({
+        where: { id },
+        data,
+        include: {
+          items: true,
+          customer: { select: { id: true, name: true } },
+          createdBy: { select: { id: true, name: true } },
+          convertedSale: { select: { id: true, number: true, status: true } },
+        },
+      });
+      return ok({ quote: updated });
+    }
+
+    // --- status change: approve / reject / reopen / convert ---
+    const body = quoteStatusSchema.parse(raw);
 
     if (quote.status === "CONVERTED") {
       throw new HttpError(400, "This quote has already been converted to an invoice.");
