@@ -8,7 +8,8 @@ import { InvoiceModal } from "@/components/InvoiceModal";
 import { QuoteReceiptModal } from "@/components/QuoteReceiptModal";
 import { QuoteStatusPill } from "@/components/QuoteStatusPill";
 import { MoneyInput } from "@/components/MoneyInput";
-import type { QuoteDetail } from "@/lib/types";
+import { phoneDigits, formatPhone } from "@/lib/phone";
+import type { Customer, QuoteDetail } from "@/lib/types";
 
 type ProductLite = { id: string; name: string; sku: string; priceCents: number };
 type EditLine = {
@@ -53,6 +54,19 @@ export function QuoteModal({
   const [editItems, setEditItems] = useState<EditLine[]>([]);
   const [itemsTouched, setItemsTouched] = useState(false);
   const [itemMenuIdx, setItemMenuIdx] = useState<number | null>(null);
+
+  // Bill-to editing: search an existing customer, or type a new one.
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [custId, setCustId] = useState<string | null>(null);
+  const [custName, setCustName] = useState("");
+  const [custEmail, setCustEmail] = useState("");
+  const [custPhone, setCustPhone] = useState("");
+  const [custAddress, setCustAddress] = useState("");
+  const [custCompany, setCustCompany] = useState("");
+  const [custLocationId, setCustLocationId] = useState("");
+  const [custOpen, setCustOpen] = useState(false);
+  const [custMenuOpen, setCustMenuOpen] = useState(false);
+  const [custTouched, setCustTouched] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -102,9 +116,10 @@ export function QuoteModal({
 
   function openEdit() {
     if (!detail) return;
-    setEditNote(detail.quote.note ?? "");
+    const q = detail.quote;
+    setEditNote(q.note ?? "");
     setEditItems(
-      detail.quote.items.map((it) => ({
+      q.items.map((it) => ({
         productId: it.productId,
         name: it.nameSnapshot,
         sku: it.skuSnapshot,
@@ -120,8 +135,112 @@ export function QuoteModal({
         .then((r) => setProducts(r.products))
         .catch(() => {});
     }
+
+    // Seed the bill-to from the quote's current snapshot.
+    setCustId(q.customerId ?? null);
+    setCustName(q.customerNameSnapshot ?? "");
+    setCustEmail(q.customerEmailSnapshot ?? "");
+    setCustPhone(formatPhone(q.customerPhoneSnapshot ?? ""));
+    setCustAddress(q.customerAddressSnapshot ?? "");
+    setCustCompany(q.customerCompanySnapshot ?? "");
+    setCustLocationId(""); // resolved once the directory loads, below
+    setCustOpen(false);
+    setCustMenuOpen(false);
+    setCustTouched(false);
+    if (customers.length === 0) {
+      api<{ customers: Customer[] }>("/api/customers")
+        .then((r) => setCustomers(r.customers))
+        .catch(() => {});
+    }
+
     setEditOpen(true);
   }
+
+  // Once the directory is in, resolve the quote's saved location label back
+  // to a location id so the select shows the right one.
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    if (!editOpen || !detail || custTouched || !custId || customers.length === 0) return;
+    const label = detail.quote.customerLocationSnapshot;
+    const c = customers.find((x) => x.id === custId);
+    if (!label || !c?.locations?.length) return;
+    const loc = c.locations.find((l) => l.label === label);
+    setCustLocationId(loc?.id ?? "MAIN");
+    /* eslint-enable react-hooks/set-state-in-effect */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editOpen, customers, custId]);
+
+  function pickCustomer(name: string) {
+    setCustTouched(true);
+    setCustName(name);
+    setCustLocationId("");
+    const match = customers.find((c) => c.name.toLowerCase() === name.trim().toLowerCase());
+    if (match) {
+      setCustId(match.id);
+      setCustEmail(match.email);
+      setCustPhone(formatPhone(match.phone));
+      setCustAddress(match.address);
+      setCustCompany(match.company);
+    } else {
+      setCustId(null);
+    }
+  }
+
+  const custMatches = (() => {
+    const q = custName.trim().toLowerCase();
+    if (!q || custId) return [];
+    const qd = phoneDigits(q);
+    return customers
+      .filter(
+        (c) =>
+          [c.name, c.company, c.phone, c.email, c.address].some((v) =>
+            (v ?? "").toLowerCase().includes(q),
+          ) || (qd.length >= 2 && phoneDigits(c.phone).includes(qd)),
+      )
+      .slice(0, 8);
+  })();
+
+  function selectCustomer(c: Customer) {
+    setCustTouched(true);
+    setCustName(c.name);
+    setCustId(c.id);
+    setCustEmail(c.email);
+    setCustPhone(formatPhone(c.phone));
+    setCustAddress(c.address);
+    setCustCompany(c.company);
+    setCustLocationId("");
+    setCustMenuOpen(false);
+  }
+
+  function pickLocation(locId: string) {
+    setCustTouched(true);
+    setCustLocationId(locId);
+    const c = customers.find((x) => x.id === custId);
+    const loc = c?.locations?.find((l) => l.id === locId);
+    if (loc) {
+      if (loc.address) setCustAddress(loc.address);
+      if (loc.phone) setCustPhone(formatPhone(loc.phone));
+      if (loc.email) setCustEmail(loc.email);
+    } else if (c) {
+      setCustAddress(c.address);
+      setCustPhone(formatPhone(c.phone));
+      setCustEmail(c.email);
+    }
+  }
+
+  function clearCustomer() {
+    setCustTouched(true);
+    setCustId(null);
+    setCustName("");
+    setCustEmail("");
+    setCustPhone("");
+    setCustAddress("");
+    setCustCompany("");
+    setCustLocationId("");
+    setCustOpen(false);
+  }
+
+  const selectedCustomer = custId ? (customers.find((c) => c.id === custId) ?? null) : null;
 
   function itemMatches(text: string): ProductLite[] {
     const terms = text.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -194,6 +313,24 @@ export function QuoteModal({
           unitPriceCents: l.unitPriceCents,
           discountCents: l.discountCents,
         }));
+      }
+      if (custTouched) {
+        if (custId) {
+          payload.customerId = custId;
+          if (custLocationId && custLocationId !== "MAIN") {
+            payload.customerLocationId = custLocationId;
+          }
+        } else if (custName.trim()) {
+          payload.customer = {
+            name: custName.trim(),
+            email: custEmail.trim(),
+            phone: custPhone.trim(),
+            address: custAddress.trim(),
+            company: custCompany.trim(),
+          };
+        } else {
+          payload.customerId = null;
+        }
       }
       await api(`/api/quotes/${quoteId}`, { method: "PATCH", body: JSON.stringify(payload) });
       setEditOpen(false);
@@ -284,6 +421,135 @@ export function QuoteModal({
             {editOpen && (
               <div className="mb-4 rounded-md border border-zinc-300 bg-zinc-50 p-3">
                 <p className="mb-2 text-sm font-medium">Edit quote</p>
+
+                <p className="mb-1.5 text-xs font-medium text-zinc-500">Customer</p>
+                <div className="mb-3 rounded-md border border-zinc-200 bg-white p-2">
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      {selectedCustomer ? (
+                        <div className="flex h-8 w-full items-center overflow-hidden rounded-md border border-zinc-200 bg-zinc-50 px-3 text-sm">
+                          <span className="truncate font-medium">
+                            {selectedCustomer.company || selectedCustomer.name}
+                          </span>
+                          {selectedCustomer.company && selectedCustomer.name && (
+                            <span className="ml-1.5 truncate text-xs text-zinc-400">
+                              · {selectedCustomer.name}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <input
+                          className="input h-8 w-full"
+                          placeholder="Search customer, or type a new one…"
+                          value={custName}
+                          onChange={(e) => {
+                            pickCustomer(e.target.value);
+                            setCustMenuOpen(true);
+                          }}
+                          onFocus={() => setCustMenuOpen(true)}
+                          onBlur={() => setTimeout(() => setCustMenuOpen(false), 150)}
+                        />
+                      )}
+                      {custMenuOpen && custMatches.length > 0 && (
+                        <ul className="absolute z-40 mt-1 max-h-60 w-full overflow-auto rounded-md border border-zinc-200 bg-white text-sm shadow-lg">
+                          {custMatches.map((c) => (
+                            <li key={c.id}>
+                              <button
+                                type="button"
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  selectCustomer(c);
+                                }}
+                                className="block w-full px-3 py-1.5 text-left hover:bg-indigo-50"
+                              >
+                                <span className="font-medium">{c.company || c.name}</span>
+                                {c.company && c.name && (
+                                  <span className="text-zinc-400"> · {c.name}</span>
+                                )}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                    {custName ? (
+                      <button onClick={clearCustomer} className="btn-ghost px-2 py-0.5 text-xs">
+                        ✕
+                      </button>
+                    ) : null}
+                    <button
+                      onClick={() => setCustOpen((v) => !v)}
+                      className="btn-ghost whitespace-nowrap px-2 py-0.5 text-xs"
+                    >
+                      {custOpen ? "Hide" : "Details"}
+                    </button>
+                  </div>
+
+                  {!!selectedCustomer?.locations?.length && (
+                    <select
+                      className="input mt-2 h-8 text-sm"
+                      value={custLocationId}
+                      onChange={(e) => pickLocation(e.target.value)}
+                      aria-label="Ship-to location"
+                    >
+                      <option value="MAIN">
+                        Main — {selectedCustomer.address || "no address on file"}
+                      </option>
+                      {selectedCustomer.locations.map((l) => (
+                        <option key={l.id} value={l.id}>
+                          {l.label}
+                          {l.address ? ` — ${l.address}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
+                  {custOpen && (
+                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                      <input
+                        className="input h-8"
+                        placeholder="Company"
+                        value={custCompany}
+                        onChange={(e) => {
+                          setCustTouched(true);
+                          setCustCompany(e.target.value);
+                        }}
+                      />
+                      <input
+                        className="input h-8"
+                        placeholder="Email"
+                        value={custEmail}
+                        onChange={(e) => {
+                          setCustTouched(true);
+                          setCustEmail(e.target.value);
+                        }}
+                      />
+                      <input
+                        className="input h-8"
+                        placeholder="Phone"
+                        value={custPhone}
+                        onChange={(e) => {
+                          setCustTouched(true);
+                          setCustPhone(e.target.value);
+                        }}
+                      />
+                      <input
+                        className="input h-8 sm:col-span-2"
+                        placeholder="Address"
+                        value={custAddress}
+                        onChange={(e) => {
+                          setCustTouched(true);
+                          setCustAddress(e.target.value);
+                        }}
+                      />
+                    </div>
+                  )}
+                  {!custId && custName.trim() && (
+                    <p className="mt-1 text-[11px] text-zinc-400">
+                      New customer — added to Customers when the quote is approved and converted.
+                    </p>
+                  )}
+                </div>
 
                 <div className="space-y-2">
                   {editItems.map((it, idx) => (

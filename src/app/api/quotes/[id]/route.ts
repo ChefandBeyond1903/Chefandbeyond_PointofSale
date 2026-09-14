@@ -71,13 +71,83 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       const data: Record<string, unknown> = {};
       if (fields.note !== undefined) data.note = fields.note;
 
-      if (fields.items) {
+      // Bill-to: link an existing customer (+ optional location), detach one
+      // (customerId: null), or set a free-text one not in the directory.
+      // `resolvedCustomerId` stays undefined when the bill-to wasn't touched,
+      // so the tax-exempt lookup below falls back to the quote's current one.
+      let resolvedCustomerId: string | null | undefined;
+      if (fields.customerId !== undefined || fields.customer !== undefined) {
+        if (fields.customerId) {
+          const c = await prisma.customer.findUnique({ where: { id: fields.customerId } });
+          if (!c) throw new HttpError(400, "Customer not found");
+          if (scoped && c.storeId && c.storeId !== scoped) {
+            throw new HttpError(400, "That customer belongs to another store.");
+          }
+          const cust = { name: c.name, email: c.email, phone: c.phone, address: c.address };
+          let locationLabel = "";
+          if (fields.customerLocationId) {
+            const loc = await prisma.customerLocation.findUnique({
+              where: { id: fields.customerLocationId },
+            });
+            if (!loc || loc.customerId !== c.id) {
+              throw new HttpError(400, "That location isn't on this customer.");
+            }
+            locationLabel = loc.label;
+            if (loc.address) cust.address = loc.address;
+            if (loc.contact) cust.name = loc.contact;
+            if (loc.phone) cust.phone = loc.phone;
+            if (loc.email) cust.email = loc.email;
+          }
+          resolvedCustomerId = c.id;
+          data.customerId = c.id;
+          data.customerNameSnapshot = cust.name;
+          data.customerCompanySnapshot = c.company;
+          data.customerEmailSnapshot = cust.email;
+          data.customerPhoneSnapshot = cust.phone;
+          data.customerAddressSnapshot = cust.address;
+          data.customerLocationSnapshot = locationLabel;
+        } else if (fields.customer) {
+          resolvedCustomerId = null;
+          data.customerId = null;
+          data.customerNameSnapshot = fields.customer.name ?? "";
+          data.customerCompanySnapshot = fields.customer.company ?? "";
+          data.customerEmailSnapshot = fields.customer.email ?? "";
+          data.customerPhoneSnapshot = fields.customer.phone ?? "";
+          data.customerAddressSnapshot = fields.customer.address ?? "";
+          data.customerLocationSnapshot = "";
+        } else {
+          // customerId sent as null (or "") — detach.
+          resolvedCustomerId = null;
+          data.customerId = null;
+          data.customerNameSnapshot = "";
+          data.customerCompanySnapshot = "";
+          data.customerEmailSnapshot = "";
+          data.customerPhoneSnapshot = "";
+          data.customerAddressSnapshot = "";
+          data.customerLocationSnapshot = "";
+        }
+      }
+
+      // Reprice whenever the items changed, or the bill-to did (a different
+      // customer can change tax-exempt status even with the same items).
+      if (fields.items || resolvedCustomerId !== undefined) {
+        // Source lines: what was sent, or — for a bill-to-only edit — the
+        // quote's current items, unchanged.
+        const sourceItems =
+          fields.items ??
+          (await prisma.quoteItem.findMany({ where: { quoteId: id } })).map((it) => ({
+            productId: it.productId,
+            quantity: it.quantity,
+            discountCents: it.discountCents,
+            unitPriceCents: it.unitPriceCents,
+          }));
+
         // Merge duplicate product lines defensively, same as creating a quote.
         const merged = new Map<
           string,
           { quantity: number; discountCents: number; unitPriceCents?: number }
         >();
-        for (const item of fields.items) {
+        for (const item of sourceItems) {
           const prev = merged.get(item.productId);
           if (prev) {
             prev.quantity += item.quantity;
@@ -120,9 +190,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           ? await prisma.store.findUnique({ where: { id: quote.storeId } })
           : null;
         let taxRateBps = store?.taxRateBps ?? 0;
-        if (quote.customerId) {
+        const taxCustomerId = resolvedCustomerId !== undefined ? resolvedCustomerId : quote.customerId;
+        if (taxCustomerId) {
           const c = await prisma.customer.findUnique({
-            where: { id: quote.customerId },
+            where: { id: taxCustomerId },
             select: { taxExempt: true, taxExemptExpiresAt: true },
           });
           if (c) {

@@ -318,13 +318,19 @@ export const quoteStatusSchema = z.object({
   convertedSaleId: z.string().min(1).optional(),
 });
 
-// Edit an open/approved/rejected quote's note and/or line items (swap a
-// product, change quantity/price). Omit items to leave them untouched — same
-// shape as saleEditSchema's item editing. Bill-to isn't editable here; a
-// wrong customer means starting a new quote.
+// Edit an open/approved/rejected quote's note, line items, and/or bill-to.
+// Omit a field entirely to leave it untouched.
 export const quoteEditSchema = z.object({
   note: z.string().trim().max(2000).optional(),
+  // Swap a product, change quantity/price — same shape as saleEditSchema's
+  // item editing.
   items: z.array(saleItemSchema).min(1).optional(),
+  // Bill-to: send customerId (+ optional customerLocationId) to link an
+  // existing customer, customerId: null to detach it, or `customer` for a
+  // free-text one not in the directory yet.
+  customerId: z.string().min(1).nullable().optional(),
+  customerLocationId: z.string().min(1).nullable().optional(),
+  customer: saleCustomerSchema.partial().optional(),
 });
 
 export const salePaymentSchema = z.object({
