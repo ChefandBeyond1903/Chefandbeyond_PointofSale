@@ -201,7 +201,7 @@ export function ReceiptModal({
                   <span>
                     {sale.paymentMethod === "CHECK" && sale.checkNumber
                       ? `Check #${sale.checkNumber}`
-                      : sale.paymentMethod}
+                      : cardLabel(sale) ?? sale.paymentMethod}
                   </span>
                   <span>{formatMoney(sale.tenderedCents)}</span>
                 </div>
@@ -248,4 +248,12 @@ export function ReceiptModal({
       </div>
     </div>
   );
+}
+
+/** "Visa •••• 4242" when the sale was paid on a card reader, else null. */
+function cardLabel(sale: { paymentMethod: string; payments?: { method: string; cardBrand?: string; cardLast4?: string }[] }): string | null {
+  if (sale.paymentMethod !== "CARD") return null;
+  const p = sale.payments?.find((x) => x.method === "CARD" && x.cardLast4);
+  if (!p) return null;
+  return `${p.cardBrand || "Card"} •••• ${p.cardLast4}`;
 }

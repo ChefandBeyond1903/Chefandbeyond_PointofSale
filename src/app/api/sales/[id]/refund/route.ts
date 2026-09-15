@@ -5,6 +5,7 @@ import { requireScopedRole, scopeStoreId } from "@/lib/scope";
 import { saleRefundSchema } from "@/lib/validation";
 import { parseEventDate } from "@/lib/date";
 import { ok, toErrorResponse } from "@/lib/api";
+import { refundCardPayments } from "@/lib/terminal";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -17,7 +18,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     const sale = await prisma.sale.findUnique({
       where: { id },
-      include: { items: true, refunds: true },
+      include: { items: true, refunds: true, payments: { orderBy: { paidAt: "asc" } } },
     });
     if (!sale) throw new HttpError(404, "Sale not found");
     const scoped = scopeStoreId(actor);
@@ -37,6 +38,15 @@ export async function POST(req: NextRequest, { params }: Params) {
     const checkNumber = (body.checkNumber ?? "").trim();
     if (body.method === "CHECK" && !checkNumber) {
       throw new HttpError(400, "Enter the check number for the refund.");
+    }
+
+    // A card refund of a sale paid on a card reader goes back to the card
+    // through Stripe. Sales paid on the old standalone terminal (no intent on
+    // any payment) are refunded by hand on that terminal, as before.
+    let stripeRefundId = "";
+    if (body.method === "CARD" && sale.payments.some((p) => p.stripePaymentIntentId)) {
+      const ids = await refundCardPayments(sale.payments, amountCents);
+      stripeRefundId = ids.join(",");
     }
 
     const alreadyRestocked = sale.refunds.some((r) => r.restocked);
@@ -61,6 +71,7 @@ export async function POST(req: NextRequest, { params }: Params) {
           refundedAt,
           createdById: actor.id,
           shiftId: openShift?.id ?? null,
+          stripeRefundId,
         },
       });
 

@@ -8,6 +8,7 @@ import { computeSale, type PricedInput } from "@/lib/sale";
 import { dueDateFromTerms } from "@/lib/terms";
 import { formatMoney } from "@/lib/money";
 import { ok, toErrorResponse } from "@/lib/api";
+import { verifyPaidIntent } from "@/lib/terminal";
 
 export async function GET(req: NextRequest) {
   try {
@@ -239,6 +240,10 @@ export async function POST(req: NextRequest) {
       amountCents: number;
       tenderedCents: number;
       checkNumber: string;
+      // Card-reader payments: the Stripe intent, verified paid below.
+      stripePaymentIntentId: string | null;
+      cardBrand: string;
+      cardLast4: string;
     };
     let paymentList: Pay[] = [];
     if (body.payments && body.payments.length > 0) {
@@ -247,6 +252,9 @@ export async function POST(req: NextRequest) {
         amountCents: p.amountCents,
         tenderedCents: p.tenderedCents,
         checkNumber: p.checkNumber ?? "",
+        stripePaymentIntentId: p.stripePaymentIntentId || null,
+        cardBrand: "",
+        cardLast4: "",
       }));
     } else if (body.depositCents > 0) {
       if (!body.depositMethod) throw new HttpError(400, "Choose how the deposit was paid.");
@@ -256,6 +264,9 @@ export async function POST(req: NextRequest) {
           amountCents: Math.min(body.depositCents, total),
           tenderedCents: body.tenderedCents,
           checkNumber: body.checkNumber ?? "",
+          stripePaymentIntentId: body.stripePaymentIntentId || null,
+          cardBrand: "",
+          cardLast4: "",
         },
       ];
     } else if (!isTermsInvoice) {
@@ -266,11 +277,23 @@ export async function POST(req: NextRequest) {
           amountCents: total,
           tenderedCents: body.tenderedCents,
           checkNumber: body.checkNumber ?? "",
+          stripePaymentIntentId: body.stripePaymentIntentId || null,
+          cardBrand: "",
+          cardLast4: "",
         },
       ];
     }
     if (paymentList.some((p) => p.method === "CHECK" && !p.checkNumber.trim())) {
       throw new HttpError(400, "Enter the check number for the check payment.");
+    }
+    // A card-reader payment only counts once Stripe says it succeeded for
+    // exactly this amount (and it isn't already on another sale).
+    for (const p of paymentList) {
+      if (!p.stripePaymentIntentId) continue;
+      if (p.method !== "CARD") throw new HttpError(400, "A card-reader payment must use the Card method.");
+      const card = await verifyPaidIntent(p.stripePaymentIntentId, p.amountCents);
+      p.cardBrand = card.cardBrand;
+      p.cardLast4 = card.cardLast4;
     }
 
     let paidNowCents = 0;
@@ -314,6 +337,8 @@ export async function POST(req: NextRequest) {
           orderBy: { openedAt: "desc" },
         })
       : null;
+
+    if (body.dryRun) return ok({ ok: true, totalCents: total });
 
     const sale = await prisma.$transaction(async (tx) => {
       const last = await tx.sale.findFirst({ orderBy: { number: "desc" }, select: { number: true } });
@@ -455,6 +480,9 @@ export async function POST(req: NextRequest) {
             isDeposit: !settledNow,
             createdById: user.id,
             shiftId: p.method === "CREDIT" ? null : (openShift?.id ?? null),
+            stripePaymentIntentId: p.stripePaymentIntentId,
+            cardBrand: p.cardBrand,
+            cardLast4: p.cardLast4,
           },
         });
       }

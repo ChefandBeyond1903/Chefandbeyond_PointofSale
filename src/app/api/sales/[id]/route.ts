@@ -7,6 +7,7 @@ import { computeSale, type PricedInput } from "@/lib/sale";
 import { formatMoney } from "@/lib/money";
 import { parseEventDate } from "@/lib/date";
 import { ok, toErrorResponse } from "@/lib/api";
+import { verifyPaidIntent } from "@/lib/terminal";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -347,6 +348,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (body.paymentMethod === "CHECK" && !checkNumber) {
       throw new HttpError(400, "Enter the check number.");
     }
+    // Collected on a card reader: Stripe must confirm it succeeded for exactly
+    // this amount before it's written against the invoice.
+    const stripePaymentIntentId = body.stripePaymentIntentId || null;
+    let card = { cardBrand: "", cardLast4: "" };
+    if (stripePaymentIntentId) {
+      if (body.paymentMethod !== "CARD") throw new HttpError(400, "A card-reader payment must use the Card method.");
+      card = await verifyPaidIntent(stripePaymentIntentId, amountCents);
+    }
 
     // Never stamp a payment in the future — that would drop the sale out of
     // "up to now" report ranges (a "today" date anchors at noon UTC).
@@ -381,6 +390,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           isDeposit: !settled,
           createdById: actor.id,
           shiftId: openShift?.id ?? null,
+          stripePaymentIntentId,
+          cardBrand: card.cardBrand,
+          cardLast4: card.cardLast4,
         },
       });
       if (body.paymentMethod === "CREDIT" && sale.customerId) {

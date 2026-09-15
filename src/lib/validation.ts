@@ -245,6 +245,10 @@ export const paymentMethodSchema = z
   .transform((s) => s.toUpperCase());
 
 export const saleCreateSchema = z.object({
+  // Validate everything (stock, prices, UMRP, payments…) and stop before
+  // writing — the register runs this before charging a card reader so a card
+  // is never charged for a sale that would then be rejected.
+  dryRun: z.boolean().default(false),
   items: z.array(saleItemSchema).min(1),
   orderDiscountCents: z.number().int().min(0).default(0),
   shippingCents: z.number().int().min(0).default(0),
@@ -253,6 +257,9 @@ export const saleCreateSchema = z.object({
   tenderedCents: z.number().int().min(0).default(0),
   // Customer's check number, when paymentMethod / depositMethod is CHECK.
   checkNumber: z.string().trim().max(40).optional(),
+  // The Stripe PaymentIntent a CARD payment was collected on (card reader).
+  // Absent = card run on a standalone terminal and recorded by hand.
+  stripePaymentIntentId: z.string().trim().max(80).optional(),
   // A deposit / part-payment taken at the register. The sale is saved as an
   // invoice with this recorded and a balance still due (unless it covers the
   // full total, in which case it settles the sale).
@@ -268,6 +275,7 @@ export const saleCreateSchema = z.object({
         amountCents: z.number().int().min(1),
         tenderedCents: z.number().int().min(0).default(0),
         checkNumber: z.string().trim().max(40).optional(),
+        stripePaymentIntentId: z.string().trim().max(80).optional(),
       }),
     )
     .max(4)
@@ -337,6 +345,8 @@ export const salePaymentSchema = z.object({
   paymentMethod: paymentMethodSchema,
   // The customer's check number, when paymentMethod is CHECK.
   checkNumber: z.string().trim().max(40).optional(),
+  // Stripe PaymentIntent id when the balance was collected on a card reader.
+  stripePaymentIntentId: z.string().trim().max(80).optional(),
   // Amount to apply. Omit to pay the whole remaining balance.
   amountCents: z.number().int().min(1).optional(),
   // The day the money was received. The sale only counts as revenue once it is

@@ -22,6 +22,7 @@ export function SettingsView({ isAdmin = false }: { isAdmin?: boolean }) {
       {isAdmin && <CompanyCard />}
       <StoresCard isAdmin={isAdmin} />
       <PaymentMethodsCard />
+      <CardReadersCard isAdmin={isAdmin} />
     </div>
   );
 }
@@ -490,6 +491,177 @@ function StoresCard({ isAdmin }: { isAdmin: boolean }) {
           </tbody>
         </table>
       </div>
+    </section>
+  );
+}
+
+// Stripe Terminal card readers. Pairing needs the code the reader shows on
+// its screen after "Generate pairing code"; each store gets its own Stripe
+// Location (created from the store address the first time).
+function CardReadersCard({ isAdmin }: { isAdmin: boolean }) {
+  type Reader = {
+    id: string;
+    storeId: string;
+    storeName: string;
+    label: string;
+    deviceType: string;
+    status: "online" | "offline" | "unknown";
+  };
+  const [readers, setReaders] = useState<Reader[]>([]);
+  const [configured, setConfigured] = useState(true);
+  const [testMode, setTestMode] = useState(false);
+  const [stores, setStores] = useState<{ id: string; name: string }[]>([]);
+  const [storeId, setStoreId] = useState("");
+  const [label, setLabel] = useState("");
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const r = await api<{ readers: Reader[]; configured: boolean; testMode: boolean }>("/api/terminal/readers");
+      setReaders(r.readers);
+      setConfigured(r.configured);
+      setTestMode(r.testMode);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not load card readers");
+    }
+  }, []);
+  useEffect(() => {
+    api<{ readers: Reader[]; configured: boolean; testMode: boolean }>("/api/terminal/readers")
+      .then((r) => {
+        setReaders(r.readers);
+        setConfigured(r.configured);
+        setTestMode(r.testMode);
+      })
+      .catch((e) => setError(e instanceof ApiError ? e.message : "Could not load card readers"));
+    if (isAdmin) {
+      api<{ stores: { id: string; name: string }[] }>("/api/stores")
+        .then((r) => setStores(r.stores))
+        .catch(() => {});
+    }
+  }, [isAdmin]);
+
+  async function pair(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api("/api/terminal/readers", {
+        method: "POST",
+        body: JSON.stringify({ label, registrationCode: code, ...(isAdmin ? { storeId } : {}) }),
+      });
+      setLabel("");
+      setCode("");
+      await load();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not pair the reader");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(r: Reader) {
+    if (!confirm(`Remove "${r.label}"? It will need pairing again to take payments.`)) return;
+    setError(null);
+    try {
+      await api(`/api/terminal/readers/${r.id}`, { method: "DELETE" });
+      await load();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not remove the reader");
+    }
+  }
+
+  return (
+    <section className="card p-5">
+      <h2 className="mb-1 font-semibold">Card readers</h2>
+      <p className="mb-4 text-sm text-zinc-500">
+        Stripe card readers (WisePOS E / Reader S700) the register sends card payments to. On the
+        reader, open Settings → Generate pairing code, then enter that code here.
+        {testMode ? " Sandbox mode: the code \"simulated-wpe\" pairs a simulated reader." : ""}
+      </p>
+
+      {!configured && (
+        <p className="mb-3 rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          Stripe isn&apos;t connected on this deployment yet, so readers can&apos;t be paired.
+        </p>
+      )}
+      {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+      <form onSubmit={pair} className="mb-5 grid gap-2 sm:grid-cols-[1fr_1fr_1fr_auto]">
+        {isAdmin ? (
+          <select className="input" value={storeId} onChange={(e) => setStoreId(e.target.value)} required>
+            <option value="">Store…</option>
+            {stores.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <div />
+        )}
+        <input
+          className="input"
+          placeholder="Reader name (e.g. Front counter)"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          required
+        />
+        <input
+          className="input"
+          placeholder="Pairing code (e.g. sepia-cerulean-orynx)"
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          required
+        />
+        <button className="btn-primary whitespace-nowrap" disabled={busy || !configured}>
+          {busy ? "Pairing…" : "Pair reader"}
+        </button>
+      </form>
+
+      {readers.length === 0 ? (
+        <p className="text-sm text-zinc-500">
+          No readers paired. Until one is, the register asks the cashier to run cards on the
+          standalone terminal and record them by hand.
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs text-zinc-500">
+                <th className="py-1 pr-3">Reader</th>
+                <th className="py-1 pr-3">Store</th>
+                <th className="py-1 pr-3">Model</th>
+                <th className="py-1 pr-3">Status</th>
+                <th className="py-1" />
+              </tr>
+            </thead>
+            <tbody>
+              {readers.map((r) => (
+                <tr key={r.id} className="border-t border-zinc-100">
+                  <td className="py-2 pr-3 font-medium">{r.label}</td>
+                  <td className="py-2 pr-3">{r.storeName}</td>
+                  <td className="py-2 pr-3 text-zinc-500">{r.deviceType.replace(/_/g, " ")}</td>
+                  <td className="py-2 pr-3">
+                    <span
+                      className={`inline-block h-2 w-2 rounded-full ${
+                        r.status === "online" ? "bg-emerald-500" : r.status === "offline" ? "bg-red-500" : "bg-zinc-300"
+                      }`}
+                    />{" "}
+                    {r.status}
+                  </td>
+                  <td className="py-2 text-right">
+                    <button onClick={() => remove(r)} className="btn-ghost text-xs text-red-600">
+                      Remove
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </section>
   );
 }

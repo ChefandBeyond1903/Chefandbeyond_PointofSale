@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney, formatBps, taxOn } from "@/lib/money";
 import { MoneyInput } from "@/components/MoneyInput";
+import { CardReaderPanel, type ReaderOption, type CardPaid } from "@/components/CardReaderPanel";
 import { PercentInput } from "@/components/PercentInput";
 import { ReceiptModal } from "@/components/ReceiptModal";
 import { QuickAddProductModal } from "@/components/QuickAddProductModal";
@@ -163,6 +164,9 @@ export default function RegisterPage() {
   const [salespersonId, setSalespersonId] = useState<string>(""); // "" = signed-in operator
   // Custom payment methods (Zelle, …) added in Settings.
   const [paymentMethods, setPaymentMethods] = useState<{ code: string; label: string }[]>([]);
+  // Paired Stripe Terminal card readers (empty = record card sales by hand).
+  const [readers, setReaders] = useState<ReaderOption[]>([]);
+  const [readerTestMode, setReaderTestMode] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   // Guards the persist effect so it can't overwrite saved state before the
   // first load has read it back in.
@@ -268,6 +272,12 @@ export default function RegisterPage() {
       .catch(() => {});
     api<{ methods: { code: string; label: string }[] }>("/api/payment-methods")
       .then((r) => setPaymentMethods(r.methods))
+      .catch(() => {});
+    api<{ readers: ReaderOption[]; testMode: boolean }>("/api/terminal/readers")
+      .then((r) => {
+        setReaders(r.readers);
+        setReaderTestMode(r.testMode);
+      })
       .catch(() => {});
   }, [loadCatalog, loadShift, loadCustomers, loadHeld]);
 
@@ -1031,11 +1041,24 @@ export default function RegisterPage() {
   }
 
   // Take a deposit / part-payment now; the rest is billed as an invoice.
+  // Validation-only pass of a sale (the server stops before writing). Run
+  // before a card reader is charged, so the card is never charged for a sale
+  // the server would then reject.
+  async function validateSale(extra: Record<string, unknown>) {
+    if (isAdmin && !sellStoreId) throw new ApiError(400, "Choose a store to sell from.");
+    if (locationNeeded) throw new ApiError(400, "Pick which of the customer's locations this is for.");
+    await api("/api/sales", {
+      method: "POST",
+      body: JSON.stringify({ ...salePayloadBase(), ...extra, dryRun: true }),
+    });
+  }
+
   async function takeDeposit(
     method: string,
     depositCents: number,
     tenderedCents: number,
     checkNumber?: string,
+    stripePaymentIntentId?: string,
   ) {
     setError(null);
     if (isAdmin && !sellStoreId) {
@@ -1051,6 +1074,7 @@ export default function RegisterPage() {
           depositMethod: method,
           tenderedCents,
           ...(method === "CHECK" ? { checkNumber } : {}),
+          ...(stripePaymentIntentId ? { stripePaymentIntentId } : {}),
         }),
       });
       afterSaleSaved(res.sale);
@@ -1066,6 +1090,7 @@ export default function RegisterPage() {
       amountCents: number;
       tenderedCents: number;
       checkNumber?: string;
+      stripePaymentIntentId?: string;
     }[],
   ) {
     setError(null);
@@ -1088,6 +1113,7 @@ export default function RegisterPage() {
     paymentMethod: string,
     tenderedCents: number,
     checkNumber?: string,
+    stripePaymentIntentId?: string,
   ) {
     setError(null);
     if (isAdmin && !sellStoreId) {
@@ -1102,6 +1128,7 @@ export default function RegisterPage() {
           paymentMethod,
           tenderedCents,
           ...(paymentMethod === "CHECK" ? { checkNumber } : {}),
+          ...(stripePaymentIntentId ? { stripePaymentIntentId } : {}),
         }),
       });
       afterSaleSaved(res.sale);
@@ -1822,6 +1849,10 @@ export default function RegisterPage() {
           canDeposit={!!custId || custName.trim().length > 0}
           creditCents={selectedCustomer?.storeCreditCents ?? 0}
           customMethods={paymentMethods}
+          readers={isAdmin ? readers.filter((r) => r.storeId === sellStoreId) : readers}
+          readerTestMode={readerTestMode}
+          chargeDescription={`Sale at ${(isAdmin ? sellStore?.name : null) ?? company?.name ?? "Chef and Beyond"}`}
+          onValidate={validateSale}
           onClose={() => setPayOpen(false)}
           onConfirm={completeSale}
           onDeposit={takeDeposit}
@@ -1945,6 +1976,10 @@ function PaymentModal({
   canDeposit,
   creditCents,
   customMethods = [],
+  readers = [],
+  readerTestMode = false,
+  chargeDescription = "Chef and Beyond POS sale",
+  onValidate,
   onClose,
   onConfirm,
   onDeposit,
@@ -1956,17 +1991,23 @@ function PaymentModal({
   canDeposit: boolean;
   creditCents?: number;
   customMethods?: { code: string; label: string }[];
+  readers?: ReaderOption[];
+  readerTestMode?: boolean;
+  chargeDescription?: string;
+  onValidate?: (extra: Record<string, unknown>) => Promise<void>;
   onClose: () => void;
   onConfirm: (
     method: string,
     tenderedCents: number,
     checkNumber?: string,
+    stripePaymentIntentId?: string,
   ) => Promise<void>;
   onDeposit: (
     method: string,
     depositCents: number,
     tenderedCents: number,
     checkNumber?: string,
+    stripePaymentIntentId?: string,
   ) => Promise<void>;
   onSplit: (
     payments: {
@@ -1974,6 +2015,7 @@ function PaymentModal({
       amountCents: number;
       tenderedCents: number;
       checkNumber?: string;
+      stripePaymentIntentId?: string;
     }[],
   ) => Promise<void>;
   onSaveInvoice?: () => Promise<void>;
@@ -2010,6 +2052,10 @@ function PaymentModal({
   const [restTab, setRestTab] = useState<"CASH" | "CARD">("CARD");
   const [restTendered, setRestTendered] = useState(0);
   const [busy, setBusy] = useState(false);
+  // Card-reader flow: the approved charge, and a "record by hand" escape hatch
+  // for a card run on the old standalone terminal.
+  const [cardPaid, setCardPaid] = useState<CardPaid | null>(null);
+  const [manualCard, setManualCard] = useState(false);
 
   const collectNow = mode === "DEPOSIT" ? deposit : total;
   const quick = [collectNow, 2000, 5000, 10000, 20000, 50000];
@@ -2019,20 +2065,31 @@ function PaymentModal({
   const creditNow = Math.min(creditApply, credit, total);
   const creditRemaining = Math.max(0, total - creditNow);
 
-  async function go() {
+  // The part of this payment that goes on a card, and whether a paired reader
+  // collects it (vs. the cashier recording a card run elsewhere by hand).
+  const cardAmount = tab === "CREDIT" ? creditRemaining : collectNow;
+  const cardTab = tab === "CARD" || (tab === "CREDIT" && restTab === "CARD" && creditRemaining > 0);
+  const useReader = cardTab && readers.length > 0 && !manualCard;
+  async function go(intentOverride?: string) {
+    // The reader flow passes the intent straight in (state isn't updated yet).
+    const intentId = intentOverride ?? cardPaid?.paymentIntentId;
     setBusy(true);
     try {
       if (tab === "CREDIT") {
         // Store credit + (if it doesn't cover the order) another tender for the
         // rest — all in one completed transaction.
-        const payments: { method: string; amountCents: number; tenderedCents: number }[] = [
-          { method: "CREDIT", amountCents: creditNow, tenderedCents: creditNow },
-        ];
+        const payments: {
+          method: string;
+          amountCents: number;
+          tenderedCents: number;
+          stripePaymentIntentId?: string;
+        }[] = [{ method: "CREDIT", amountCents: creditNow, tenderedCents: creditNow }];
         if (creditRemaining > 0) {
           payments.push({
             method: restTab,
             amountCents: creditRemaining,
             tenderedCents: restTab === "CASH" ? Math.max(restTendered, creditRemaining) : creditRemaining,
+            ...(restTab === "CARD" && intentId ? { stripePaymentIntentId: intentId } : {}),
           });
         }
         await onSplit(payments);
@@ -2042,17 +2099,37 @@ function PaymentModal({
           deposit,
           tab === "CASH" ? tendered : deposit,
           tab === "CHECK" ? checkNo.trim() : undefined,
+          tab === "CARD" ? intentId : undefined,
         );
       } else {
         await onConfirm(
           tab,
           tab === "CASH" ? tendered : total,
           tab === "CHECK" ? checkNo.trim() : undefined,
+          tab === "CARD" ? intentId : undefined,
         );
       }
     } finally {
       setBusy(false);
     }
+  }
+
+  // The same payments, without the intent — what the dry-run validates before
+  // the reader is charged.
+  function validationExtra(): Record<string, unknown> {
+    if (tab === "CREDIT") {
+      const payments = [{ method: "CREDIT", amountCents: creditNow, tenderedCents: creditNow }];
+      if (creditRemaining > 0) payments.push({ method: "CARD", amountCents: creditRemaining, tenderedCents: creditRemaining });
+      return { payments };
+    }
+    if (mode === "DEPOSIT") return { depositCents: deposit, depositMethod: "CARD", tenderedCents: deposit };
+    return { paymentMethod: "CARD", tenderedCents: total };
+  }
+
+  // Card approved on the reader → the sale completes on its own.
+  function cardApproved(card: CardPaid) {
+    setCardPaid(card);
+    void go(card.paymentIntentId);
   }
 
   return (
@@ -2068,6 +2145,7 @@ function PaymentModal({
             {(["FULL", "DEPOSIT"] as const).map((m) => (
               <button
                 key={m}
+                disabled={!!cardPaid}
                 onClick={() => setMode(m)}
                 className={`flex-1 rounded px-3 py-1.5 font-medium ${
                   mode === m ? "bg-white shadow-sm" : "text-zinc-500"
@@ -2094,6 +2172,7 @@ function PaymentModal({
           {methods.map((m) => (
             <button
               key={m}
+              disabled={!!cardPaid}
               onClick={() => setTab(m)}
               className={`flex-1 rounded px-3 py-1.5 text-sm font-medium ${
                 tab === m ? "bg-white shadow-sm" : "text-zinc-500"
@@ -2175,6 +2254,16 @@ function PaymentModal({
                       </span>
                     </div>
                   </div>
+                ) : useReader ? (
+                  <CardReaderPanel
+                    amountCents={cardAmount}
+                    readers={readers}
+                    testMode={readerTestMode}
+                    description={chargeDescription}
+                    beforeCharge={onValidate ? () => onValidate(validationExtra()) : undefined}
+                    onPaid={cardApproved}
+                    paid={cardPaid}
+                  />
                 ) : (
                   <p className="text-xs text-zinc-500">Run the card, then confirm below.</p>
                 )}
@@ -2203,6 +2292,29 @@ function PaymentModal({
               Record the customer&apos;s check number, then confirm.
             </p>
           </div>
+        ) : tab === "CARD" && readers.length > 0 ? (
+          <div>
+            {useReader ? (
+              <CardReaderPanel
+                amountCents={cardAmount}
+                readers={readers}
+                testMode={readerTestMode}
+                description={chargeDescription}
+                beforeCharge={onValidate ? () => onValidate(validationExtra()) : undefined}
+                onPaid={cardApproved}
+                paid={cardPaid}
+              />
+            ) : (
+              <p className="rounded-md bg-zinc-50 px-3 py-6 text-center text-sm text-zinc-500">
+                Run the card on your terminal, then confirm below.
+              </p>
+            )}
+            {!cardPaid && (
+              <button type="button" onClick={() => setManualCard((v) => !v)} className="btn-ghost mt-1 w-full text-[11px]">
+                {useReader ? "Card was run on another terminal — record it by hand" : "Use the card reader instead"}
+              </button>
+            )}
+          </div>
         ) : (
           <p className="rounded-md bg-zinc-50 px-3 py-6 text-center text-sm text-zinc-500">
             {tab === "CARD"
@@ -2218,9 +2330,10 @@ function PaymentModal({
             Cancel
           </button>
           <button
-            onClick={go}
+            onClick={() => go()}
             disabled={
               busy ||
+              (useReader && !cardPaid) ||
               (tab === "CREDIT" &&
                 (creditNow < 1 ||
                   (creditRemaining > 0 && restTab === "CASH" && restTendered < creditRemaining))) ||

@@ -36,11 +36,15 @@ model Store {
   phone      String   @default("")
   email      String   @default("")
   active     Boolean  @default(true)
+  // Stripe Terminal Location this store's card readers are registered under.
+  // Created on demand the first time a reader is paired (see lib/terminal.ts).
+  stripeLocationId String @default("")
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
   users             User[]
   sales             Sale[]
+  cardReaders       CardReader[]
   purchaseOrders    PurchaseOrder[]
   inventory         StoreInventory[]
   bills             Bill[]
@@ -722,6 +726,13 @@ model SalePayment {
   // True for a payment taken before the sale was settled (a deposit / partial).
   isDeposit   Boolean  @default(false)
   note        String   @default("")
+  // Set when a CARD payment was collected on a Stripe Terminal reader: the
+  // PaymentIntent it settled, and the card details for the receipt. Unique so
+  // one Stripe charge can never be attached to two sales. Null for card
+  // payments taken on the old standalone terminal (recorded by hand).
+  stripePaymentIntentId String? @unique
+  cardBrand             String  @default("")
+  cardLast4             String  @default("")
 
   createdById String
   createdBy   User    @relation("SalePaymentCreatedBy", fields: [createdById], references: [id])
@@ -741,6 +752,9 @@ model SalePayment {
 /// were put back into the selling store's inventory.
 model SaleRefund {
   id          String   @id @default(cuid())
+  // Set when the money went back to the card through Stripe (a CARD refund of
+  // a sale that was paid on a Terminal reader).
+  stripeRefundId String @default("")
   saleId      String
   sale        Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
   amountCents Int
@@ -801,5 +815,23 @@ model RecurringExpense {
   updatedAt   DateTime @updatedAt
 
   @@index([nextDate])
+  @@index([storeId])
+}
+
+/// A Stripe Terminal card reader (WisePOS E / Reader S700) paired to a store.
+/// The register pushes card payments to it; Stripe reports the result back.
+/// Pairing/removal happens in Settings; the Stripe-side reader object is the
+/// source of truth for online/offline status.
+model CardReader {
+  id             String   @id @default(cuid())
+  storeId        String
+  store          Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  stripeReaderId String   @unique
+  label          String
+  deviceType     String   @default("")
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
   @@index([storeId])
 }

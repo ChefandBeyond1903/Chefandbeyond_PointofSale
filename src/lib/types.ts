@@ -387,6 +387,10 @@ export interface SalePayment {
   note: string;
   createdAt: string;
   createdBy?: { id: string; name: string } | null;
+  // Set when collected on a Stripe Terminal card reader.
+  stripePaymentIntentId?: string | null;
+  cardBrand?: string;
+  cardLast4?: string;
 }
 
 export interface SaleRefund {

@@ -6,6 +6,7 @@ import { api, ApiError } from "@/lib/client";
 import { formatMoney, formatBps } from "@/lib/money";
 import { formatDateOnly, todayInputValue } from "@/lib/date";
 import { MoneyInput } from "@/components/MoneyInput";
+import { CardReaderPanel, type ReaderOption, type CardPaid } from "@/components/CardReaderPanel";
 import { ReceiptModal } from "@/components/ReceiptModal";
 import { RefundReceiptModal } from "@/components/RefundReceiptModal";
 import type { InvoiceDetail, PurchaseOrder, Sale, Vendor } from "@/lib/types";
@@ -65,6 +66,19 @@ export function InvoiceModal({
   useEffect(() => {
     api<{ methods: { code: string; label: string }[] }>("/api/payment-methods")
       .then((r) => setCustomMethods(r.methods))
+      .catch(() => {});
+  }, []);
+
+  // Paired card readers (for taking the balance on a card at pickup).
+  const [readers, setReaders] = useState<ReaderOption[]>([]);
+  const [readerTestMode, setReaderTestMode] = useState(false);
+  const [manualCard, setManualCard] = useState(false);
+  useEffect(() => {
+    api<{ readers: ReaderOption[]; testMode: boolean }>("/api/terminal/readers")
+      .then((r) => {
+        setReaders(r.readers);
+        setReaderTestMode(r.testMode);
+      })
       .catch(() => {});
   }, []);
 
@@ -275,7 +289,7 @@ export function InvoiceModal({
     }
   }, [saleId]);
 
-  async function recordPayment(amountCents?: number) {
+  async function recordPayment(amountCents?: number, card?: CardPaid) {
     if (!detail) return;
     setPayBusy(true);
     setErr(null);
@@ -285,6 +299,7 @@ export function InvoiceModal({
         body: JSON.stringify({
           paymentMethod: payMethod,
           ...(payMethod === "CHECK" ? { checkNumber: payCheckNo.trim() } : {}),
+          ...(card ? { stripePaymentIntentId: card.paymentIntentId } : {}),
           paidAt: payDate,
           ...(amountCents ? { amountCents } : {}),
         }),
@@ -751,6 +766,8 @@ export function InvoiceModal({
             {(() => {
               const paid = sale.amountPaidCents ?? 0;
               const balance = sale.totalCents - paid;
+              const invoiceReaders = readers.filter((r) => !sale.storeId || r.storeId === sale.storeId);
+              const useInvoiceReader = payMethod === "CARD" && invoiceReaders.length > 0 && !manualCard;
               const payments = sale.payments ?? [];
               if (sale.status === "INVOICED") {
                 return (
@@ -776,7 +793,9 @@ export function InvoiceModal({
                               {p.isDeposit ? "Deposit" : "Payment"} {formatMoney(p.amountCents)} ·{" "}
                               {p.method === "CHECK" && p.checkNumber
                                 ? `Check #${p.checkNumber}`
-                                : p.method}{" "}
+                                : p.method === "CARD" && p.cardLast4
+                                  ? `${p.cardBrand || "Card"} •••• ${p.cardLast4}`
+                                  : p.method}{" "}
                               · {formatDateOnly(p.paidAt)}
                             </span>
                             {canManage && (
@@ -848,20 +867,45 @@ export function InvoiceModal({
                             placeholder={(balance / 100).toFixed(2)}
                           />
                         </div>
+                        {!useInvoiceReader && (
+                          <button
+                            onClick={() => recordPayment(payAmount || undefined)}
+                            disabled={
+                              payBusy ||
+                              (payAmount > 0 && payAmount > balance) ||
+                              (payMethod === "CHECK" && !payCheckNo.trim())
+                            }
+                            className="btn-primary h-8"
+                          >
+                            {payBusy
+                              ? "Saving…"
+                              : payAmount > 0 && payAmount < balance
+                                ? `Record ${formatMoney(payAmount)}`
+                                : "Pay balance"}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {canManage && payMethod === "CARD" && invoiceReaders.length > 0 && (
+                      <div className="mt-2 max-w-md">
+                        {useInvoiceReader ? (
+                          <CardReaderPanel
+                            amountCents={payAmount > 0 ? Math.min(payAmount, balance) : balance}
+                            readers={invoiceReaders}
+                            testMode={readerTestMode}
+                            description={`Invoice #${sale.number} — ${sale.customerCompanySnapshot || sale.customerNameSnapshot || "customer"}`}
+                            paid={null}
+                            onPaid={(card) => recordPayment(payAmount > 0 ? Math.min(payAmount, balance) : undefined, card)}
+                          />
+                        ) : null}
                         <button
-                          onClick={() => recordPayment(payAmount || undefined)}
-                          disabled={
-                            payBusy ||
-                            (payAmount > 0 && payAmount > balance) ||
-                            (payMethod === "CHECK" && !payCheckNo.trim())
-                          }
-                          className="btn-primary h-8"
+                          type="button"
+                          onClick={() => setManualCard((v) => !v)}
+                          className="btn-ghost mt-1 px-1 text-[11px]"
                         >
-                          {payBusy
-                            ? "Saving…"
-                            : payAmount > 0 && payAmount < balance
-                              ? `Record ${formatMoney(payAmount)}`
-                              : "Pay balance"}
+                          {useInvoiceReader
+                            ? "Card was run on another terminal — record it by hand"
+                            : "Use the card reader instead"}
                         </button>
                       </div>
                     )}
@@ -886,7 +930,9 @@ export function InvoiceModal({
                               {p.isDeposit ? "Deposit" : "Payment"} {formatMoney(p.amountCents)} ·{" "}
                               {p.method === "CHECK" && p.checkNumber
                                 ? `Check #${p.checkNumber}`
-                                : p.method}{" "}
+                                : p.method === "CARD" && p.cardLast4
+                                  ? `${p.cardBrand || "Card"} •••• ${p.cardLast4}`
+                                  : p.method}{" "}
                               · {formatDateOnly(p.paidAt)}
                             </span>
                             {canManage && (
