@@ -66,7 +66,13 @@ export interface Customer {
   name: string;
   email: string;
   phone: string;
+  // address is composed server-side from street/city/state/zip — edit those,
+  // not this.
   address: string;
+  street?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
   company: string;
   notes: string;
   taxExempt: boolean;
@@ -104,6 +110,10 @@ export interface CustomerLocation {
   id: string;
   label: string;
   address: string;
+  street?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
   contact: string;
   phone: string;
   email: string;

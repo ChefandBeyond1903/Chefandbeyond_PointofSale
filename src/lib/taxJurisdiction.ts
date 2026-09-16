@@ -34,14 +34,12 @@ export function jurisdictionLabel(code: TaxJurisdictionCode | null | undefined):
   return code ? TAX_JURISDICTIONS[code].label : "";
 }
 
-// The delivery address's state field is a dropdown of these two, plus an
-// "Other" option (free-text 2-letter code) for a state this store doesn't
-// have a tax profile for yet — kept for the record, but taxed at the store's
-// home jurisdiction until a real profile is added for it.
-export const DELIVERY_STATE_OPTIONS = [
-  { code: "KY", label: "Kentucky" },
-  { code: "TN", label: "Tennessee" },
-] as const;
+// The delivery address's state field is a dropdown of these two (see
+// src/lib/address.ts — the same list offered for a customer's billing/
+// shipping address), plus an "Other" option (free-text 2-letter code) for a
+// state this store doesn't have a tax profile for yet — kept for the record,
+// but taxed at the store's home jurisdiction until a real profile is added.
+export { STATE_OPTIONS as DELIVERY_STATE_OPTIONS } from "./address";
 
 // A delivery address's state maps deterministically to a jurisdiction — no
 // guessing from free text. Anything other than KY/TN (a state this store has

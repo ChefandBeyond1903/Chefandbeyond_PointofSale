@@ -4,6 +4,7 @@ import { requireScopedUser, requireScopedRole, scopeStoreId } from "@/lib/scope"
 import { customerCreateSchema } from "@/lib/validation";
 import { parseDateInput } from "@/lib/date";
 import { phoneDigits } from "@/lib/phone";
+import { formatAddress } from "@/lib/address";
 import { ok, toErrorResponse } from "@/lib/api";
 
 export async function GET(req: NextRequest) {
@@ -84,6 +85,9 @@ export async function POST(req: NextRequest) {
     const customer = await prisma.customer.create({
       data: {
         ...data,
+        // Single-line address for anything that just displays/snapshots a
+        // string — composed from street/city/state/zip, the source of truth.
+        address: formatAddress(data),
         // Belongs to the creator's store; an admin with no store creates a
         // shared (null-store) customer.
         storeId: actor.storeId ?? null,

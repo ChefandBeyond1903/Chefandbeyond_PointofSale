@@ -325,10 +325,29 @@ export const quoteCreateSchema = z.object({
   customer: saleCustomerSchema.partial().optional(),
 });
 
+// Street/city/state/zip, shared by anywhere the app collects a structured
+// address (a customer's billing address, a ship-to location). `address` — a
+// single-line string — is composed from these server-side and kept only for
+// consumers that still want plain text (invoice/receipt snapshots, search).
+export const structuredAddressFields = {
+  street: z.string().trim().max(200).default(""),
+  city: z.string().trim().max(120).default(""),
+  state: z.string().trim().max(2).default(""),
+  zip: z.string().trim().max(12).default(""),
+};
+// Same, but for a partial-update schema: an omitted field is left untouched
+// rather than reset to "" (see the note on productUpdateSchema above).
+export const structuredAddressFieldsOptional = {
+  street: z.string().trim().max(200).optional(),
+  city: z.string().trim().max(120).optional(),
+  state: z.string().trim().max(2).optional(),
+  zip: z.string().trim().max(12).optional(),
+};
+
 // A customer's ship-to / billing location.
 export const customerLocationSchema = z.object({
   label: z.string().trim().min(1).max(120),
-  address: z.string().trim().max(400).default(""),
+  ...structuredAddressFields,
   contact: z.string().trim().max(160).default(""),
   phone: z.string().trim().max(60).default(""),
   email: z.string().trim().max(200).default(""),
@@ -437,7 +456,7 @@ export const customerCreateSchema = z.object({
   name: z.string().trim().min(1).max(160),
   email: z.string().trim().max(200).default(""),
   phone: z.string().trim().max(60).default(""),
-  address: z.string().trim().max(400).default(""),
+  ...structuredAddressFields,
   company: z.string().trim().max(160).default(""),
   notes: z.string().trim().max(1000).default(""),
   taxExempt: customerTaxFields.taxExempt.default(false),
@@ -451,7 +470,7 @@ export const customerUpdateSchema = z.object({
   name: z.string().trim().min(1).max(160).optional(),
   email: z.string().trim().max(200).optional(),
   phone: z.string().trim().max(60).optional(),
-  address: z.string().trim().max(400).optional(),
+  ...structuredAddressFieldsOptional,
   company: z.string().trim().max(160).optional(),
   notes: z.string().trim().max(1000).optional(),
   taxExempt: customerTaxFields.taxExempt.optional(),

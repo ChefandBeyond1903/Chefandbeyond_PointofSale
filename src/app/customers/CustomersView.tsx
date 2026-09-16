@@ -11,6 +11,7 @@ import { InvoiceModal } from "@/components/InvoiceModal";
 import { SaleStatusPill } from "@/components/SaleStatusPill";
 import { ListHeader, SearchBox, FilterToggle } from "@/components/ListToolbar";
 import { LoadingRow, EmptyRow } from "@/components/TableState";
+import { STATE_OPTIONS } from "@/lib/address";
 import type { Customer, CustomerLocation, StoreCreditEntry } from "@/lib/types";
 
 const TERMS = ["Net 15", "Net 30", "Net 45", "Net 60", "Net 90"] as const;
@@ -21,7 +22,11 @@ type Draft = {
   email: string;
   phone: string;
   company: string;
-  address: string;
+  street: string;
+  city: string;
+  state: string; // "" | "KY" | "TN" | "OTHER"
+  stateOther: string; // free-text code when state === "OTHER"
+  zip: string;
   notes: string;
   taxExempt: boolean;
   taxExemptCertNumber: string;
@@ -36,7 +41,11 @@ const emptyDraft: Draft = {
   email: "",
   phone: "",
   company: "",
-  address: "",
+  street: "",
+  city: "",
+  state: "",
+  stateOther: "",
+  zip: "",
   notes: "",
   taxExempt: false,
   taxExemptCertNumber: "",
@@ -46,10 +55,99 @@ const emptyDraft: Draft = {
   taxExemptDocName: "",
 };
 
+// Maps a stored 2-letter state code onto the dropdown: KY/TN select
+// themselves, anything else falls into "Add state…" with the code shown in
+// its free-text field, "" leaves the dropdown unset.
+function stateToDraft(state?: string | null): { state: string; stateOther: string } {
+  const s = (state ?? "").trim().toUpperCase();
+  if (!s) return { state: "", stateOther: "" };
+  if (STATE_OPTIONS.some((o) => o.code === s)) return { state: s, stateOther: "" };
+  return { state: "OTHER", stateOther: s };
+}
+
+// The address's actual 2-letter code to send to the server: the dropdown
+// value, or its free-text field when "Add state…" is selected.
+function resolveState(state: string, stateOther: string): string {
+  return state === "OTHER" ? stateOther.trim().toUpperCase() : state;
+}
+
 function certExpired(iso: string | null | undefined): boolean {
   if (!iso) return false;
   const d = new Date(iso);
   return !Number.isNaN(d.getTime()) && d < new Date(new Date().toDateString());
+}
+
+// Street / city / state (KY, TN, or a free-text "Add state…") / zip — used
+// for both the customer's own billing address and each ship-to location.
+function AddressFields({
+  street,
+  city,
+  state,
+  stateOther,
+  zip,
+  onStreet,
+  onCity,
+  onState,
+  onStateOther,
+  onZip,
+}: {
+  street: string;
+  city: string;
+  state: string;
+  stateOther: string;
+  zip: string;
+  onStreet: (v: string) => void;
+  onCity: (v: string) => void;
+  onState: (v: string) => void;
+  onStateOther: (v: string) => void;
+  onZip: (v: string) => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <input
+        className="input h-8"
+        placeholder="Street address"
+        value={street}
+        onChange={(e) => onStreet(e.target.value)}
+      />
+      <div className="flex gap-1.5">
+        <input
+          className="input h-8 min-w-0 flex-1"
+          placeholder="City"
+          value={city}
+          onChange={(e) => onCity(e.target.value)}
+        />
+        <select
+          className="input h-8 w-32"
+          value={state}
+          onChange={(e) => onState(e.target.value)}
+        >
+          <option value="">State…</option>
+          {STATE_OPTIONS.map((s) => (
+            <option key={s.code} value={s.code}>
+              {s.code}
+            </option>
+          ))}
+          <option value="OTHER">Add state…</option>
+        </select>
+        <input
+          className="input h-8 w-24"
+          placeholder="ZIP"
+          value={zip}
+          onChange={(e) => onZip(e.target.value)}
+        />
+      </div>
+      {state === "OTHER" && (
+        <input
+          className="input h-8 w-32"
+          placeholder="State (2-letter)"
+          maxLength={2}
+          value={stateOther}
+          onChange={(e) => onStateOther(e.target.value.toUpperCase())}
+        />
+      )}
+    </div>
+  );
 }
 
 export function CustomersView({
@@ -79,7 +177,17 @@ export function CustomersView({
   // The open customer's sales / invoice history and ship-to locations.
   const [custSales, setCustSales] = useState<NonNullable<Customer["sales"]>>([]);
   const [custLocations, setCustLocations] = useState<CustomerLocation[]>([]);
-  const [locForm, setLocForm] = useState({ label: "", address: "", contact: "", phone: "" });
+  const emptyLocForm = {
+    label: "",
+    street: "",
+    city: "",
+    state: "",
+    stateOther: "",
+    zip: "",
+    contact: "",
+    phone: "",
+  };
+  const [locForm, setLocForm] = useState(emptyLocForm);
   const [locBusy, setLocBusy] = useState(false);
 
   const loadCustSales = useCallback(async (id: string) => {
@@ -102,12 +210,15 @@ export function CustomersView({
         method: "POST",
         body: JSON.stringify({
           label: locForm.label.trim(),
-          address: locForm.address.trim(),
+          street: locForm.street.trim(),
+          city: locForm.city.trim(),
+          state: resolveState(locForm.state, locForm.stateOther),
+          zip: locForm.zip.trim(),
           contact: locForm.contact.trim(),
           phone: locForm.phone.trim(),
         }),
       });
-      setLocForm({ label: "", address: "", contact: "", phone: "" });
+      setLocForm(emptyLocForm);
       loadCustSales(draft.id);
       load();
     } catch (err) {
@@ -200,7 +311,10 @@ export function CustomersView({
       email: draft.email,
       phone: draft.phone,
       company: draft.company,
-      address: draft.address,
+      street: draft.street.trim(),
+      city: draft.city.trim(),
+      state: resolveState(draft.state, draft.stateOther),
+      zip: draft.zip.trim(),
       notes: draft.notes,
       taxExempt: draft.taxExempt,
       taxExemptCertNumber: draft.taxExemptCertNumber,
@@ -406,7 +520,10 @@ export function CustomersView({
                               email: c.email,
                               phone: formatPhone(c.phone),
                               company: c.company,
-                              address: c.address,
+                              street: c.street ?? "",
+                              city: c.city ?? "",
+                              ...stateToDraft(c.state),
+                              zip: c.zip ?? "",
                               notes: c.notes,
                               taxExempt: c.taxExempt,
                               taxExemptCertNumber: c.taxExemptCertNumber ?? "",
@@ -489,12 +606,18 @@ export function CustomersView({
                 />
               </div>
               <div>
-                <label className="label">Address</label>
-                <textarea
-                  className="input"
-                  rows={2}
-                  value={draft.address}
-                  onChange={(e) => setDraft({ ...draft, address: e.target.value })}
+                <label className="label">Billing address</label>
+                <AddressFields
+                  street={draft.street}
+                  city={draft.city}
+                  state={draft.state}
+                  stateOther={draft.stateOther}
+                  zip={draft.zip}
+                  onStreet={(v) => setDraft({ ...draft, street: v })}
+                  onCity={(v) => setDraft({ ...draft, city: v })}
+                  onState={(v) => setDraft({ ...draft, state: v })}
+                  onStateOther={(v) => setDraft({ ...draft, stateOther: v })}
+                  onZip={(v) => setDraft({ ...draft, zip: v })}
                 />
               </div>
               <div>
@@ -730,13 +853,38 @@ export function CustomersView({
                       value={locForm.phone}
                       onChange={(e) => setLocForm({ ...locForm, phone: e.target.value })}
                     />
-                    <input
-                      className="input h-8"
-                      placeholder="Address"
-                      value={locForm.address}
-                      onChange={(e) => setLocForm({ ...locForm, address: e.target.value })}
-                    />
                   </div>
+                  <div className="mt-2 flex items-center justify-between">
+                    <span className="label mb-0">Address</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setLocForm({
+                          ...locForm,
+                          street: draft.street,
+                          city: draft.city,
+                          state: draft.state,
+                          stateOther: draft.stateOther,
+                          zip: draft.zip,
+                        })
+                      }
+                      className="text-[11px] text-indigo-600 underline"
+                    >
+                      Same as billing address
+                    </button>
+                  </div>
+                  <AddressFields
+                    street={locForm.street}
+                    city={locForm.city}
+                    state={locForm.state}
+                    stateOther={locForm.stateOther}
+                    zip={locForm.zip}
+                    onStreet={(v) => setLocForm({ ...locForm, street: v })}
+                    onCity={(v) => setLocForm({ ...locForm, city: v })}
+                    onState={(v) => setLocForm({ ...locForm, state: v })}
+                    onStateOther={(v) => setLocForm({ ...locForm, stateOther: v })}
+                    onZip={(v) => setLocForm({ ...locForm, zip: v })}
+                  />
                   <button
                     type="button"
                     onClick={addLocation}

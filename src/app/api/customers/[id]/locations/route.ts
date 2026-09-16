@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireScopedUser, requireScopedRole, assertCustomerInScope } from "@/lib/scope";
 import { customerLocationSchema } from "@/lib/validation";
+import { formatAddress } from "@/lib/address";
 import { ok, toErrorResponse } from "@/lib/api";
 
 type Params = { params: Promise<{ id: string }> };
@@ -28,7 +29,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     await assertCustomerInScope(id, actor);
     const f = customerLocationSchema.parse(await req.json());
     const location = await prisma.customerLocation.create({
-      data: { customerId: id, ...f },
+      data: { customerId: id, ...f, address: formatAddress(f) },
     });
     return ok({ location }, 201);
   } catch (err) {

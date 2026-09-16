@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { HttpError } from "@/lib/auth";
 import { requireScopedRole, assertCustomerInScope } from "@/lib/scope";
 import { customerLocationUpdateSchema } from "@/lib/validation";
+import { formatAddress } from "@/lib/address";
 import { ok, toErrorResponse } from "@/lib/api";
 
 type Params = { params: Promise<{ id: string; locId: string }> };
@@ -15,7 +16,21 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const loc = await prisma.customerLocation.findUnique({ where: { id: locId } });
     if (!loc || loc.customerId !== id) throw new HttpError(404, "Location not found");
     const f = customerLocationUpdateSchema.parse(await req.json());
-    const location = await prisma.customerLocation.update({ where: { id: locId }, data: f });
+    const data: Record<string, unknown> = { ...f };
+    if (
+      f.street !== undefined ||
+      f.city !== undefined ||
+      f.state !== undefined ||
+      f.zip !== undefined
+    ) {
+      data.address = formatAddress({
+        street: f.street ?? loc.street,
+        city: f.city ?? loc.city,
+        state: f.state ?? loc.state,
+        zip: f.zip ?? loc.zip,
+      });
+    }
+    const location = await prisma.customerLocation.update({ where: { id: locId }, data });
     return ok({ location });
   } catch (err) {
     return toErrorResponse(err);

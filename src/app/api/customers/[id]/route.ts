@@ -4,6 +4,7 @@ import { HttpError } from "@/lib/auth";
 import { requireScopedRole, assertCustomerInScope } from "@/lib/scope";
 import { customerUpdateSchema } from "@/lib/validation";
 import { parseDateInput } from "@/lib/date";
+import { formatAddress } from "@/lib/address";
 import { ok, toErrorResponse } from "@/lib/api";
 
 type Params = { params: Promise<{ id: string }> };
@@ -67,6 +68,25 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       data.taxExemptExpiresAt = parsed.taxExemptExpiresAt
         ? parseDateInput(parsed.taxExemptExpiresAt)
         : null;
+    }
+    // Re-compose the single-line address whenever any structured field
+    // changed, merging in whatever part wasn't touched by this update.
+    if (
+      parsed.street !== undefined ||
+      parsed.city !== undefined ||
+      parsed.state !== undefined ||
+      parsed.zip !== undefined
+    ) {
+      const current = await prisma.customer.findUnique({
+        where: { id },
+        select: { street: true, city: true, state: true, zip: true },
+      });
+      data.address = formatAddress({
+        street: parsed.street ?? current?.street ?? "",
+        city: parsed.city ?? current?.city ?? "",
+        state: parsed.state ?? current?.state ?? "",
+        zip: parsed.zip ?? current?.zip ?? "",
+      });
     }
     const customer = await prisma.customer.update({ where: { id }, data });
     return ok({ customer });

@@ -167,7 +167,15 @@ model Customer {
   name    String
   email   String @default("")
   phone   String @default("")
+  // Composed automatically from street/city/state/zip below whenever they're
+  // edited — kept so every existing consumer (invoice/receipt snapshots,
+  // search, the register's "use customer's address" fill) keeps working.
+  // Edit street/city/state/zip, not this, from the Customers page.
   address String @default("")
+  street  String @default("")
+  city    String @default("")
+  state   String @default("")
+  zip     String @default("")
   company String @default("")
   notes   String @default("")
 
@@ -215,7 +223,12 @@ model CustomerLocation {
   customerId String
   customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
   label      String
+  // Composed automatically from street/city/state/zip below — see Customer.address.
   address    String   @default("")
+  street     String   @default("")
+  city       String   @default("")
+  state      String   @default("")
+  zip        String   @default("")
   contact    String   @default("")
   phone      String   @default("")
   email      String   @default("")
