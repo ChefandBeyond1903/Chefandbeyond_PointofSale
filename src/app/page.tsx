@@ -20,6 +20,7 @@ import {
   autoJurisdiction as autoTaxJurisdiction,
   jurisdictionRateBps,
   jurisdictionLabel,
+  DELIVERY_STATE_OPTIONS,
   type TaxJurisdictionCode,
 } from "@/lib/taxJurisdiction";
 import type {
@@ -62,7 +63,11 @@ interface TicketSnapshot {
   custLocationId: string;
   salespersonId: string;
   deliveryMethod: "PICKUP" | "DELIVERY";
-  deliveryAddress: string;
+  deliveryStreet: string;
+  deliveryCity: string;
+  deliveryState: string;
+  deliveryStateOther: string;
+  deliveryZip: string;
   deliveryCounty: string;
   taxOverrideCode: "" | TaxJurisdictionCode;
   taxOverrideReason: string;
@@ -139,9 +144,13 @@ export default function RegisterPage() {
 
   // KY/TN delivery-based sales tax — only shown once a home jurisdiction is
   // known (see homeJurisdiction below). Pickup keeps the store's own
-  // jurisdiction; delivery auto-suggests the other one from the address.
+  // jurisdiction; the delivery state dropdown drives the tax deterministically.
   const [deliveryMethod, setDeliveryMethod] = useState<"PICKUP" | "DELIVERY">("PICKUP");
-  const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [deliveryStreet, setDeliveryStreet] = useState("");
+  const [deliveryCity, setDeliveryCity] = useState("");
+  const [deliveryState, setDeliveryState] = useState("");
+  const [deliveryStateOther, setDeliveryStateOther] = useState("");
+  const [deliveryZip, setDeliveryZip] = useState("");
   const [deliveryCounty, setDeliveryCounty] = useState("");
   const [taxOverrideCode, setTaxOverrideCode] = useState<"" | TaxJurisdictionCode>("");
   const [taxOverrideReason, setTaxOverrideReason] = useState("");
@@ -337,7 +346,11 @@ export default function RegisterPage() {
           setCustLocationId(s.custLocationId ?? "");
           setSalespersonId(s.salespersonId ?? "");
           setDeliveryMethod(s.deliveryMethod ?? "PICKUP");
-          setDeliveryAddress(s.deliveryAddress ?? "");
+          setDeliveryStreet(s.deliveryStreet ?? "");
+          setDeliveryCity(s.deliveryCity ?? "");
+          setDeliveryState(s.deliveryState ?? "");
+          setDeliveryStateOther(s.deliveryStateOther ?? "");
+          setDeliveryZip(s.deliveryZip ?? "");
           setDeliveryCounty(s.deliveryCounty ?? "");
           setTaxOverrideCode(s.taxOverrideCode ?? "");
           setTaxOverrideReason(s.taxOverrideReason ?? "");
@@ -370,7 +383,11 @@ export default function RegisterPage() {
         custLocationId,
         salespersonId,
         deliveryMethod,
-        deliveryAddress,
+        deliveryStreet,
+        deliveryCity,
+        deliveryState,
+        deliveryStateOther,
+        deliveryZip,
         deliveryCounty,
         taxOverrideCode,
         taxOverrideReason,
@@ -391,7 +408,11 @@ export default function RegisterPage() {
     custLocationId,
     salespersonId,
     deliveryMethod,
-    deliveryAddress,
+    deliveryStreet,
+    deliveryCity,
+    deliveryState,
+    deliveryStateOther,
+    deliveryZip,
     deliveryCounty,
     taxOverrideCode,
     taxOverrideReason,
@@ -580,7 +601,9 @@ export default function RegisterPage() {
   // store's rate matches a known profile; every other store keeps its flat
   // rate exactly as before. See src/lib/taxJurisdiction.ts.
   const homeJurisdiction = storeHomeJurisdiction(sellStoreTaxRateBps);
-  const suggestedJurisdiction = autoTaxJurisdiction(homeJurisdiction, deliveryMethod, deliveryAddress);
+  // The dropdown's chosen 2-letter code — "Other" resolves to its free-text field.
+  const deliveryStateCode = deliveryState === "OTHER" ? deliveryStateOther.trim() : deliveryState;
+  const suggestedJurisdiction = autoTaxJurisdiction(homeJurisdiction, deliveryMethod, deliveryStateCode);
   const activeJurisdiction = taxOverrideCode || suggestedJurisdiction;
   const baseTaxRateBps = homeJurisdiction
     ? (activeJurisdiction ? jurisdictionRateBps(activeJurisdiction) : sellStoreTaxRateBps)
@@ -799,7 +822,11 @@ export default function RegisterPage() {
     setShippingCents(0);
     clearCustomer();
     setDeliveryMethod("PICKUP");
-    setDeliveryAddress("");
+    setDeliveryStreet("");
+    setDeliveryCity("");
+    setDeliveryState("");
+    setDeliveryStateOther("");
+    setDeliveryZip("");
     setDeliveryCounty("");
     setTaxOverrideCode("");
     setTaxOverrideReason("");
@@ -1026,7 +1053,10 @@ export default function RegisterPage() {
       ...(homeJurisdiction
         ? {
             deliveryMethod,
-            deliveryAddress: deliveryMethod === "DELIVERY" ? deliveryAddress.trim() : "",
+            deliveryStreet: deliveryMethod === "DELIVERY" ? deliveryStreet.trim() : "",
+            deliveryCity: deliveryMethod === "DELIVERY" ? deliveryCity.trim() : "",
+            deliveryState: deliveryMethod === "DELIVERY" ? deliveryStateCode : "",
+            deliveryZip: deliveryMethod === "DELIVERY" ? deliveryZip.trim() : "",
             deliveryCounty: activeJurisdiction === "TN" ? deliveryCounty.trim() : "",
             ...(taxOverrideCode
               ? { taxOverride: { jurisdiction: taxOverrideCode, reason: taxOverrideReason.trim() } }
@@ -1037,13 +1067,18 @@ export default function RegisterPage() {
     };
   }
 
-  // Checked before completing/invoicing/holding a sale — a delivery needs an
-  // address, a Tennessee-jurisdiction delivery needs a county, and a manual
-  // tax override needs a reason (it's logged with it).
+  // Checked before completing/invoicing/holding a sale — a delivery needs a
+  // full address, a Tennessee-jurisdiction delivery needs a county, and a
+  // manual tax override needs a reason (it's logged with it).
   function deliveryValidationError(): string | null {
     if (!homeJurisdiction) return null;
-    if (deliveryMethod === "DELIVERY" && !deliveryAddress.trim()) {
-      return "Enter the delivery address.";
+    if (deliveryMethod === "DELIVERY") {
+      if (!deliveryStreet.trim() || !deliveryCity.trim() || !deliveryZip.trim()) {
+        return "Enter the full delivery address.";
+      }
+      if (!deliveryStateCode) {
+        return deliveryState === "OTHER" ? "Enter the delivery state." : "Choose a delivery state.";
+      }
     }
     if (deliveryMethod === "DELIVERY" && activeJurisdiction === "TN" && !deliveryCounty.trim()) {
       return "Enter the Tennessee delivery county.";
@@ -1851,17 +1886,67 @@ export default function RegisterPage() {
                     deliveryMethod === "DELIVERY" ? "bg-white shadow-sm" : "text-zinc-500"
                   }`}
                 >
-                  Seller delivery
+                  Deliver to Customer
                 </button>
               </div>
               {deliveryMethod === "DELIVERY" && (
-                <>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-zinc-400">
+                      Tax is charged for the state delivered to.
+                    </span>
+                    {custAddress.trim() && (
+                      <button
+                        type="button"
+                        onClick={() => setDeliveryStreet(custAddress.trim())}
+                        className="text-[11px] text-indigo-600 underline"
+                      >
+                        Use customer&apos;s address
+                      </button>
+                    )}
+                  </div>
                   <input
                     className="input h-8 w-full text-xs"
-                    placeholder="Delivery address (street, city, state, zip)"
-                    value={deliveryAddress}
-                    onChange={(e) => setDeliveryAddress(e.target.value)}
+                    placeholder="Street address"
+                    value={deliveryStreet}
+                    onChange={(e) => setDeliveryStreet(e.target.value)}
                   />
+                  <div className="flex gap-1.5">
+                    <input
+                      className="input h-8 min-w-0 flex-1 text-xs"
+                      placeholder="City"
+                      value={deliveryCity}
+                      onChange={(e) => setDeliveryCity(e.target.value)}
+                    />
+                    <select
+                      className="input h-8 w-32 text-xs"
+                      value={deliveryState}
+                      onChange={(e) => setDeliveryState(e.target.value)}
+                    >
+                      <option value="">State…</option>
+                      {DELIVERY_STATE_OPTIONS.map((s) => (
+                        <option key={s.code} value={s.code}>
+                          {s.code}
+                        </option>
+                      ))}
+                      <option value="OTHER">Add state…</option>
+                    </select>
+                    <input
+                      className="input h-8 w-24 text-xs"
+                      placeholder="ZIP"
+                      value={deliveryZip}
+                      onChange={(e) => setDeliveryZip(e.target.value)}
+                    />
+                  </div>
+                  {deliveryState === "OTHER" && (
+                    <input
+                      className="input h-8 w-32 text-xs"
+                      placeholder="State (2-letter)"
+                      maxLength={2}
+                      value={deliveryStateOther}
+                      onChange={(e) => setDeliveryStateOther(e.target.value.toUpperCase())}
+                    />
+                  )}
                   {activeJurisdiction === "TN" && (
                     <input
                       className="input h-8 w-full text-xs"
@@ -1870,7 +1955,7 @@ export default function RegisterPage() {
                       onChange={(e) => setDeliveryCounty(e.target.value)}
                     />
                   )}
-                </>
+                </div>
               )}
               <button
                 type="button"

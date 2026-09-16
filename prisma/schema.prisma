@@ -29,18 +29,18 @@ model Company {
 /// A physical store location. taxRateBps is basis points (975 = 9.75%) and is
 /// charged on every line of a sale rung by a cashier assigned to this store.
 model Store {
-  id         String   @id @default(cuid())
-  name       String   @unique
-  taxRateBps Int      @default(0)
-  address    String   @default("")
-  phone      String   @default("")
-  email      String   @default("")
-  active     Boolean  @default(true)
+  id               String   @id @default(cuid())
+  name             String   @unique
+  taxRateBps       Int      @default(0)
+  address          String   @default("")
+  phone            String   @default("")
+  email            String   @default("")
+  active           Boolean  @default(true)
   // Stripe Terminal Location this store's card readers are registered under.
   // Created on demand the first time a reader is paired (see lib/terminal.ts).
-  stripeLocationId String @default("")
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  stripeLocationId String   @default("")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   users             User[]
   sales             Sale[]
@@ -330,11 +330,16 @@ model Sale {
   // KY/TN delivery-based sales tax. "PICKUP" or "DELIVERY"; jurisdiction/rate
   // only apply to a store whose tax rate matches a known profile (see
   // src/lib/taxJurisdiction.ts) — blank on every other sale, old and new.
-  // Pickup keeps the store's home jurisdiction; a seller delivery is taxed
-  // where possession transfers, detected from the delivery address (falling
-  // back to the store's home jurisdiction when it can't be determined).
+  // Pickup keeps the store's home jurisdiction; a "Deliver to Customer" sale
+  // is taxed where possession transfers — the chosen delivery state — falling
+  // back to the store's home jurisdiction for a state with no tax profile.
   deliveryMethod  String           @default("PICKUP")
-  deliveryAddress String           @default("")
+  deliveryStreet  String           @default("")
+  deliveryCity    String           @default("")
+  // Two-letter state code. Drives the jurisdiction switch above — a dropdown
+  // at the register, never free text, so the switch is deterministic.
+  deliveryState   String           @default("")
+  deliveryZip     String           @default("")
   // Required, and only meaningful, for a Tennessee-jurisdiction delivery —
   // kept for the state's remittance report.
   deliveryCounty  String           @default("")
@@ -750,26 +755,26 @@ model Shift {
 /// full settlement. Every cash/card movement is a row here so the till and the
 /// customer-deposit liability can be reconciled precisely.
 model SalePayment {
-  id          String   @id @default(cuid())
-  saleId      String
-  sale        Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  amountCents Int
-  method      String // "CASH" | "CARD" | "CHECK" | "CREDIT" (store credit)
+  id                    String   @id @default(cuid())
+  saleId                String
+  sale                  Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  amountCents           Int
+  method                String // "CASH" | "CARD" | "CHECK" | "CREDIT" (store credit)
   // The customer's check number, when method is CHECK.
-  checkNumber String   @default("")
+  checkNumber           String   @default("")
   // The day the money was received — deposits and balance payments each land on
   // their own date.
-  paidAt      DateTime
+  paidAt                DateTime
   // True for a payment taken before the sale was settled (a deposit / partial).
-  isDeposit   Boolean  @default(false)
-  note        String   @default("")
+  isDeposit             Boolean  @default(false)
+  note                  String   @default("")
   // Set when a CARD payment was collected on a Stripe Terminal reader: the
   // PaymentIntent it settled, and the card details for the receipt. Unique so
   // one Stripe charge can never be attached to two sales. Null for card
   // payments taken on the old standalone terminal (recorded by hand).
-  stripePaymentIntentId String? @unique
-  cardBrand             String  @default("")
-  cardLast4             String  @default("")
+  stripePaymentIntentId String?  @unique
+  cardBrand             String   @default("")
+  cardLast4             String   @default("")
 
   createdById String
   createdBy   User    @relation("SalePaymentCreatedBy", fields: [createdById], references: [id])
@@ -788,20 +793,20 @@ model SalePayment {
 /// customer's store-credit balance). `restocked` = the order's item quantities
 /// were put back into the selling store's inventory.
 model SaleRefund {
-  id          String   @id @default(cuid())
+  id             String   @id @default(cuid())
   // Set when the money went back to the card through Stripe (a CARD refund of
   // a sale that was paid on a Terminal reader).
-  stripeRefundId String @default("")
-  saleId      String
-  sale        Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  amountCents Int
-  method      String
+  stripeRefundId String   @default("")
+  saleId         String
+  sale           Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  amountCents    Int
+  method         String
   // The check number, when the refund was paid out by check.
-  checkNumber String   @default("")
-  restocked   Boolean  @default(false)
-  reason      String   @default("")
+  checkNumber    String   @default("")
+  restocked      Boolean  @default(false)
+  reason         String   @default("")
   // The day the refund was issued — the date it reduces revenue for.
-  refundedAt  DateTime
+  refundedAt     DateTime
 
   createdById String
   createdBy   User    @relation("SaleRefundCreatedBy", fields: [createdById], references: [id])

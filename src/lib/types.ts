@@ -449,7 +449,10 @@ export interface Sale {
   // KY/TN delivery-based tax jurisdiction. Blank on sales rung at a store
   // outside that scheme (see src/lib/taxJurisdiction.ts).
   deliveryMethod?: string; // "PICKUP" | "DELIVERY"
-  deliveryAddress?: string;
+  deliveryStreet?: string;
+  deliveryCity?: string;
+  deliveryState?: string;
+  deliveryZip?: string;
   deliveryCounty?: string;
   taxJurisdiction?: string; // "KY" | "TN" | ""
   taxOverridden?: boolean;

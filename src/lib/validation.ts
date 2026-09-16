@@ -261,7 +261,10 @@ export const saleCreateSchema = z.object({
   orderDiscountCents: z.number().int().min(0).default(0),
   shippingCents: z.number().int().min(0).default(0),
   deliveryMethod: z.enum(["PICKUP", "DELIVERY"]).default("PICKUP"),
-  deliveryAddress: z.string().trim().max(400).default(""),
+  deliveryStreet: z.string().trim().max(200).default(""),
+  deliveryCity: z.string().trim().max(120).default(""),
+  deliveryState: z.string().trim().max(2).default(""),
+  deliveryZip: z.string().trim().max(12).default(""),
   deliveryCounty: z.string().trim().max(120).default(""),
   // Staff-initiated override of the auto-selected tax jurisdiction. Present
   // only when the operator explicitly changed it; logged with a reason.

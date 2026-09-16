@@ -34,29 +34,35 @@ export function jurisdictionLabel(code: TaxJurisdictionCode | null | undefined):
   return code ? TAX_JURISDICTIONS[code].label : "";
 }
 
-// Best-effort read of the destination state out of a free-text delivery
-// address ("... Clarksville, TN 37040" / "... Guthrie, Kentucky 42234").
-// Returns null when the address doesn't clearly name one of the two states,
-// so the caller can fall back to the store's home jurisdiction — matching the
-// "default tax = Kentucky" requirement rather than guessing.
-export function detectStateFromAddress(address: string): TaxJurisdictionCode | null {
-  const a = address.toUpperCase();
-  const tn = /\bTN\b/.test(a) || /TENNESSEE/.test(a);
-  const ky = /\bKY\b/.test(a) || /KENTUCKY/.test(a);
-  if (tn && !ky) return "TN";
-  if (ky && !tn) return "KY";
+// The delivery address's state field is a dropdown of these two, plus an
+// "Other" option (free-text 2-letter code) for a state this store doesn't
+// have a tax profile for yet — kept for the record, but taxed at the store's
+// home jurisdiction until a real profile is added for it.
+export const DELIVERY_STATE_OPTIONS = [
+  { code: "KY", label: "Kentucky" },
+  { code: "TN", label: "Tennessee" },
+] as const;
+
+// A delivery address's state maps deterministically to a jurisdiction — no
+// guessing from free text. Anything other than KY/TN (a state this store has
+// no profile for) returns null.
+export function stateToJurisdiction(stateCode: string): TaxJurisdictionCode | null {
+  const c = stateCode.trim().toUpperCase();
+  if (c === "KY") return "KY";
+  if (c === "TN") return "TN";
   return null;
 }
 
 // The jurisdiction the POS auto-selects before any manual override: pickup
-// keeps the store's home jurisdiction; a delivery is taxed where the address
-// says possession transfers, falling back to home when that can't be read.
+// keeps the store's home jurisdiction; a delivery is taxed where the chosen
+// delivery state says possession transfers, falling back to home for a state
+// with no tax profile — matching the "default tax = Kentucky" requirement.
 export function autoJurisdiction(
   homeJurisdiction: TaxJurisdictionCode | null,
   deliveryMethod: "PICKUP" | "DELIVERY",
-  deliveryAddress: string,
+  deliveryState: string,
 ): TaxJurisdictionCode | null {
   if (!homeJurisdiction) return null;
   if (deliveryMethod !== "DELIVERY") return homeJurisdiction;
-  return detectStateFromAddress(deliveryAddress) ?? homeJurisdiction;
+  return stateToJurisdiction(deliveryState) ?? homeJurisdiction;
 }

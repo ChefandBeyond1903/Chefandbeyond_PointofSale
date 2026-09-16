@@ -102,13 +102,14 @@ export async function POST(req: NextRequest) {
     // KY/TN delivery-based tax jurisdiction — only engages for a store whose
     // rate matches a known profile; every other store keeps its flat rate
     // exactly as before. Pickup keeps the store's home jurisdiction; a
-    // delivery is taxed where the address says possession transfers. Staff
-    // may override the result either way, which is logged for compliance.
+    // "Deliver to Customer" sale is taxed where the chosen delivery state
+    // says possession transfers. Staff may override the result either way,
+    // which is logged for compliance.
     const homeJurisdiction = storeHomeJurisdiction(sellStore?.taxRateBps);
     const suggestedJurisdiction = autoTaxJurisdiction(
       homeJurisdiction,
       body.deliveryMethod,
-      body.deliveryAddress,
+      body.deliveryState,
     );
     let taxJurisdiction = suggestedJurisdiction;
     let taxOverridden = false;
@@ -119,7 +120,9 @@ export async function POST(req: NextRequest) {
     if (taxJurisdiction) taxRateBps = jurisdictionRateBps(taxJurisdiction);
 
     if (homeJurisdiction && body.deliveryMethod === "DELIVERY") {
-      if (!body.deliveryAddress) throw new HttpError(400, "Enter the delivery address.");
+      if (!body.deliveryStreet || !body.deliveryCity || !body.deliveryState || !body.deliveryZip) {
+        throw new HttpError(400, "Enter the full delivery address.");
+      }
       if (taxJurisdiction === "TN" && !body.deliveryCounty) {
         throw new HttpError(400, "Enter the Tennessee delivery county.");
       }
@@ -452,7 +455,10 @@ export async function POST(req: NextRequest) {
           shippingCents: computed.shippingCents,
           totalCents: computed.totalCents,
           deliveryMethod: body.deliveryMethod,
-          deliveryAddress: body.deliveryMethod === "DELIVERY" ? body.deliveryAddress : "",
+          deliveryStreet: body.deliveryMethod === "DELIVERY" ? body.deliveryStreet : "",
+          deliveryCity: body.deliveryMethod === "DELIVERY" ? body.deliveryCity : "",
+          deliveryState: body.deliveryMethod === "DELIVERY" ? body.deliveryState : "",
+          deliveryZip: body.deliveryMethod === "DELIVERY" ? body.deliveryZip : "",
           deliveryCounty: taxJurisdiction === "TN" ? body.deliveryCounty : "",
           taxJurisdiction: taxJurisdiction ?? "",
           taxOverridden,
