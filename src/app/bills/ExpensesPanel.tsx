@@ -22,7 +22,15 @@ function fmtDate(s: string) {
   return new Date(s).toLocaleDateString(undefined, { timeZone: "UTC" });
 }
 
-export function ExpensesPanel({ isAdmin }: { isAdmin: boolean }) {
+export function ExpensesPanel({
+  isAdmin,
+  storeId = "",
+}: {
+  isAdmin: boolean;
+  // The store selected in the Bills store filter above ("" = all stores) —
+  // keeps this list in step with that same selection.
+  storeId?: string;
+}) {
   const [rows, setRows] = useState<Expense[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
@@ -59,8 +67,9 @@ export function ExpensesPanel({ isAdmin }: { isAdmin: boolean }) {
     setLoading(true);
     setError(null);
     try {
+      const qs = storeId ? `?storeId=${encodeURIComponent(storeId)}` : "";
       const [e, c] = await Promise.all([
-        api<{ expenses: Expense[] }>("/api/expenses"),
+        api<{ expenses: Expense[] }>(`/api/expenses${qs}`),
         api<{ categories: string[] }>("/api/expense-categories"),
       ]);
       setRows(e.expenses);
@@ -70,7 +79,7 @@ export function ExpensesPanel({ isAdmin }: { isAdmin: boolean }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [storeId]);
 
   useEffect(() => {
     setForm((f) => (f.expenseDate ? f : { ...f, expenseDate: todayInput() }));

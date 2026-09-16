@@ -236,7 +236,7 @@ export function BillsView({
         </table>
       </div>
 
-      <ExpensesPanel isAdmin={isAdmin} />
+      <ExpensesPanel isAdmin={isAdmin} storeId={isAdmin ? storeId : ""} />
 
       {openId && (
         <BillDetailModal
