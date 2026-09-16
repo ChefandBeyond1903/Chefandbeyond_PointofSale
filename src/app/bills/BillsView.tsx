@@ -10,7 +10,7 @@ import { BILL_TERMS } from "@/lib/terms";
 import { usePaged } from "@/lib/usePaged";
 import { Pager } from "@/components/Pager";
 import { ExpensesPanel } from "./ExpensesPanel";
-import type { Bill } from "@/lib/types";
+import type { Bill, Store } from "@/lib/types";
 
 const FILTERS = ["ALL", "OPEN", "OVERDUE", "PAID"] as const;
 type Filter = (typeof FILTERS)[number];
@@ -36,6 +36,15 @@ export function BillsView({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [stores, setStores] = useState<Store[]>([]);
+  const [storeId, setStoreId] = useState(""); // "" = all stores (admin only)
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    api<{ stores: Store[] }>("/api/stores")
+      .then((r) => setStores(r.stores))
+      .catch(() => {});
+  }, [isAdmin]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -45,6 +54,7 @@ export function BillsView({
       if (filter === "OVERDUE") params.set("overdue", "1");
       else if (filter !== "ALL") params.set("status", filter);
       if (q.trim()) params.set("q", q.trim());
+      if (isAdmin && storeId) params.set("storeId", storeId);
       const res = await api<{ bills: Bill[] }>(`/api/bills?${params.toString()}`);
       setBills(res.bills);
     } catch (err) {
@@ -52,7 +62,7 @@ export function BillsView({
     } finally {
       setLoading(false);
     }
-  }, [filter, q]);
+  }, [filter, q, isAdmin, storeId]);
 
   useEffect(() => {
     const t = setTimeout(load, 200);
@@ -109,6 +119,20 @@ export function BillsView({
           <button onClick={() => setQ("")} className="btn-ghost text-xs">
             Clear
           </button>
+        )}
+        {isAdmin && (
+          <select
+            className="input h-8 w-auto min-w-56"
+            value={storeId}
+            onChange={(e) => setStoreId(e.target.value)}
+          >
+            <option value="">All stores (combined)</option>
+            {stores.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
         )}
         <span className="text-xs text-zinc-400">{bills.length} shown</span>
       </div>
