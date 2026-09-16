@@ -104,25 +104,27 @@ export function ExpensesPanel({
 
   const total = useMemo(() => rows.reduce((s, r) => s + r.amountCents, 0), [rows]);
 
-  async function addCategory() {
-    const name = prompt("New expense category:");
-    if (!name || !name.trim()) return;
+  // Persists a category typed into any of the pickers below so it's in the
+  // dropdown/datalist from then on — a no-op (upsert) if it already exists.
+  async function ensureCategory(name: string) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    if (categories.some((c) => c.toLowerCase() === trimmed.toLowerCase())) return;
     try {
       const r = await api<{ categories: string[] }>("/api/expense-categories", {
         method: "POST",
-        body: JSON.stringify({ name: name.trim() }),
+        body: JSON.stringify({ name: trimmed }),
       });
       setCategories(r.categories);
-      setForm((f) => ({ ...f, category: name.trim() }));
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not add category");
+    } catch {
+      /* non-fatal — the expense/template still saves with this category text */
     }
   }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.category) {
-      setError("Pick a category");
+    if (!form.category.trim()) {
+      setError("Enter a category");
       return;
     }
     if (form.amountCents <= 0) {
@@ -132,10 +134,11 @@ export function ExpensesPanel({
     setBusy(true);
     setError(null);
     try {
+      await ensureCategory(form.category);
       await api("/api/expenses", {
         method: "POST",
         body: JSON.stringify({
-          category: form.category,
+          category: form.category.trim(),
           payee: form.payee.trim(),
           amountCents: form.amountCents,
           expenseDate: form.expenseDate,
@@ -187,15 +190,16 @@ export function ExpensesPanel({
 
   async function saveEdit() {
     if (!edit) return;
-    if (!edit.category) return setError("Pick a category");
+    if (!edit.category.trim()) return setError("Enter a category");
     if (edit.amountCents <= 0) return setError("Enter an amount");
     setEditBusy(true);
     setError(null);
     try {
+      await ensureCategory(edit.category);
       await api(`/api/expenses/${edit.id}`, {
         method: "PATCH",
         body: JSON.stringify({
-          category: edit.category,
+          category: edit.category.trim(),
           payee: edit.payee.trim(),
           amountCents: edit.amountCents,
           expenseDate: edit.expenseDate,
@@ -215,6 +219,14 @@ export function ExpensesPanel({
 
   return (
     <div className="mt-10">
+      {/* Shared by every category input on this page (here, the edit modal,
+          and the recurring-expense form) — type a new name and it's saved
+          automatically, so it's offered here next time. */}
+      <datalist id="expense-category-options">
+        {categories.map((c) => (
+          <option key={c} value={c} />
+        ))}
+      </datalist>
       <div className="mb-3 flex flex-wrap items-center gap-3">
         <h2 className="text-lg font-semibold">Operating expenses</h2>
         <span className="text-sm text-zinc-400">
@@ -230,7 +242,7 @@ export function ExpensesPanel({
 
       <RecurringExpensesSection
         isAdmin={isAdmin}
-        categories={categories}
+        ensureCategory={ensureCategory}
         stores={stores}
         onPosted={load}
       />
@@ -238,28 +250,13 @@ export function ExpensesPanel({
       <form onSubmit={submit} className="card mb-4 grid gap-3 p-4 sm:grid-cols-6">
         <div className="sm:col-span-2">
           <label className="label">Category</label>
-          <div className="flex gap-1">
-            <select
-              className="input"
-              value={form.category}
-              onChange={(e) => setForm({ ...form, category: e.target.value })}
-            >
-              <option value="">— Pick —</option>
-              {categories.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={addCategory}
-              className="btn-secondary shrink-0 whitespace-nowrap px-2"
-              title="Add a new category"
-            >
-              + New
-            </button>
-          </div>
+          <input
+            className="input"
+            list="expense-category-options"
+            placeholder="Type or pick a category"
+            value={form.category}
+            onChange={(e) => setForm({ ...form, category: e.target.value })}
+          />
         </div>
         <div className="sm:col-span-2">
           <label className="label">Payee (optional)</label>
@@ -415,18 +412,13 @@ export function ExpensesPanel({
             <div className="grid gap-3">
               <div>
                 <label className="label">Category</label>
-                <select
+                <input
                   className="input"
+                  list="expense-category-options"
+                  placeholder="Type or pick a category"
                   value={edit.category}
                   onChange={(e) => setEdit({ ...edit, category: e.target.value })}
-                >
-                  <option value="">— Pick —</option>
-                  {[...new Set([...categories, edit.category].filter(Boolean))].map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -542,12 +534,14 @@ const emptyRecurForm = (): RecurForm => ({
 
 function RecurringExpensesSection({
   isAdmin,
-  categories,
+  ensureCategory,
   stores,
   onPosted,
 }: {
   isAdmin: boolean;
-  categories: string[];
+  // Persists a newly-typed category so it's in the shared datalist (see
+  // #expense-category-options in ExpensesPanel) from then on.
+  ensureCategory: (name: string) => Promise<void>;
   stores: Store[];
   onPosted: () => void;
 }) {
@@ -577,15 +571,16 @@ function RecurringExpensesSection({
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.category) return setErr("Pick a category");
+    if (!form.category.trim()) return setErr("Enter a category");
     if (form.amountCents <= 0) return setErr("Enter an amount");
     setBusy(true);
     setErr(null);
     try {
+      await ensureCategory(form.category);
       await api("/api/recurring-expenses", {
         method: "POST",
         body: JSON.stringify({
-          category: form.category,
+          category: form.category.trim(),
           payee: form.payee.trim(),
           amountCents: form.amountCents,
           memo: form.memo.trim(),
@@ -674,18 +669,13 @@ function RecurringExpensesSection({
         >
           <div className="sm:col-span-2">
             <label className="label">Category</label>
-            <select
+            <input
               className="input"
+              list="expense-category-options"
+              placeholder="Type or pick a category"
               value={form.category}
               onChange={(e) => setForm({ ...form, category: e.target.value })}
-            >
-              <option value="">— Pick —</option>
-              {categories.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
+            />
           </div>
           <div className="sm:col-span-2">
             <label className="label">Payee (optional)</label>
