@@ -9,6 +9,8 @@ import { VendorPicker } from "@/components/VendorPicker";
 import { BILL_TERMS } from "@/lib/terms";
 import { usePaged } from "@/lib/usePaged";
 import { Pager } from "@/components/Pager";
+import { DateRangePicker } from "@/components/DateRangePicker";
+import type { DateRange } from "@/lib/dateRange";
 import { ExpensesPanel } from "./ExpensesPanel";
 import type { Bill, Store } from "@/lib/types";
 
@@ -38,6 +40,10 @@ export function BillsView({
   const [openId, setOpenId] = useState<string | null>(null);
   const [stores, setStores] = useState<Store[]>([]);
   const [storeId, setStoreId] = useState(""); // "" = all stores (admin only)
+  // null = no date filter (every bill, the long-standing default) — set once
+  // the picker below is touched.
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
+  const [dateLabel, setDateLabel] = useState("");
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -55,6 +61,10 @@ export function BillsView({
       else if (filter !== "ALL") params.set("status", filter);
       if (q.trim()) params.set("q", q.trim());
       if (isAdmin && storeId) params.set("storeId", storeId);
+      if (dateRange) {
+        params.set("from", dateRange.from.toISOString());
+        params.set("to", dateRange.to.toISOString());
+      }
       const res = await api<{ bills: Bill[] }>(`/api/bills?${params.toString()}`);
       setBills(res.bills);
     } catch (err) {
@@ -62,7 +72,7 @@ export function BillsView({
     } finally {
       setLoading(false);
     }
-  }, [filter, q, isAdmin, storeId]);
+  }, [filter, q, isAdmin, storeId, dateRange]);
 
   useEffect(() => {
     const t = setTimeout(load, 200);
@@ -134,7 +144,27 @@ export function BillsView({
             ))}
           </select>
         )}
-        <span className="text-xs text-zinc-400">{bills.length} shown</span>
+        <DateRangePicker
+          defaultPreset="this_month"
+          onChange={(r, l) => {
+            setDateRange(r);
+            setDateLabel(l);
+          }}
+        />
+        {dateRange && (
+          <button
+            onClick={() => {
+              setDateRange(null);
+              setDateLabel("");
+            }}
+            className="btn-ghost text-xs"
+          >
+            Clear dates
+          </button>
+        )}
+        <span className="text-xs text-zinc-400">
+          {bills.length} shown{dateRange ? ` · ${dateLabel.toLowerCase()}` : ""}
+        </span>
       </div>
 
       <p className="mb-3 text-xs text-zinc-400">
@@ -236,7 +266,7 @@ export function BillsView({
         </table>
       </div>
 
-      <ExpensesPanel isAdmin={isAdmin} storeId={isAdmin ? storeId : ""} />
+      <ExpensesPanel isAdmin={isAdmin} storeId={isAdmin ? storeId : ""} dateRange={dateRange} />
 
       {openId && (
         <BillDetailModal

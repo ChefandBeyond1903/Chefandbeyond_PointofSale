@@ -6,6 +6,7 @@ import { formatMoney } from "@/lib/money";
 import { formatDateOnly } from "@/lib/date";
 import { MoneyInput } from "@/components/MoneyInput";
 import { RECUR_FREQUENCY_LABEL } from "@/lib/recur";
+import type { DateRange } from "@/lib/dateRange";
 import type { Expense, RecurringExpense, Store } from "@/lib/types";
 
 const FREQUENCIES = ["WEEKLY", "MONTHLY", "QUARTERLY", "YEARLY"] as const;
@@ -25,11 +26,15 @@ function fmtDate(s: string) {
 export function ExpensesPanel({
   isAdmin,
   storeId = "",
+  dateRange = null,
 }: {
   isAdmin: boolean;
   // The store selected in the Bills store filter above ("" = all stores) —
   // keeps this list in step with that same selection.
   storeId?: string;
+  // The date range picked in the Bills header above (null = no filter) —
+  // keeps this list in step with that same selection.
+  dateRange?: DateRange | null;
 }) {
   const [rows, setRows] = useState<Expense[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
@@ -67,7 +72,13 @@ export function ExpensesPanel({
     setLoading(true);
     setError(null);
     try {
-      const qs = storeId ? `?storeId=${encodeURIComponent(storeId)}` : "";
+      const params = new URLSearchParams();
+      if (storeId) params.set("storeId", storeId);
+      if (dateRange) {
+        params.set("from", dateRange.from.toISOString());
+        params.set("to", dateRange.to.toISOString());
+      }
+      const qs = params.toString() ? `?${params.toString()}` : "";
       const [e, c] = await Promise.all([
         api<{ expenses: Expense[] }>(`/api/expenses${qs}`),
         api<{ categories: string[] }>("/api/expense-categories"),
@@ -79,7 +90,7 @@ export function ExpensesPanel({
     } finally {
       setLoading(false);
     }
-  }, [storeId]);
+  }, [storeId, dateRange]);
 
   useEffect(() => {
     setForm((f) => (f.expenseDate ? f : { ...f, expenseDate: todayInput() }));
