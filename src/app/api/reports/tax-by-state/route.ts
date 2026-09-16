@@ -21,9 +21,12 @@ export async function GET(req: NextRequest) {
     const storeId = user.role === "ADMIN" ? requestedStore : scoped;
     const noStoreAssigned = scoped === "__none__";
 
+    // Same filter as /api/reports/summary's P&L totals (status COMPLETED,
+    // paidAt-based) so this report's KY + TN + unassigned always reconciles
+    // exactly with the "sales tax collected" figure shown there.
     const where: Prisma.SaleWhereInput = {
-      status: { in: ["COMPLETED", "INVOICED"] },
-      createdAt: { gte: from, lte: to },
+      status: "COMPLETED",
+      paidAt: { gte: from, lte: to },
     };
     if (storeId) where.storeId = storeId;
 

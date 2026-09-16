@@ -18,6 +18,7 @@ import type {
   ProfitRow,
   PurchaseOrder,
   ReportSummary,
+  TaxByStateReport as TaxByStateReportData,
 } from "@/lib/types";
 
 export function ReportsView({
@@ -44,6 +45,7 @@ export function ReportsView({
   const [bills, setBills] = useState<Bill[]>([]);
   const [heldTickets, setHeldTickets] = useState<HeldSaleSummary[]>([]);
   const [inv, setInv] = useState<InventoryValuation | null>(null);
+  const [taxByState, setTaxByState] = useState<TaxByStateReportData | null>(null);
 
   const load = useCallback(
     async (from: Date, to: Date, store: string) => {
@@ -76,6 +78,11 @@ export function ReportsView({
         api<InventoryValuation>(`/api/reports/inventory${invQs}`)
           .then((r) => setInv(r))
           .catch(() => setInv(null));
+        // KY/TN split of the same "sales tax collected" figure shown on the
+        // P&L below — how much is owed to each state.
+        api<TaxByStateReportData>(`/api/reports/tax-by-state?${qs.toString()}`)
+          .then((r) => setTaxByState(r))
+          .catch(() => setTaxByState(null));
       }
     },
     [isAdmin, limited],
@@ -425,7 +432,7 @@ export function ReportsView({
             </div>
           )}
 
-          {!limited && <ProfitLoss data={data} />}
+          {!limited && <ProfitLoss data={data} taxByState={taxByState} />}
         </div>
       )}
       </>
@@ -544,7 +551,13 @@ function PLRow({
   );
 }
 
-function ProfitLoss({ data }: { data: ReportSummary }) {
+function ProfitLoss({
+  data,
+  taxByState,
+}: {
+  data: ReportSummary;
+  taxByState: TaxByStateReportData | null;
+}) {
   const t = data.totals;
   const grossSales = t.subtotalCents - t.discountCents;
   return (
@@ -638,9 +651,27 @@ function ProfitLoss({ data }: { data: ReportSummary }) {
           </p>
         )}
       </div>
-      <p className="mt-2 text-xs text-zinc-400">
-        Sales tax collected ({formatMoney(t.taxCents)}) is excluded — it isn&apos;t revenue.
-      </p>
+      {taxByState ? (
+        <div className="mt-3 border-t border-zinc-200 pt-2 text-sm">
+          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-zinc-400">
+            Sales tax collected — excluded from profit above, owed to each state
+          </p>
+          <PLRow label="Kentucky" value={formatMoney(taxByState.ky.taxCollectedCents)} indent />
+          <PLRow label="Tennessee" value={formatMoney(taxByState.tn.taxCollectedCents)} indent />
+          {taxByState.unassigned.taxCollectedCents > 0 && (
+            <PLRow
+              label="Other / unassigned"
+              value={formatMoney(taxByState.unassigned.taxCollectedCents)}
+              indent
+            />
+          )}
+          <PLRow label="Total sales tax" value={formatMoney(t.taxCents)} border />
+        </div>
+      ) : (
+        <p className="mt-2 text-xs text-zinc-400">
+          Sales tax collected ({formatMoney(t.taxCents)}) is excluded — it isn&apos;t revenue.
+        </p>
+      )}
     </div>
   );
 }
