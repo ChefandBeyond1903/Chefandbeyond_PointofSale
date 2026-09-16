@@ -15,12 +15,13 @@ import { dueDateFromTerms } from "@/lib/terms";
 import { phoneDigits, formatPhone } from "@/lib/phone";
 import { PhoneInput } from "@/components/PhoneInput";
 import { matchesSearch } from "@/lib/search";
+import { AddressFields, stateToDraft, resolveState } from "@/components/AddressFields";
+import { formatAddress } from "@/lib/address";
 import {
   storeHomeJurisdiction,
   autoJurisdiction as autoTaxJurisdiction,
   jurisdictionRateBps,
   jurisdictionLabel,
-  DELIVERY_STATE_OPTIONS,
   type TaxJurisdictionCode,
 } from "@/lib/taxJurisdiction";
 import type {
@@ -58,7 +59,11 @@ interface TicketSnapshot {
   custName: string;
   custEmail: string;
   custPhone: string;
-  custAddress: string;
+  custStreet: string;
+  custCity: string;
+  custState: string;
+  custStateOther: string;
+  custZip: string;
   custCompany: string;
   custLocationId: string;
   salespersonId: string;
@@ -68,7 +73,6 @@ interface TicketSnapshot {
   deliveryState: string;
   deliveryStateOther: string;
   deliveryZip: string;
-  deliveryCounty: string;
   taxOverrideCode: "" | TaxJurisdictionCode;
   taxOverrideReason: string;
 }
@@ -151,7 +155,6 @@ export default function RegisterPage() {
   const [deliveryState, setDeliveryState] = useState("");
   const [deliveryStateOther, setDeliveryStateOther] = useState("");
   const [deliveryZip, setDeliveryZip] = useState("");
-  const [deliveryCounty, setDeliveryCounty] = useState("");
   const [taxOverrideCode, setTaxOverrideCode] = useState<"" | TaxJurisdictionCode>("");
   const [taxOverrideReason, setTaxOverrideReason] = useState("");
   const [taxOverrideOpen, setTaxOverrideOpen] = useState(false);
@@ -161,7 +164,11 @@ export default function RegisterPage() {
   const [custName, setCustName] = useState("");
   const [custEmail, setCustEmail] = useState("");
   const [custPhone, setCustPhone] = useState("");
-  const [custAddress, setCustAddress] = useState("");
+  const [custStreet, setCustStreet] = useState("");
+  const [custCity, setCustCity] = useState("");
+  const [custState, setCustState] = useState("");
+  const [custStateOther, setCustStateOther] = useState("");
+  const [custZip, setCustZip] = useState("");
   const [custCompany, setCustCompany] = useState("");
   // "" = the customer's own address; otherwise one of their ship-to locations.
   const [custLocationId, setCustLocationId] = useState("");
@@ -341,7 +348,11 @@ export default function RegisterPage() {
           setCustName(s.custName ?? "");
           setCustEmail(s.custEmail ?? "");
           setCustPhone(s.custPhone ?? "");
-          setCustAddress(s.custAddress ?? "");
+          setCustStreet(s.custStreet ?? "");
+          setCustCity(s.custCity ?? "");
+          setCustState(s.custState ?? "");
+          setCustStateOther(s.custStateOther ?? "");
+          setCustZip(s.custZip ?? "");
           setCustCompany(s.custCompany ?? "");
           setCustLocationId(s.custLocationId ?? "");
           setSalespersonId(s.salespersonId ?? "");
@@ -351,7 +362,6 @@ export default function RegisterPage() {
           setDeliveryState(s.deliveryState ?? "");
           setDeliveryStateOther(s.deliveryStateOther ?? "");
           setDeliveryZip(s.deliveryZip ?? "");
-          setDeliveryCounty(s.deliveryCounty ?? "");
           setTaxOverrideCode(s.taxOverrideCode ?? "");
           setTaxOverrideReason(s.taxOverrideReason ?? "");
         }
@@ -378,7 +388,11 @@ export default function RegisterPage() {
         custName,
         custEmail,
         custPhone,
-        custAddress,
+        custStreet,
+        custCity,
+        custState,
+        custStateOther,
+        custZip,
         custCompany,
         custLocationId,
         salespersonId,
@@ -388,7 +402,6 @@ export default function RegisterPage() {
         deliveryState,
         deliveryStateOther,
         deliveryZip,
-        deliveryCounty,
         taxOverrideCode,
         taxOverrideReason,
       };
@@ -403,7 +416,11 @@ export default function RegisterPage() {
     custName,
     custEmail,
     custPhone,
-    custAddress,
+    custStreet,
+    custCity,
+    custState,
+    custStateOther,
+    custZip,
     custCompany,
     custLocationId,
     salespersonId,
@@ -413,7 +430,6 @@ export default function RegisterPage() {
     deliveryState,
     deliveryStateOther,
     deliveryZip,
-    deliveryCounty,
     taxOverrideCode,
     taxOverrideReason,
   ]);
@@ -441,6 +457,35 @@ export default function RegisterPage() {
     );
   }
 
+  // Fills the customer bill-to fields from a source address, splitting the
+  // state into the dropdown + "Add state…" free text as needed.
+  function applyCustAddress(street: string, city: string, state: string, zip: string) {
+    setCustStreet(street);
+    setCustCity(city);
+    const st = stateToDraft(state);
+    setCustState(st.state);
+    setCustStateOther(st.stateOther);
+    setCustZip(zip);
+  }
+
+  // Fills the register's delivery-address fields the same way — used to
+  // auto-suggest a saved customer/location address for "Deliver to Customer".
+  function applyDeliveryAddress(street: string, city: string, state: string, zip: string) {
+    setDeliveryStreet(street);
+    setDeliveryCity(city);
+    const st = stateToDraft(state);
+    setDeliveryState(st.state);
+    setDeliveryStateOther(st.stateOther);
+    setDeliveryZip(zip);
+  }
+
+  // The delivery fields are still all blank — so picking a customer can
+  // suggest their saved address without overwriting anything staff already
+  // typed for this specific sale.
+  function deliveryAddressBlank() {
+    return !deliveryStreet.trim() && !deliveryCity.trim() && !deliveryZip.trim();
+  }
+
   function pickCustomer(name: string) {
     setCustName(name);
     setCustLocationId("");
@@ -449,8 +494,11 @@ export default function RegisterPage() {
       setCustId(match.id);
       setCustEmail(match.email);
       setCustPhone(formatPhone(match.phone));
-      setCustAddress(match.address);
+      applyCustAddress(match.street ?? "", match.city ?? "", match.state ?? "", match.zip ?? "");
       setCustCompany(match.company);
+      if (deliveryAddressBlank() && (match.street || match.city || match.zip)) {
+        applyDeliveryAddress(match.street ?? "", match.city ?? "", match.state ?? "", match.zip ?? "");
+      }
     } else {
       setCustId(null);
     }
@@ -476,10 +524,13 @@ export default function RegisterPage() {
     setCustId(c.id);
     setCustEmail(c.email);
     setCustPhone(formatPhone(c.phone));
-    setCustAddress(c.address);
+    applyCustAddress(c.street ?? "", c.city ?? "", c.state ?? "", c.zip ?? "");
     setCustCompany(c.company);
     setCustLocationId("");
     setCustMenuOpen(false);
+    if (deliveryAddressBlank() && (c.street || c.city || c.zip)) {
+      applyDeliveryAddress(c.street ?? "", c.city ?? "", c.state ?? "", c.zip ?? "");
+    }
   }
 
   // Charge to one of the customer's ship-to locations (or "" = their own
@@ -491,13 +542,21 @@ export default function RegisterPage() {
     const c = customers.find((x) => x.id === custId);
     const loc = c?.locations?.find((l) => l.id === locId);
     if (loc) {
-      if (loc.address) setCustAddress(loc.address);
+      if (loc.street || loc.city || loc.zip) {
+        applyCustAddress(loc.street ?? "", loc.city ?? "", loc.state ?? "", loc.zip ?? "");
+      }
       if (loc.phone) setCustPhone(formatPhone(loc.phone));
       if (loc.email) setCustEmail(loc.email);
+      if (deliveryAddressBlank() && (loc.street || loc.city || loc.zip)) {
+        applyDeliveryAddress(loc.street ?? "", loc.city ?? "", loc.state ?? "", loc.zip ?? "");
+      }
     } else if (c) {
-      setCustAddress(c.address);
+      applyCustAddress(c.street ?? "", c.city ?? "", c.state ?? "", c.zip ?? "");
       setCustPhone(formatPhone(c.phone));
       setCustEmail(c.email);
+      if (deliveryAddressBlank() && (c.street || c.city || c.zip)) {
+        applyDeliveryAddress(c.street ?? "", c.city ?? "", c.state ?? "", c.zip ?? "");
+      }
     }
   }
 
@@ -506,7 +565,7 @@ export default function RegisterPage() {
     setCustName("");
     setCustEmail("");
     setCustPhone("");
-    setCustAddress("");
+    applyCustAddress("", "", "", "");
     setCustCompany("");
     setCustLocationId("");
     setCustOpen(false);
@@ -827,7 +886,6 @@ export default function RegisterPage() {
     setDeliveryState("");
     setDeliveryStateOther("");
     setDeliveryZip("");
-    setDeliveryCounty("");
     setTaxOverrideCode("");
     setTaxOverrideReason("");
     setTaxOverrideOpen(false);
@@ -841,16 +899,22 @@ export default function RegisterPage() {
           ? { customerLocationId: custLocationId }
           : {}),
       };
-    if (custName.trim())
+    if (custName.trim()) {
+      const state = resolveState(custState, custStateOther);
       return {
         customer: {
           name: custName.trim(),
           email: custEmail.trim(),
           phone: custPhone.trim(),
-          address: custAddress.trim(),
+          address: formatAddress({ street: custStreet, city: custCity, state, zip: custZip }),
+          street: custStreet.trim(),
+          city: custCity.trim(),
+          state,
+          zip: custZip.trim(),
           company: custCompany.trim(),
         },
       };
+    }
     return {};
   }
 
@@ -918,7 +982,10 @@ export default function RegisterPage() {
       setCustName(res.heldSale.customerName);
       setCustEmail(res.heldSale.customerEmail);
       setCustPhone(res.heldSale.customerPhone);
-      setCustAddress(res.heldSale.customerAddress);
+      // Held sales only ever snapshot a single-line address (no structured
+      // fields on that model) — put it in Street and leave city/state/zip for
+      // staff to split out if this sale needs delivery tax handling.
+      applyCustAddress(res.heldSale.customerAddress ?? "", "", "", "");
       setCustCompany(res.heldSale.customerCompany);
       setCustOpen(false);
       setSalespersonId(
@@ -980,7 +1047,9 @@ export default function RegisterPage() {
       setCustName(res.quote.customerNameSnapshot ?? "");
       setCustEmail(res.quote.customerEmailSnapshot ?? "");
       setCustPhone(res.quote.customerPhoneSnapshot ?? "");
-      setCustAddress(res.quote.customerAddressSnapshot ?? "");
+      // Quotes only ever snapshot a single-line address — same as held sales
+      // above.
+      applyCustAddress(res.quote.customerAddressSnapshot ?? "", "", "", "");
       setCustCompany(res.quote.customerCompanySnapshot ?? "");
       setCustOpen(false);
       setFromQuoteId(id);
@@ -1057,7 +1126,6 @@ export default function RegisterPage() {
             deliveryCity: deliveryMethod === "DELIVERY" ? deliveryCity.trim() : "",
             deliveryState: deliveryMethod === "DELIVERY" ? deliveryStateCode : "",
             deliveryZip: deliveryMethod === "DELIVERY" ? deliveryZip.trim() : "",
-            deliveryCounty: activeJurisdiction === "TN" ? deliveryCounty.trim() : "",
             ...(taxOverrideCode
               ? { taxOverride: { jurisdiction: taxOverrideCode, reason: taxOverrideReason.trim() } }
               : {}),
@@ -1079,9 +1147,6 @@ export default function RegisterPage() {
       if (!deliveryStateCode) {
         return deliveryState === "OTHER" ? "Enter the delivery state." : "Choose a delivery state.";
       }
-    }
-    if (deliveryMethod === "DELIVERY" && activeJurisdiction === "TN" && !deliveryCounty.trim()) {
-      return "Enter the Tennessee delivery county.";
     }
     if (taxOverrideCode && !taxOverrideReason.trim()) {
       return "Enter a reason for overriding the tax jurisdiction.";
@@ -1697,12 +1762,17 @@ export default function RegisterPage() {
                     onChange={(e) => setCustCompany(e.target.value)}
                   />
                 </div>
-                <textarea
-                  className="input"
-                  rows={2}
-                  placeholder="Address"
-                  value={custAddress}
-                  onChange={(e) => setCustAddress(e.target.value)}
+                <AddressFields
+                  street={custStreet}
+                  city={custCity}
+                  state={custState}
+                  stateOther={custStateOther}
+                  zip={custZip}
+                  onStreet={setCustStreet}
+                  onCity={setCustCity}
+                  onState={setCustState}
+                  onStateOther={setCustStateOther}
+                  onZip={setCustZip}
                 />
                 {!custId && custName.trim() && (
                   <p className="text-[11px] text-zinc-400">
@@ -1893,68 +1963,37 @@ export default function RegisterPage() {
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] text-zinc-400">
-                      Tax is charged for the state delivered to.
+                      Tax is charged for the state delivered to. Saved to the customer on checkout.
                     </span>
-                    {custAddress.trim() && (
+                    {(custStreet.trim() || custCity.trim() || custZip.trim()) && (
                       <button
                         type="button"
-                        onClick={() => setDeliveryStreet(custAddress.trim())}
+                        onClick={() =>
+                          applyDeliveryAddress(
+                            custStreet,
+                            custCity,
+                            resolveState(custState, custStateOther),
+                            custZip,
+                          )
+                        }
                         className="text-[11px] text-indigo-600 underline"
                       >
                         Use customer&apos;s address
                       </button>
                     )}
                   </div>
-                  <input
-                    className="input h-8 w-full text-xs"
-                    placeholder="Street address"
-                    value={deliveryStreet}
-                    onChange={(e) => setDeliveryStreet(e.target.value)}
+                  <AddressFields
+                    street={deliveryStreet}
+                    city={deliveryCity}
+                    state={deliveryState}
+                    stateOther={deliveryStateOther}
+                    zip={deliveryZip}
+                    onStreet={setDeliveryStreet}
+                    onCity={setDeliveryCity}
+                    onState={setDeliveryState}
+                    onStateOther={setDeliveryStateOther}
+                    onZip={setDeliveryZip}
                   />
-                  <div className="flex gap-1.5">
-                    <input
-                      className="input h-8 min-w-0 flex-1 text-xs"
-                      placeholder="City"
-                      value={deliveryCity}
-                      onChange={(e) => setDeliveryCity(e.target.value)}
-                    />
-                    <select
-                      className="input h-8 w-32 text-xs"
-                      value={deliveryState}
-                      onChange={(e) => setDeliveryState(e.target.value)}
-                    >
-                      <option value="">State…</option>
-                      {DELIVERY_STATE_OPTIONS.map((s) => (
-                        <option key={s.code} value={s.code}>
-                          {s.code}
-                        </option>
-                      ))}
-                      <option value="OTHER">Add state…</option>
-                    </select>
-                    <input
-                      className="input h-8 w-24 text-xs"
-                      placeholder="ZIP"
-                      value={deliveryZip}
-                      onChange={(e) => setDeliveryZip(e.target.value)}
-                    />
-                  </div>
-                  {deliveryState === "OTHER" && (
-                    <input
-                      className="input h-8 w-32 text-xs"
-                      placeholder="State (2-letter)"
-                      maxLength={2}
-                      value={deliveryStateOther}
-                      onChange={(e) => setDeliveryStateOther(e.target.value.toUpperCase())}
-                    />
-                  )}
-                  {activeJurisdiction === "TN" && (
-                    <input
-                      className="input h-8 w-full text-xs"
-                      placeholder="Delivery county (Tennessee)"
-                      value={deliveryCounty}
-                      onChange={(e) => setDeliveryCounty(e.target.value)}
-                    />
-                  )}
                 </div>
               )}
               <button

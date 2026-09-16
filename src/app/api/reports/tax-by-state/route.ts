@@ -41,7 +41,6 @@ export async function GET(req: NextRequest) {
               shippingCents: true,
               taxCents: true,
               taxJurisdiction: true,
-              deliveryCounty: true,
               customerTaxExemptSnapshot: true,
             },
           }),
@@ -63,7 +62,7 @@ export async function GET(req: NextRequest) {
       return { grossSalesCents: 0, taxableSalesCents: 0, taxCollectedCents: 0, saleCount: 0 };
     }
     const ky = blank();
-    const tn = { ...blank(), byCounty: new Map<string, ReturnType<typeof blank>>() };
+    const tn = blank();
     const unassigned = blank();
 
     for (const s of sales) {
@@ -73,16 +72,6 @@ export async function GET(req: NextRequest) {
       bucket.taxCollectedCents += s.taxCents;
       bucket.saleCount += 1;
       if (!s.customerTaxExemptSnapshot) bucket.taxableSalesCents += grossCents;
-
-      if (s.taxJurisdiction === "TN") {
-        const county = s.deliveryCounty.trim() || "Unspecified";
-        const row = tn.byCounty.get(county) ?? blank();
-        row.grossSalesCents += grossCents;
-        row.taxCollectedCents += s.taxCents;
-        row.saleCount += 1;
-        if (!s.customerTaxExemptSnapshot) row.taxableSalesCents += grossCents;
-        tn.byCounty.set(county, row);
-      }
     }
 
     const storeName = storeId ? (stores.find((s) => s.id === storeId)?.name ?? "") : "";
@@ -96,12 +85,7 @@ export async function GET(req: NextRequest) {
       },
       stores,
       ky,
-      tn: {
-        ...tn,
-        byCounty: [...tn.byCounty.entries()]
-          .map(([county, r]) => ({ county, ...r }))
-          .sort((a, b) => b.grossSalesCents - a.grossSalesCents),
-      },
+      tn,
       unassigned,
       overrides: overrideLogs.map((l) => ({
         id: l.id,

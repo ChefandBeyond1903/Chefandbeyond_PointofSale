@@ -12,6 +12,7 @@ import {
   jurisdictionRateBps,
 } from "@/lib/taxJurisdiction";
 import { formatMoney } from "@/lib/money";
+import { formatAddress } from "@/lib/address";
 import { ok, toErrorResponse } from "@/lib/api";
 import { verifyPaidIntent } from "@/lib/terminal";
 
@@ -122,9 +123,6 @@ export async function POST(req: NextRequest) {
     if (homeJurisdiction && body.deliveryMethod === "DELIVERY") {
       if (!body.deliveryStreet || !body.deliveryCity || !body.deliveryState || !body.deliveryZip) {
         throw new HttpError(400, "Enter the full delivery address.");
-      }
-      if (taxJurisdiction === "TN" && !body.deliveryCounty) {
-        throw new HttpError(400, "Enter the Tennessee delivery county.");
       }
     }
 
@@ -417,8 +415,16 @@ export async function POST(req: NextRequest) {
           const patch: Record<string, string> = {};
           if (!existing.email && inp.email) patch.email = inp.email;
           if (!existing.phone && inp.phone) patch.phone = inp.phone;
-          if (!existing.address && inp.address) patch.address = inp.address;
           if (!existing.company && inp.company) patch.company = inp.company;
+          if (!existing.street && !existing.city && !existing.zip && inp.street) {
+            patch.street = inp.street;
+            patch.city = inp.city;
+            patch.state = inp.state;
+            patch.zip = inp.zip;
+            patch.address = formatAddress(inp);
+          } else if (!existing.address && inp.address) {
+            patch.address = inp.address;
+          }
           const c = Object.keys(patch).length
             ? await tx.customer.update({ where: { id: existing.id }, data: patch })
             : existing;
@@ -430,7 +436,11 @@ export async function POST(req: NextRequest) {
               name: inp.name,
               email: inp.email,
               phone: inp.phone,
-              address: inp.address,
+              address: inp.address || formatAddress(inp),
+              street: inp.street,
+              city: inp.city,
+              state: inp.state,
+              zip: inp.zip,
               company: inp.company,
               storeId: storeId ?? null,
             },
@@ -438,6 +448,32 @@ export async function POST(req: NextRequest) {
           customerId = c.id;
           cSnap = { name: c.name, company: c.company, email: c.email, phone: c.phone, address: c.address };
         }
+      }
+
+      // Sync the delivery address entered for this sale back onto the
+      // customer's own record, so it's remembered next time — for both a
+      // customer that already existed and one just auto-created above.
+      if (
+        homeJurisdiction &&
+        body.deliveryMethod === "DELIVERY" &&
+        customerId &&
+        (body.deliveryStreet || body.deliveryCity || body.deliveryZip)
+      ) {
+        await tx.customer.update({
+          where: { id: customerId },
+          data: {
+            street: body.deliveryStreet,
+            city: body.deliveryCity,
+            state: body.deliveryState,
+            zip: body.deliveryZip,
+            address: formatAddress({
+              street: body.deliveryStreet,
+              city: body.deliveryCity,
+              state: body.deliveryState,
+              zip: body.deliveryZip,
+            }),
+          },
+        });
       }
 
       const created = await tx.sale.create({
@@ -459,7 +495,6 @@ export async function POST(req: NextRequest) {
           deliveryCity: body.deliveryMethod === "DELIVERY" ? body.deliveryCity : "",
           deliveryState: body.deliveryMethod === "DELIVERY" ? body.deliveryState : "",
           deliveryZip: body.deliveryMethod === "DELIVERY" ? body.deliveryZip : "",
-          deliveryCounty: taxJurisdiction === "TN" ? body.deliveryCounty : "",
           taxJurisdiction: taxJurisdiction ?? "",
           taxOverridden,
           paymentMethod: payMethod,

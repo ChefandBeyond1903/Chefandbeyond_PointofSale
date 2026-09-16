@@ -463,7 +463,6 @@ export interface Sale {
   deliveryCity?: string;
   deliveryState?: string;
   deliveryZip?: string;
-  deliveryCounty?: string;
   taxJurisdiction?: string; // "KY" | "TN" | ""
   taxOverridden?: boolean;
   items: SaleItem[];
@@ -488,16 +487,12 @@ export interface TaxByStateJurisdiction {
   saleCount: number;
 }
 
-export interface TaxByStateCounty extends TaxByStateJurisdiction {
-  county: string;
-}
-
 export interface TaxByStateReport {
   range: { from: string; to: string };
   scope: { allStores: boolean; storeName: string | null; noStoreAssigned: boolean };
   stores: { id: string; name: string }[];
   ky: TaxByStateJurisdiction;
-  tn: TaxByStateJurisdiction & { byCounty: TaxByStateCounty[] };
+  tn: TaxByStateJurisdiction;
   unassigned: TaxByStateJurisdiction;
   overrides: TaxOverrideLog[];
 }

@@ -225,11 +225,36 @@ export const saleItemSchema = z.object({
   unitPriceCents: z.number().int().min(0).max(100_000_00).optional(),
 });
 
+// Street/city/state/zip, shared by anywhere the app collects a structured
+// address (a customer's billing address, a ship-to location, an inline
+// customer typed at the register). `address` — a single-line string — is
+// composed from these server-side and kept only for consumers that still
+// want plain text (invoice/receipt snapshots, search).
+export const structuredAddressFields = {
+  street: z.string().trim().max(200).default(""),
+  city: z.string().trim().max(120).default(""),
+  state: z.string().trim().max(2).default(""),
+  zip: z.string().trim().max(12).default(""),
+};
+// Same, but for a partial-update schema: an omitted field is left untouched
+// rather than reset to "" (see the note on productUpdateSchema above).
+export const structuredAddressFieldsOptional = {
+  street: z.string().trim().max(200).optional(),
+  city: z.string().trim().max(120).optional(),
+  state: z.string().trim().max(2).optional(),
+  zip: z.string().trim().max(12).optional(),
+};
+
 export const saleCustomerSchema = z.object({
   name: z.string().trim().min(1).max(160),
   email: z.string().trim().max(200).default(""),
   phone: z.string().trim().max(60).default(""),
+  // `address` is a composed single-line fallback (used as-is by quotes/held
+  // sales, which only ever snapshot text); the sales route — the only place
+  // that actually creates/updates a Customer row from this — prefers the
+  // structured fields below when present.
   address: z.string().trim().max(400).default(""),
+  ...structuredAddressFields,
   company: z.string().trim().max(160).default(""),
 });
 
@@ -265,7 +290,6 @@ export const saleCreateSchema = z.object({
   deliveryCity: z.string().trim().max(120).default(""),
   deliveryState: z.string().trim().max(2).default(""),
   deliveryZip: z.string().trim().max(12).default(""),
-  deliveryCounty: z.string().trim().max(120).default(""),
   // Staff-initiated override of the auto-selected tax jurisdiction. Present
   // only when the operator explicitly changed it; logged with a reason.
   taxOverride: taxOverrideSchema.optional(),
@@ -324,25 +348,6 @@ export const quoteCreateSchema = z.object({
   customerLocationId: z.string().min(1).optional(),
   customer: saleCustomerSchema.partial().optional(),
 });
-
-// Street/city/state/zip, shared by anywhere the app collects a structured
-// address (a customer's billing address, a ship-to location). `address` — a
-// single-line string — is composed from these server-side and kept only for
-// consumers that still want plain text (invoice/receipt snapshots, search).
-export const structuredAddressFields = {
-  street: z.string().trim().max(200).default(""),
-  city: z.string().trim().max(120).default(""),
-  state: z.string().trim().max(2).default(""),
-  zip: z.string().trim().max(12).default(""),
-};
-// Same, but for a partial-update schema: an omitted field is left untouched
-// rather than reset to "" (see the note on productUpdateSchema above).
-export const structuredAddressFieldsOptional = {
-  street: z.string().trim().max(200).optional(),
-  city: z.string().trim().max(120).optional(),
-  state: z.string().trim().max(2).optional(),
-  zip: z.string().trim().max(12).optional(),
-};
 
 // A customer's ship-to / billing location.
 export const customerLocationSchema = z.object({

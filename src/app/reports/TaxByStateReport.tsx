@@ -84,15 +84,6 @@ export function TaxByStateReport({ isAdmin }: { isAdmin: boolean }) {
       ["Gross sales", "Taxable sales", "Tax collected (9.75%)", "Transactions"],
       [money(data.tn.grossSalesCents), money(data.tn.taxableSalesCents), money(data.tn.taxCollectedCents), data.tn.saleCount],
       [],
-      ["Delivery county", "Gross sales", "Taxable sales", "Tax collected", "Transactions"],
-      ...data.tn.byCounty.map((c) => [
-        c.county,
-        money(c.grossSalesCents),
-        money(c.taxableSalesCents),
-        money(c.taxCollectedCents),
-        c.saleCount,
-      ]),
-      [],
       ["This is a working report for filing — not an official TNTAP upload file."],
     ]);
   }
@@ -166,32 +157,6 @@ export function TaxByStateReport({ isAdmin }: { isAdmin: boolean }) {
                 <Stat label="Tax collected" value={formatMoney(data.tn.taxCollectedCents)} />
                 <Stat label="Transactions" value={String(data.tn.saleCount)} />
               </dl>
-              {data.tn.byCounty.length > 0 && (
-                <div className="overflow-x-auto border-t border-zinc-100">
-                  <table className="w-full text-sm">
-                    <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
-                      <tr>
-                        <th className="px-4 py-2">Delivery county</th>
-                        <th className="px-4 py-2 text-right">Taxable sales</th>
-                        <th className="px-4 py-2 text-right">Tax collected</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-100">
-                      {data.tn.byCounty.map((c) => (
-                        <tr key={c.county}>
-                          <td className="px-4 py-2">{c.county}</td>
-                          <td className="px-4 py-2 text-right text-zinc-500">
-                            {formatMoney(c.taxableSalesCents)}
-                          </td>
-                          <td className="px-4 py-2 text-right font-medium">
-                            {formatMoney(c.taxCollectedCents)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
             </div>
           </div>
 
