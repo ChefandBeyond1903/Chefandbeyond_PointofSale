@@ -244,6 +244,14 @@ export const paymentMethodSchema = z
   .max(40)
   .transform((s) => s.toUpperCase());
 
+// KY/TN delivery-based tax jurisdiction, sent by the register only for a
+// store whose rate matches a known profile (see src/lib/taxJurisdiction.ts) —
+// ignored server-side for every other store.
+export const taxOverrideSchema = z.object({
+  jurisdiction: z.enum(["KY", "TN"]),
+  reason: z.string().trim().max(300).default(""),
+});
+
 export const saleCreateSchema = z.object({
   // Validate everything (stock, prices, UMRP, payments…) and stop before
   // writing — the register runs this before charging a card reader so a card
@@ -252,6 +260,12 @@ export const saleCreateSchema = z.object({
   items: z.array(saleItemSchema).min(1),
   orderDiscountCents: z.number().int().min(0).default(0),
   shippingCents: z.number().int().min(0).default(0),
+  deliveryMethod: z.enum(["PICKUP", "DELIVERY"]).default("PICKUP"),
+  deliveryAddress: z.string().trim().max(400).default(""),
+  deliveryCounty: z.string().trim().max(120).default(""),
+  // Staff-initiated override of the auto-selected tax jurisdiction. Present
+  // only when the operator explicitly changed it; logged with a reason.
+  taxOverride: taxOverrideSchema.optional(),
   // Omitted when saving an unpaid invoice for a terms customer.
   paymentMethod: paymentMethodSchema.optional(),
   tenderedCents: z.number().int().min(0).default(0),

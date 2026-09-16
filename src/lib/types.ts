@@ -446,7 +446,47 @@ export interface Sale {
   customerPhoneSnapshot?: string;
   customerAddressSnapshot?: string;
   customerLocationSnapshot?: string;
+  // KY/TN delivery-based tax jurisdiction. Blank on sales rung at a store
+  // outside that scheme (see src/lib/taxJurisdiction.ts).
+  deliveryMethod?: string; // "PICKUP" | "DELIVERY"
+  deliveryAddress?: string;
+  deliveryCounty?: string;
+  taxJurisdiction?: string; // "KY" | "TN" | ""
+  taxOverridden?: boolean;
   items: SaleItem[];
+}
+
+export interface TaxOverrideLog {
+  id: string;
+  saleId: string;
+  sale?: { id: string; number: number } | null;
+  fromJurisdiction: string;
+  toJurisdiction: string;
+  reason: string;
+  changedById: string;
+  changedBy?: { id: string; name: string } | null;
+  createdAt: string;
+}
+
+export interface TaxByStateJurisdiction {
+  grossSalesCents: number;
+  taxableSalesCents: number;
+  taxCollectedCents: number;
+  saleCount: number;
+}
+
+export interface TaxByStateCounty extends TaxByStateJurisdiction {
+  county: string;
+}
+
+export interface TaxByStateReport {
+  range: { from: string; to: string };
+  scope: { allStores: boolean; storeName: string | null; noStoreAssigned: boolean };
+  stores: { id: string; name: string }[];
+  ky: TaxByStateJurisdiction;
+  tn: TaxByStateJurisdiction & { byCounty: TaxByStateCounty[] };
+  unassigned: TaxByStateJurisdiction;
+  overrides: TaxOverrideLog[];
 }
 
 export interface QuoteItem {

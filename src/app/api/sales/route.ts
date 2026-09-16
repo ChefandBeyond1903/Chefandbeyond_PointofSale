@@ -6,6 +6,11 @@ import { requireScopedUser, scopeStoreId } from "@/lib/scope";
 import { saleCreateSchema } from "@/lib/validation";
 import { computeSale, type PricedInput } from "@/lib/sale";
 import { dueDateFromTerms } from "@/lib/terms";
+import {
+  storeHomeJurisdiction,
+  autoJurisdiction as autoTaxJurisdiction,
+  jurisdictionRateBps,
+} from "@/lib/taxJurisdiction";
 import { formatMoney } from "@/lib/money";
 import { ok, toErrorResponse } from "@/lib/api";
 import { verifyPaidIntent } from "@/lib/terminal";
@@ -93,6 +98,32 @@ export async function POST(req: NextRequest) {
     }
     let taxRateBps = sellStore?.taxRateBps ?? 0;
     const storeId = sellStore?.id ?? null;
+
+    // KY/TN delivery-based tax jurisdiction — only engages for a store whose
+    // rate matches a known profile; every other store keeps its flat rate
+    // exactly as before. Pickup keeps the store's home jurisdiction; a
+    // delivery is taxed where the address says possession transfers. Staff
+    // may override the result either way, which is logged for compliance.
+    const homeJurisdiction = storeHomeJurisdiction(sellStore?.taxRateBps);
+    const suggestedJurisdiction = autoTaxJurisdiction(
+      homeJurisdiction,
+      body.deliveryMethod,
+      body.deliveryAddress,
+    );
+    let taxJurisdiction = suggestedJurisdiction;
+    let taxOverridden = false;
+    if (body.taxOverride && homeJurisdiction) {
+      if (body.taxOverride.jurisdiction !== suggestedJurisdiction) taxOverridden = true;
+      taxJurisdiction = body.taxOverride.jurisdiction;
+    }
+    if (taxJurisdiction) taxRateBps = jurisdictionRateBps(taxJurisdiction);
+
+    if (homeJurisdiction && body.deliveryMethod === "DELIVERY") {
+      if (!body.deliveryAddress) throw new HttpError(400, "Enter the delivery address.");
+      if (taxJurisdiction === "TN" && !body.deliveryCounty) {
+        throw new HttpError(400, "Enter the Tennessee delivery county.");
+      }
+    }
 
     // A tax-exempt customer (with an unexpired certificate) rings at 0% tax.
     // Their payment terms set the invoice due date.
@@ -420,6 +451,11 @@ export async function POST(req: NextRequest) {
           taxRateBps: computed.taxRateBps,
           shippingCents: computed.shippingCents,
           totalCents: computed.totalCents,
+          deliveryMethod: body.deliveryMethod,
+          deliveryAddress: body.deliveryMethod === "DELIVERY" ? body.deliveryAddress : "",
+          deliveryCounty: taxJurisdiction === "TN" ? body.deliveryCounty : "",
+          taxJurisdiction: taxJurisdiction ?? "",
+          taxOverridden,
           paymentMethod: payMethod,
           tenderedCents,
           changeCents,
@@ -466,6 +502,20 @@ export async function POST(req: NextRequest) {
           customer: true,
         },
       });
+
+      // A manual tax-jurisdiction override is audit-logged: who, when, from
+      // what, to what, why — required for KY DOR / TN TNTAP compliance.
+      if (taxOverridden && body.taxOverride) {
+        await tx.taxOverrideLog.create({
+          data: {
+            saleId: created.id,
+            fromJurisdiction: suggestedJurisdiction ?? "",
+            toJurisdiction: body.taxOverride.jurisdiction,
+            reason: body.taxOverride.reason,
+            changedById: user.id,
+          },
+        });
+      }
 
       // One SalePayment row per tender so the till and the customer-deposit /
       // store-credit balances reconcile precisely.

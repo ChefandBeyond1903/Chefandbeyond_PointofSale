@@ -9,6 +9,7 @@ import { DateRangePicker } from "@/components/DateRangePicker";
 import { PnlPrintModal } from "@/components/PnlPrintModal";
 import { SalesByVendorReport } from "./SalesByVendorReport";
 import { PurchasesByVendorReport } from "./PurchasesByVendorReport";
+import { TaxByStateReport } from "./TaxByStateReport";
 import { resolvePreset, type DateRange, type DateRangePresetKey } from "@/lib/dateRange";
 import type {
   Bill,
@@ -26,7 +27,7 @@ export function ReportsView({
   isAdmin?: boolean;
   limited?: boolean;
 }) {
-  const [tab, setTab] = useState<"overview" | "vendor" | "purchases">("overview");
+  const [tab, setTab] = useState<"overview" | "vendor" | "purchases" | "tax">("overview");
   const [range, setRange] = useState<DateRange>(() => resolvePreset("this_month"));
   const [rangeLabel, setRangeLabel] = useState("This month");
   const [rangeKey, setRangeKey] = useState<DateRangePresetKey | "custom">("this_month");
@@ -143,6 +144,14 @@ export function ReportsView({
             >
               Purchases by vendor
             </button>
+            <button
+              onClick={() => setTab("tax")}
+              className={`rounded px-2.5 py-1 font-medium ${
+                tab === "tax" ? "bg-white shadow-sm" : "text-zinc-500"
+              }`}
+            >
+              Sales tax by state
+            </button>
           </div>
         )}
         {tab === "overview" && (
@@ -190,6 +199,8 @@ export function ReportsView({
         <SalesByVendorReport isAdmin={isAdmin} />
       ) : tab === "purchases" ? (
         <PurchasesByVendorReport isAdmin={isAdmin} />
+      ) : tab === "tax" ? (
+        <TaxByStateReport isAdmin={isAdmin} />
       ) : (
       <>
       {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}

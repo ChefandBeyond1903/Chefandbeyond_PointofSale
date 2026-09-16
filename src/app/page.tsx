@@ -15,6 +15,13 @@ import { dueDateFromTerms } from "@/lib/terms";
 import { phoneDigits, formatPhone } from "@/lib/phone";
 import { PhoneInput } from "@/components/PhoneInput";
 import { matchesSearch } from "@/lib/search";
+import {
+  storeHomeJurisdiction,
+  autoJurisdiction as autoTaxJurisdiction,
+  jurisdictionRateBps,
+  jurisdictionLabel,
+  type TaxJurisdictionCode,
+} from "@/lib/taxJurisdiction";
 import type {
   Category,
   Company,
@@ -54,6 +61,11 @@ interface TicketSnapshot {
   custCompany: string;
   custLocationId: string;
   salespersonId: string;
+  deliveryMethod: "PICKUP" | "DELIVERY";
+  deliveryAddress: string;
+  deliveryCounty: string;
+  taxOverrideCode: "" | TaxJurisdictionCode;
+  taxOverrideReason: string;
 }
 
 interface CartLine {
@@ -124,6 +136,16 @@ export default function RegisterPage() {
 
   const [cart, setCart] = useState<CartLine[]>([]);
   const [shippingCents, setShippingCents] = useState(0);
+
+  // KY/TN delivery-based sales tax — only shown once a home jurisdiction is
+  // known (see homeJurisdiction below). Pickup keeps the store's own
+  // jurisdiction; delivery auto-suggests the other one from the address.
+  const [deliveryMethod, setDeliveryMethod] = useState<"PICKUP" | "DELIVERY">("PICKUP");
+  const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [deliveryCounty, setDeliveryCounty] = useState("");
+  const [taxOverrideCode, setTaxOverrideCode] = useState<"" | TaxJurisdictionCode>("");
+  const [taxOverrideReason, setTaxOverrideReason] = useState("");
+  const [taxOverrideOpen, setTaxOverrideOpen] = useState(false);
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [custId, setCustId] = useState<string | null>(null);
@@ -314,6 +336,11 @@ export default function RegisterPage() {
           setCustCompany(s.custCompany ?? "");
           setCustLocationId(s.custLocationId ?? "");
           setSalespersonId(s.salespersonId ?? "");
+          setDeliveryMethod(s.deliveryMethod ?? "PICKUP");
+          setDeliveryAddress(s.deliveryAddress ?? "");
+          setDeliveryCounty(s.deliveryCounty ?? "");
+          setTaxOverrideCode(s.taxOverrideCode ?? "");
+          setTaxOverrideReason(s.taxOverrideReason ?? "");
         }
       }
     } catch {
@@ -342,6 +369,11 @@ export default function RegisterPage() {
         custCompany,
         custLocationId,
         salespersonId,
+        deliveryMethod,
+        deliveryAddress,
+        deliveryCounty,
+        taxOverrideCode,
+        taxOverrideReason,
       };
       localStorage.setItem(TICKET_KEY, JSON.stringify(snap));
     } catch {
@@ -358,6 +390,11 @@ export default function RegisterPage() {
     custCompany,
     custLocationId,
     salespersonId,
+    deliveryMethod,
+    deliveryAddress,
+    deliveryCounty,
+    taxOverrideCode,
+    taxOverrideReason,
   ]);
 
   // A line may never be priced below its minimum (UMRP). Rather than snapping
@@ -537,7 +574,17 @@ export default function RegisterPage() {
   // register.
   const isAdmin = role === "ADMIN";
   const sellStore = isAdmin ? (stores.find((s) => s.id === sellStoreId) ?? null) : null;
-  const baseTaxRateBps = isAdmin ? (sellStore?.taxRateBps ?? null) : storeTaxRateBps;
+  const sellStoreTaxRateBps = isAdmin ? (sellStore?.taxRateBps ?? null) : storeTaxRateBps;
+
+  // KY/TN delivery-based tax jurisdiction — only engages when the selling
+  // store's rate matches a known profile; every other store keeps its flat
+  // rate exactly as before. See src/lib/taxJurisdiction.ts.
+  const homeJurisdiction = storeHomeJurisdiction(sellStoreTaxRateBps);
+  const suggestedJurisdiction = autoTaxJurisdiction(homeJurisdiction, deliveryMethod, deliveryAddress);
+  const activeJurisdiction = taxOverrideCode || suggestedJurisdiction;
+  const baseTaxRateBps = homeJurisdiction
+    ? (activeJurisdiction ? jurisdictionRateBps(activeJurisdiction) : sellStoreTaxRateBps)
+    : sellStoreTaxRateBps;
 
   useEffect(() => {
     try {
@@ -751,6 +798,12 @@ export default function RegisterPage() {
     setCart([]);
     setShippingCents(0);
     clearCustomer();
+    setDeliveryMethod("PICKUP");
+    setDeliveryAddress("");
+    setDeliveryCounty("");
+    setTaxOverrideCode("");
+    setTaxOverrideReason("");
+    setTaxOverrideOpen(false);
   }
 
   function customerPayload() {
@@ -970,8 +1023,35 @@ export default function RegisterPage() {
       shippingCents: totals.shipping,
       ...(isAdmin && sellStoreId ? { storeId: sellStoreId } : {}),
       ...(salespersonId && salespersonId !== meId ? { salespersonId } : {}),
+      ...(homeJurisdiction
+        ? {
+            deliveryMethod,
+            deliveryAddress: deliveryMethod === "DELIVERY" ? deliveryAddress.trim() : "",
+            deliveryCounty: activeJurisdiction === "TN" ? deliveryCounty.trim() : "",
+            ...(taxOverrideCode
+              ? { taxOverride: { jurisdiction: taxOverrideCode, reason: taxOverrideReason.trim() } }
+              : {}),
+          }
+        : {}),
       ...customerPayload(),
     };
+  }
+
+  // Checked before completing/invoicing/holding a sale — a delivery needs an
+  // address, a Tennessee-jurisdiction delivery needs a county, and a manual
+  // tax override needs a reason (it's logged with it).
+  function deliveryValidationError(): string | null {
+    if (!homeJurisdiction) return null;
+    if (deliveryMethod === "DELIVERY" && !deliveryAddress.trim()) {
+      return "Enter the delivery address.";
+    }
+    if (deliveryMethod === "DELIVERY" && activeJurisdiction === "TN" && !deliveryCounty.trim()) {
+      return "Enter the Tennessee delivery county.";
+    }
+    if (taxOverrideCode && !taxOverrideReason.trim()) {
+      return "Enter a reason for overriding the tax jurisdiction.";
+    }
+    return null;
   }
 
   function afterSaleSaved(sale: Sale) {
@@ -1029,6 +1109,11 @@ export default function RegisterPage() {
       setError("Pick which of the customer's locations this is for.");
       return;
     }
+    const deliveryError = deliveryValidationError();
+    if (deliveryError) {
+      setError(deliveryError);
+      return;
+    }
     try {
       const res = await api<{ sale: Sale }>("/api/sales", {
         method: "POST",
@@ -1065,6 +1150,11 @@ export default function RegisterPage() {
       setError("Choose a store to sell from.");
       return;
     }
+    const deliveryError = deliveryValidationError();
+    if (deliveryError) {
+      setError(deliveryError);
+      return;
+    }
     try {
       const res = await api<{ sale: Sale }>("/api/sales", {
         method: "POST",
@@ -1098,6 +1188,11 @@ export default function RegisterPage() {
       setError("Choose a store to sell from.");
       return;
     }
+    const deliveryError = deliveryValidationError();
+    if (deliveryError) {
+      setError(deliveryError);
+      return;
+    }
     try {
       const res = await api<{ sale: Sale }>("/api/sales", {
         method: "POST",
@@ -1118,6 +1213,11 @@ export default function RegisterPage() {
     setError(null);
     if (isAdmin && !sellStoreId) {
       setError("Choose a store to sell from.");
+      return;
+    }
+    const deliveryError = deliveryValidationError();
+    if (deliveryError) {
+      setError(deliveryError);
       return;
     }
     try {
@@ -1723,6 +1823,107 @@ export default function RegisterPage() {
               </ul>
             )}
           </div>
+
+          {homeJurisdiction && (
+            <div className="space-y-2 border-t border-zinc-100 px-4 py-3 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-zinc-700">Delivery &amp; tax</span>
+                <span className="text-xs text-zinc-400">
+                  {activeJurisdiction
+                    ? `${jurisdictionLabel(activeJurisdiction)} (${formatBps(jurisdictionRateBps(activeJurisdiction))})`
+                    : ""}
+                </span>
+              </div>
+              <div className="flex gap-1 rounded-md bg-zinc-100 p-1 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setDeliveryMethod("PICKUP")}
+                  className={`flex-1 rounded px-2 py-1 font-medium ${
+                    deliveryMethod === "PICKUP" ? "bg-white shadow-sm" : "text-zinc-500"
+                  }`}
+                >
+                  Pickup
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeliveryMethod("DELIVERY")}
+                  className={`flex-1 rounded px-2 py-1 font-medium ${
+                    deliveryMethod === "DELIVERY" ? "bg-white shadow-sm" : "text-zinc-500"
+                  }`}
+                >
+                  Seller delivery
+                </button>
+              </div>
+              {deliveryMethod === "DELIVERY" && (
+                <>
+                  <input
+                    className="input h-8 w-full text-xs"
+                    placeholder="Delivery address (street, city, state, zip)"
+                    value={deliveryAddress}
+                    onChange={(e) => setDeliveryAddress(e.target.value)}
+                  />
+                  {activeJurisdiction === "TN" && (
+                    <input
+                      className="input h-8 w-full text-xs"
+                      placeholder="Delivery county (Tennessee)"
+                      value={deliveryCounty}
+                      onChange={(e) => setDeliveryCounty(e.target.value)}
+                    />
+                  )}
+                </>
+              )}
+              <button
+                type="button"
+                onClick={() => setTaxOverrideOpen((o) => !o)}
+                className="text-xs text-indigo-600 underline"
+              >
+                {taxOverrideCode
+                  ? `Manually set to ${jurisdictionLabel(taxOverrideCode)} — change`
+                  : "Override tax jurisdiction"}
+              </button>
+              {taxOverrideOpen && (
+                <div className="space-y-1.5 rounded-md bg-amber-50 p-2">
+                  <div className="flex gap-1">
+                    {(["KY", "TN"] as const).map((code) => (
+                      <button
+                        key={code}
+                        type="button"
+                        onClick={() => setTaxOverrideCode(code)}
+                        className={`flex-1 rounded px-2 py-1 text-xs font-medium ${
+                          taxOverrideCode === code
+                            ? "bg-amber-600 text-white"
+                            : "bg-white text-zinc-600"
+                        }`}
+                      >
+                        {jurisdictionLabel(code)}
+                      </button>
+                    ))}
+                    {taxOverrideCode && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTaxOverrideCode("");
+                          setTaxOverrideReason("");
+                        }}
+                        className="rounded px-2 py-1 text-xs text-zinc-500 underline"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    className="input h-7 w-full text-xs"
+                    placeholder="Reason (required)"
+                    value={taxOverrideReason}
+                    onChange={(e) => setTaxOverrideReason(e.target.value)}
+                  />
+                  <p className="text-[10px] text-zinc-400">
+                    Logged with your name, the time, and this reason.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="space-y-2 border-t border-zinc-100 px-4 py-3 text-sm">
             <Row label="Subtotal (list)" value={formatMoney(totals.subtotal)} />

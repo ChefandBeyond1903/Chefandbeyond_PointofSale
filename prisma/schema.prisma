@@ -57,19 +57,19 @@ model Store {
 /// Staff who can sign in. role is "CASHIER", "MANAGER" (scoped to one store),
 /// or "ADMIN" (all stores, cross-store reports).
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
   // Supabase Auth user id (auth.users.id). Identity and passwords live in
   // Supabase; this row carries the POS role/store assignment.
-  authId    String?  @unique
+  authId       String?  @unique
   // Rotated on every login. Only the device holding the matching cookie stays
   // signed in — a new login elsewhere logs the others out.
   sessionToken String?
-  role      String   @default("CASHIER")
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  role         String   @default("CASHIER")
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   storeId String?
   store   Store?  @relation(fields: [storeId], references: [id])
@@ -79,18 +79,19 @@ model User {
   createdBy    User?   @relation("UserCreatedBy", fields: [createdById], references: [id])
   createdUsers User[]  @relation("UserCreatedBy")
 
-  sales             Sale[]             @relation("SaleCashier")
+  sales              Sale[]             @relation("SaleCashier")
   salesCredited      Sale[]             @relation("SaleSalesperson")
   salePayments       SalePayment[]      @relation("SalePaymentCreatedBy")
   saleRefunds        SaleRefund[]       @relation("SaleRefundCreatedBy")
   storeCreditEntries StoreCreditEntry[] @relation("StoreCreditEntryCreatedBy")
   shifts             Shift[]
-  purchaseOrders PurchaseOrder[]
-  bills          Bill[]
-  heldSales      HeldSale[]
-  expenses       Expense[]
-  recurringExpenses RecurringExpense[]
-  quotesCreated  Quote[]         @relation("QuoteCreatedBy")
+  purchaseOrders     PurchaseOrder[]
+  bills              Bill[]
+  heldSales          HeldSale[]
+  expenses           Expense[]
+  recurringExpenses  RecurringExpense[]
+  quotesCreated      Quote[]            @relation("QuoteCreatedBy")
+  taxOverrideLogs    TaxOverrideLog[]
 
   @@index([storeId])
   @@index([createdById])
@@ -162,13 +163,13 @@ model Vendor {
 /// Customer directory. Rows are created automatically the first time a sale is
 /// invoiced to a customer name, and can be edited here afterward.
 model Customer {
-  id        String   @id @default(cuid())
-  name      String
-  email     String   @default("")
-  phone     String   @default("")
-  address   String   @default("")
-  company   String   @default("")
-  notes     String   @default("")
+  id      String @id @default(cuid())
+  name    String
+  email   String @default("")
+  phone   String @default("")
+  address String @default("")
+  company String @default("")
+  notes   String @default("")
 
   // Sales-tax exemption. When taxExempt is on (and not past taxExemptExpiresAt),
   // invoices to this customer ring at 0% tax. The certificate itself is stored
@@ -318,19 +319,37 @@ model Sale {
   subtotalCents     Int
   // Sum of catalog list price × qty, before any manual price change or
   // discount. Used to show the customer's saving vs. list. 0 on old rows.
-  listSubtotalCents Int     @default(0)
-  discountCents     Int     @default(0)
-  taxCents          Int     @default(0)
-  taxRateBps        Int     @default(0)
+  listSubtotalCents Int       @default(0)
+  discountCents     Int       @default(0)
+  taxCents          Int       @default(0)
+  taxRateBps        Int       @default(0)
   // Flat shipping/delivery charge added to the invoice. Not taxed.
-  shippingCents     Int     @default(0)
+  shippingCents     Int       @default(0)
   totalCents        Int
-  paymentMethod     String
+
+  // KY/TN delivery-based sales tax. "PICKUP" or "DELIVERY"; jurisdiction/rate
+  // only apply to a store whose tax rate matches a known profile (see
+  // src/lib/taxJurisdiction.ts) — blank on every other sale, old and new.
+  // Pickup keeps the store's home jurisdiction; a seller delivery is taxed
+  // where possession transfers, detected from the delivery address (falling
+  // back to the store's home jurisdiction when it can't be determined).
+  deliveryMethod  String           @default("PICKUP")
+  deliveryAddress String           @default("")
+  // Required, and only meaningful, for a Tennessee-jurisdiction delivery —
+  // kept for the state's remittance report.
+  deliveryCounty  String           @default("")
+  // "KY" or "TN" — tags the transaction for jurisdiction-split tax reporting.
+  taxJurisdiction String           @default("")
+  // True when staff manually chose a different jurisdiction than the one the
+  // POS auto-selected. See TaxOverrideLog for the audit trail.
+  taxOverridden   Boolean          @default(false)
+  taxOverrides    TaxOverrideLog[]
+  paymentMethod   String
   // Set when the whole sale was settled by a single check.
-  checkNumber       String  @default("")
-  tenderedCents     Int     @default(0)
-  changeCents       Int     @default(0)
-  note              String?
+  checkNumber     String           @default("")
+  tenderedCents   Int              @default(0)
+  changeCents     Int              @default(0)
+  note            String?
 
   // Invoice payment terms, snapshotted from the customer at sale time, and the
   // due date they imply. dueDate is null for due-on-receipt / walk-in sales.
@@ -348,7 +367,7 @@ model Sale {
   // Total refunded against this sale (SaleRefund rows). status becomes
   // "REFUNDED" once refundedCents reaches totalCents.
   refundedCents Int          @default(0)
-  refunds      SaleRefund[]
+  refunds       SaleRefund[]
 
   // Store the sale was rung at (the cashier's assigned store). storeId may be
   // null for historic rows; the snapshots freeze the store's details onto the
@@ -362,15 +381,15 @@ model Sale {
 
   // Customer the invoice is billed to. customerId may be null (walk-in);
   // the snapshot fields freeze the details onto this invoice.
-  customerId              String?
-  customer                Customer? @relation(fields: [customerId], references: [id])
-  customerNameSnapshot    String    @default("")
-  customerCompanySnapshot String    @default("")
-  customerEmailSnapshot   String    @default("")
-  customerPhoneSnapshot   String    @default("")
-  customerAddressSnapshot String    @default("")
+  customerId               String?
+  customer                 Customer? @relation(fields: [customerId], references: [id])
+  customerNameSnapshot     String    @default("")
+  customerCompanySnapshot  String    @default("")
+  customerEmailSnapshot    String    @default("")
+  customerPhoneSnapshot    String    @default("")
+  customerAddressSnapshot  String    @default("")
   // The chosen ship-to location's label, when the customer has more than one.
-  customerLocationSnapshot String   @default("")
+  customerLocationSnapshot String    @default("")
 
   // The operator who was signed in and rang the sale.
   cashierId     String
@@ -393,6 +412,24 @@ model Sale {
   @@index([cashierId])
   @@index([salespersonId])
   @@index([storeId])
+}
+
+// Audit trail for a manual tax-jurisdiction override at the register — who
+// changed it, when, from what, to what, and why. Required for KY/TN sales-tax
+// compliance (Kentucky DOR / Tennessee TNTAP filing).
+model TaxOverrideLog {
+  id               String   @id @default(cuid())
+  saleId           String
+  sale             Sale     @relation(fields: [saleId], references: [id])
+  fromJurisdiction String
+  toJurisdiction   String
+  reason           String   @default("")
+  changedById      String
+  changedBy        User     @relation(fields: [changedById], references: [id])
+  createdAt        DateTime @default(now())
+
+  @@index([saleId])
+  @@index([createdAt])
 }
 
 model SaleItem {
@@ -424,31 +461,31 @@ model SaleItem {
 /// | "CONVERTED" (turned into a real invoice — see convertedSale). Once
 /// CONVERTED, a quote is frozen — its only remaining reference is the invoice.
 model Quote {
-  id                String    @id @default(cuid())
-  number            Int       @unique
-  status            String    @default("OPEN")
+  id                String @id @default(cuid())
+  number            Int    @unique
+  status            String @default("OPEN")
   subtotalCents     Int
-  listSubtotalCents Int       @default(0)
-  discountCents     Int       @default(0)
-  taxCents          Int       @default(0)
-  taxRateBps        Int       @default(0)
-  shippingCents     Int       @default(0)
+  listSubtotalCents Int    @default(0)
+  discountCents     Int    @default(0)
+  taxCents          Int    @default(0)
+  taxRateBps        Int    @default(0)
+  shippingCents     Int    @default(0)
   totalCents        Int
-  note              String    @default("")
+  note              String @default("")
 
   storeId           String?
   store             Store?  @relation(fields: [storeId], references: [id])
   storeNameSnapshot String  @default("")
 
-  customerId              String?
-  customer                Customer? @relation(fields: [customerId], references: [id])
-  customerNameSnapshot    String    @default("")
-  customerCompanySnapshot String    @default("")
-  customerEmailSnapshot   String    @default("")
-  customerPhoneSnapshot   String    @default("")
-  customerAddressSnapshot String    @default("")
+  customerId               String?
+  customer                 Customer? @relation(fields: [customerId], references: [id])
+  customerNameSnapshot     String    @default("")
+  customerCompanySnapshot  String    @default("")
+  customerEmailSnapshot    String    @default("")
+  customerPhoneSnapshot    String    @default("")
+  customerAddressSnapshot  String    @default("")
   // The chosen ship-to location's label, when the customer has more than one.
-  customerLocationSnapshot String   @default("")
+  customerLocationSnapshot String    @default("")
 
   createdById String
   createdBy   User   @relation("QuoteCreatedBy", fields: [createdById], references: [id])
@@ -494,19 +531,19 @@ model QuoteItem {
 /// status: "OPEN" | "CLOSED" | "SENT" | "RECEIVED" | "CANCELLED".
 /// subtotalCents = sum of every category line + item line amount.
 model PurchaseOrder {
-  id            String  @id @default(cuid())
-  poNumber      String  @unique
-  vendor        String
-  status        String  @default("OPEN")
+  id               String  @id @default(cuid())
+  poNumber         String  @unique
+  vendor           String
+  status           String  @default("OPEN")
   // subtotalCents = every item line amount + shippingCents + dropShipFeeCents + taxCents.
-  subtotalCents Int     @default(0)
+  subtotalCents    Int     @default(0)
   // Flat freight/shipping charge entered on the item-details section.
-  shippingCents Int     @default(0)
+  shippingCents    Int     @default(0)
   // Flat drop-ship fee the vendor billed on this invoice.
-  dropShipFeeCents Int  @default(0)
+  dropShipFeeCents Int     @default(0)
   // Sales tax the vendor charged on this invoice.
-  taxCents      Int     @default(0)
-  note          String?
+  taxCents         Int     @default(0)
+  note             String?
 
   // Header
   email             String    @default("")
