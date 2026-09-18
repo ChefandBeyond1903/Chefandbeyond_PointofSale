@@ -7,6 +7,7 @@ import { api, ApiError } from "@/lib/client";
 import { formatMoney, formatBps, taxOn } from "@/lib/money";
 import { MoneyInput } from "@/components/MoneyInput";
 import { CardReaderPanel, type ReaderOption, type CardPaid } from "@/components/CardReaderPanel";
+import { ManualCardPanel, manualCardAvailable } from "@/components/ManualCardPanel";
 import { PercentInput } from "@/components/PercentInput";
 import { ReceiptModal } from "@/components/ReceiptModal";
 import { QuickAddProductModal } from "@/components/QuickAddProductModal";
@@ -2395,6 +2396,10 @@ function PaymentModal({
   const cardAmount = tab === "CREDIT" ? creditRemaining : collectNow;
   const cardTab = tab === "CARD" || (tab === "CREDIT" && restTab === "CARD" && creditRemaining > 0);
   const useReader = cardTab && readers.length > 0 && !manualCard;
+  // A real Stripe charge (reader or typed-card) is pending — don't let the
+  // cashier complete the sale until it's actually gone through.
+  const cardVerificationPending =
+    cardTab && !cardPaid && (useReader || (readers.length === 0 && manualCardAvailable()));
   async function go(intentOverride?: string) {
     // The reader flow passes the intent straight in (state isn't updated yet).
     const intentId = intentOverride ?? cardPaid?.paymentIntentId;
@@ -2589,6 +2594,13 @@ function PaymentModal({
                     onPaid={cardApproved}
                     paid={cardPaid}
                   />
+                ) : manualCardAvailable() ? (
+                  <ManualCardPanel
+                    amountCents={cardAmount}
+                    beforeCharge={onValidate ? () => onValidate(validationExtra()) : undefined}
+                    onPaid={cardApproved}
+                    paid={cardPaid}
+                  />
                 ) : (
                   <p className="text-xs text-zinc-500">Run the card, then confirm below.</p>
                 )}
@@ -2617,7 +2629,7 @@ function PaymentModal({
               Record the customer&apos;s check number, then confirm.
             </p>
           </div>
-        ) : tab === "CARD" && readers.length > 0 ? (
+        ) : tab === "CARD" ? (
           <div>
             {useReader ? (
               <CardReaderPanel
@@ -2629,12 +2641,23 @@ function PaymentModal({
                 onPaid={cardApproved}
                 paid={cardPaid}
               />
+            ) : readers.length > 0 ? (
+              <p className="rounded-md bg-zinc-50 px-3 py-6 text-center text-sm text-zinc-500">
+                Run the card on your terminal, then confirm below.
+              </p>
+            ) : manualCardAvailable() ? (
+              <ManualCardPanel
+                amountCents={cardAmount}
+                beforeCharge={onValidate ? () => onValidate(validationExtra()) : undefined}
+                onPaid={cardApproved}
+                paid={cardPaid}
+              />
             ) : (
               <p className="rounded-md bg-zinc-50 px-3 py-6 text-center text-sm text-zinc-500">
                 Run the card on your terminal, then confirm below.
               </p>
             )}
-            {!cardPaid && (
+            {!cardPaid && readers.length > 0 && (
               <button type="button" onClick={() => setManualCard((v) => !v)} className="btn-ghost mt-1 w-full text-[11px]">
                 {useReader ? "Card was run on another terminal — record it by hand" : "Use the card reader instead"}
               </button>
@@ -2642,9 +2665,7 @@ function PaymentModal({
           </div>
         ) : (
           <p className="rounded-md bg-zinc-50 px-3 py-6 text-center text-sm text-zinc-500">
-            {tab === "CARD"
-              ? "Run the card on your terminal, then confirm below."
-              : `Record the ${methodLabel(tab)} payment, then confirm below.`}
+            {`Record the ${methodLabel(tab)} payment, then confirm below.`}
           </p>
         )}
 
@@ -2658,7 +2679,7 @@ function PaymentModal({
             onClick={() => go()}
             disabled={
               busy ||
-              (useReader && !cardPaid) ||
+              cardVerificationPending ||
               (tab === "CREDIT" &&
                 (creditNow < 1 ||
                   (creditRemaining > 0 && restTab === "CASH" && restTendered < creditRemaining))) ||

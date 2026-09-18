@@ -334,9 +334,11 @@ export async function simulateTap(paymentIntentId: string) {
 
 function cardDetails(intent: Stripe.PaymentIntent): { brand: string; last4: string; cardBrand: string; cardLast4: string } {
   const charge = intent.latest_charge && typeof intent.latest_charge === "object" ? intent.latest_charge : null;
-  const cp = charge?.payment_method_details?.card_present;
-  const brand = cp?.brand ? cp.brand.charAt(0).toUpperCase() + cp.brand.slice(1) : "";
-  const last4 = cp?.last4 ?? "";
+  // A Terminal (card_present) tap/dip, or a manually-keyed online card — one
+  // of the two is populated depending on how the card was charged.
+  const card = charge?.payment_method_details?.card_present ?? charge?.payment_method_details?.card;
+  const brand = card?.brand ? card.brand.charAt(0).toUpperCase() + card.brand.slice(1) : "";
+  const last4 = card?.last4 ?? "";
   return { brand, last4, cardBrand: brand, cardLast4: last4 };
 }
 
