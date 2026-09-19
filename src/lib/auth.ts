@@ -1,6 +1,6 @@
 import "server-only";
 import { cache } from "react";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { SESSION_COOKIE } from "@/lib/session";
 import { supabaseServer } from "@/lib/supabase";
@@ -25,11 +25,23 @@ export function toRole(value: unknown): Role {
 
 /**
  * Current user, or null. Authentication comes from the Supabase session
- * cookie; the POS role/store assignment comes from our User row (linked by
- * authId). Deactivated staff are treated as signed out even with a live
- * Supabase session. Cached per request.
+ * cookie (browser) or, when there is no cookie session to read, an
+ * `Authorization: Bearer <sessionToken>` header — the mobile app has no
+ * cookie jar to rely on, so it sends back the same opaque token /api/auth/
+ * login issues and rotates, checked directly against the User row with no
+ * Supabase round trip. Either way, deactivated staff or a token superseded
+ * by a login elsewhere comes back signed out. Cached per request.
  */
 export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
+  const bearer = (await headers()).get("authorization")?.match(/^Bearer (.+)$/i)?.[1];
+  if (bearer) {
+    const row = await prisma.user.findFirst({
+      where: { sessionToken: bearer, active: true },
+      select: { id: true, email: true, name: true, role: true },
+    });
+    return row ? { id: row.id, email: row.email, name: row.name, role: toRole(row.role) } : null;
+  }
+
   const supabase = await supabaseServer();
   const {
     data: { user },

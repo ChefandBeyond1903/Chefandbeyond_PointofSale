@@ -45,6 +45,9 @@ export async function POST(req: NextRequest) {
 
     return ok({
       user: { id: row.id, email: row.email, name: row.name, role: toRole(row.role) },
+      // For a client with no cookie jar (the mobile app) — send this back as
+      // `Authorization: Bearer <sessionToken>` on every request instead.
+      sessionToken,
     });
   } catch (err) {
     return toErrorResponse(err);
