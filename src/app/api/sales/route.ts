@@ -82,6 +82,9 @@ export async function POST(req: NextRequest) {
   try {
     const user = await requireUser();
     const body = saleCreateSchema.parse(await req.json());
+    if (!body.customerId && !body.customer) {
+      throw new HttpError(400, "Add the customer's information before completing this sale.");
+    }
 
     const actor = await prisma.user.findUnique({
       where: { id: user.id },

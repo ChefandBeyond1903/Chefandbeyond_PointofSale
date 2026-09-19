@@ -706,6 +706,8 @@ export default function RegisterPage() {
   const selectedCustomer = custId ? (customers.find((c) => c.id === custId) ?? null) : null;
   // A multi-location customer must have a location picked before checkout.
   const locationNeeded = !!selectedCustomer?.locations?.length && !custLocationId;
+  // Every sale needs a customer on file — no more anonymous walk-ins.
+  const customerMissing = !custId && custName.trim().length === 0;
   // A customer with payment terms is invoiced (billed later), not charged now.
   const invoiceCustomer = !!selectedCustomer?.paymentTerms;
   const invoiceDueLabel = (() => {
@@ -2141,6 +2143,11 @@ export default function RegisterPage() {
                 payment from the invoice when the money comes in.
               </p>
             )}
+            {customerMissing && cart.length > 0 && (
+              <p className="text-xs font-medium text-amber-700">
+                Enter the customer&apos;s information above before completing this sale.
+              </p>
+            )}
             <button
               onClick={() => setPayOpen(true)}
               disabled={
@@ -2148,6 +2155,7 @@ export default function RegisterPage() {
                 totals.umrpViolations.length > 0 ||
                 totals.noCostItems.length > 0 ||
                 locationNeeded ||
+                customerMissing ||
                 (isAdmin && !sellStoreId)
               }
               className="btn-primary w-full py-3 text-base"

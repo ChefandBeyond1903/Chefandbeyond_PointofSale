@@ -7,12 +7,12 @@ import { ok, toErrorResponse } from "@/lib/api";
 
 type Params = { params: Promise<{ id: string; paymentId: string }> };
 
-// Undo a payment recorded against a sale by mistake. Manager / admin only.
+// Undo a payment recorded against a sale by mistake. Admin only.
 // Reverses the amount, drops the sale back to INVOICED if it's no longer
 // fully paid, and hands store credit back if the payment was store credit.
 export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
-    const actor = await requireScopedRole("MANAGER", "ADMIN");
+    const actor = await requireScopedRole("ADMIN");
     const { id, paymentId } = await params;
 
     const sale = await prisma.sale.findUnique({

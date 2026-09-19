@@ -802,7 +802,7 @@ export function InvoiceModal({
                                   : p.method}{" "}
                               · {formatDateOnly(p.paidAt)}
                             </span>
-                            {canManage && (
+                            {isAdmin && (
                               <button
                                 onClick={() => deletePayment(p.id)}
                                 disabled={payBusy}
@@ -947,7 +947,7 @@ export function InvoiceModal({
                                   : p.method}{" "}
                               · {formatDateOnly(p.paidAt)}
                             </span>
-                            {canManage && (
+                            {isAdmin && (
                               <button
                                 onClick={() => deletePayment(p.id)}
                                 disabled={payBusy}
