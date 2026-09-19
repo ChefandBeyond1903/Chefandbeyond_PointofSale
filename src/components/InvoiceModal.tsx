@@ -7,6 +7,7 @@ import { formatMoney, formatBps } from "@/lib/money";
 import { formatDateOnly, todayInputValue } from "@/lib/date";
 import { MoneyInput } from "@/components/MoneyInput";
 import { CardReaderPanel, type ReaderOption, type CardPaid } from "@/components/CardReaderPanel";
+import { ManualCardPanel, manualCardAvailable } from "@/components/ManualCardPanel";
 import { ReceiptModal } from "@/components/ReceiptModal";
 import { RefundReceiptModal } from "@/components/RefundReceiptModal";
 import type { InvoiceDetail, PurchaseOrder, Sale, Vendor } from "@/lib/types";
@@ -768,6 +769,9 @@ export function InvoiceModal({
               const balance = sale.totalCents - paid;
               const invoiceReaders = readers.filter((r) => !sale.storeId || r.storeId === sale.storeId);
               const useInvoiceReader = payMethod === "CARD" && invoiceReaders.length > 0 && !manualCard;
+              // No paired reader — fall back to typed-card entry via Stripe.
+              const showInvoiceManualCard =
+                payMethod === "CARD" && invoiceReaders.length === 0 && manualCardAvailable();
               const payments = sale.payments ?? [];
               if (sale.status === "INVOICED") {
                 return (
@@ -867,7 +871,7 @@ export function InvoiceModal({
                             placeholder={(balance / 100).toFixed(2)}
                           />
                         </div>
-                        {!useInvoiceReader && (
+                        {!useInvoiceReader && !showInvoiceManualCard && (
                           <button
                             onClick={() => recordPayment(payAmount || undefined)}
                             disabled={
@@ -886,7 +890,7 @@ export function InvoiceModal({
                         )}
                       </div>
                     )}
-                    {canManage && payMethod === "CARD" && invoiceReaders.length > 0 && (
+                    {canManage && payMethod === "CARD" && (invoiceReaders.length > 0 || showInvoiceManualCard) && (
                       <div className="mt-2 max-w-md">
                         {useInvoiceReader ? (
                           <CardReaderPanel
@@ -897,16 +901,24 @@ export function InvoiceModal({
                             paid={null}
                             onPaid={(card) => recordPayment(payAmount > 0 ? Math.min(payAmount, balance) : undefined, card)}
                           />
+                        ) : showInvoiceManualCard ? (
+                          <ManualCardPanel
+                            amountCents={payAmount > 0 ? Math.min(payAmount, balance) : balance}
+                            paid={null}
+                            onPaid={(card) => recordPayment(payAmount > 0 ? Math.min(payAmount, balance) : undefined, card)}
+                          />
                         ) : null}
-                        <button
-                          type="button"
-                          onClick={() => setManualCard((v) => !v)}
-                          className="btn-ghost mt-1 px-1 text-[11px]"
-                        >
-                          {useInvoiceReader
-                            ? "Card was run on another terminal — record it by hand"
-                            : "Use the card reader instead"}
-                        </button>
+                        {invoiceReaders.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setManualCard((v) => !v)}
+                            className="btn-ghost mt-1 px-1 text-[11px]"
+                          >
+                            {useInvoiceReader
+                              ? "Card was run on another terminal — record it by hand"
+                              : "Use the card reader instead"}
+                          </button>
+                        )}
                       </div>
                     )}
                     <p className="mt-1 text-[11px] text-amber-700">
