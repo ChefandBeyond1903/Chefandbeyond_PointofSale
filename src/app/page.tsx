@@ -1436,7 +1436,7 @@ export default function RegisterPage() {
           </div>
         )}
 
-        {(isSearching || catalogOpen || !!activeCategory) &&
+        {(isSearching || !!activeCategory) &&
           (loading ? (
             <p className="text-sm text-zinc-500">Loading catalog…</p>
           ) : (
