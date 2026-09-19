@@ -1399,11 +1399,11 @@ export default function RegisterPage() {
           </button>
         </div>
 
-        {/* Favorite-category icon tiles — always visible (not gated behind
-           "Open catalog") so a favorite category is one tap away. Tapping one
-           filters the favorite-products view down to it. Hidden while
-           searching so it doesn't compete with the results. */}
-        {!isSearching && favoriteCategories.length > 0 && (
+        {/* Favorite-category icon tiles — behind the same "Catalog"/"Hide"
+           toggle as the full category list, so the register stays uncrowded
+           by default. Tapping one filters the favorite-products view down to
+           it. Hidden while searching so it doesn't compete with the results. */}
+        {catalogOpen && !isSearching && favoriteCategories.length > 0 && (
           <div className="mb-3 grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
             {favoriteCategories.map((c) => (
               <button
