@@ -132,7 +132,6 @@ export default function RegisterPage() {
   const [allProducts, setAllProducts] = useState<Product[] | null>(null);
   const [searchHits, setSearchHits] = useState<Product[] | null>(null);
   const [searching, setSearching] = useState(false);
-  const [browseAll, setBrowseAll] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -245,14 +244,6 @@ export default function RegisterPage() {
       setError(err instanceof ApiError ? err.message : "Failed to load products");
     }
   }, [storeQs]);
-
-  function toggleBrowseAll() {
-    setBrowseAll((on) => {
-      const next = !on;
-      if (next && !allProducts) loadAllProducts();
-      return next;
-    });
-  }
 
   const loadShift = useCallback(async () => {
     try {
@@ -639,7 +630,7 @@ export default function RegisterPage() {
     // favorites — favorites only govern the no-category default view.
     const source = isSearching
       ? (searchHits ?? [])
-      : activeCategory || browseAll
+      : activeCategory
         ? (allProducts ?? [])
         : favorites;
     const byCategory = source.filter((p) => !activeCategory || p.categoryId === activeCategory);
@@ -649,7 +640,7 @@ export default function RegisterPage() {
     return isSearching
       ? [...inStock].sort((a, b) => Number(!hasStockSomewhere(a)) - Number(!hasStockSomewhere(b)))
       : inStock;
-  }, [isSearching, searchHits, browseAll, allProducts, favorites, activeCategory]);
+  }, [isSearching, searchHits, allProducts, favorites, activeCategory]);
 
   // Categories starred to show as icon tiles on the register's home view.
   const favoriteCategories = useMemo(() => categories.filter((c) => c.favorite), [categories]);
@@ -708,13 +699,13 @@ export default function RegisterPage() {
   useEffect(() => {
     if (!isAdmin) return;
     loadCatalog();
-    // allProducts also backs category browsing and search, not just
-    // "Browse all" — keep it in step with the newly picked store whenever
-    // it's already loaded. Deliberately not a dependency: reloading it here
-    // changes it, which would re-fire this effect in a loop.
-    if (browseAll || allProducts) loadAllProducts();
+    // allProducts also backs category browsing and search — keep it in step
+    // with the newly picked store whenever it's already loaded. Deliberately
+    // not a dependency: reloading it here changes it, which would re-fire
+    // this effect in a loop.
+    if (allProducts) loadAllProducts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdmin, sellStoreId, loadCatalog, loadAllProducts, browseAll]);
+  }, [isAdmin, sellStoreId, loadCatalog, loadAllProducts]);
 
   // A selected tax-exempt customer (cert not past its expiry) zeroes the tax
   // and gives the invoice a due date from their payment terms.
@@ -1441,35 +1432,6 @@ export default function RegisterPage() {
               className="btn-ghost text-xs"
             >
               Clear
-            </button>
-          </div>
-        )}
-
-        {/* The full category-chip list only when the catalog is explicitly
-           open — the register otherwise shows just the favorite categories
-           above. A search should show its results, not a wall of chips. */}
-        {catalogOpen && !isSearching && (
-          <div className="mb-3 flex flex-wrap gap-1.5">
-            <button
-              onClick={() => pickCategory(null)}
-              className={activeCategory === null ? "btn-primary" : "btn-secondary"}
-            >
-              All
-            </button>
-            {categories.map((c) => (
-              <button
-                key={c.id}
-                onClick={() => pickCategory(c.id)}
-                className={activeCategory === c.id ? "btn-primary" : "btn-secondary"}
-              >
-                {c.name}
-              </button>
-            ))}
-            <button
-              onClick={toggleBrowseAll}
-              className={browseAll ? "btn-primary" : "btn-secondary"}
-            >
-              {browseAll ? "Favorites only" : "Browse all"}
             </button>
           </div>
         )}
