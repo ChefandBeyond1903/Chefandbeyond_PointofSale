@@ -54,6 +54,9 @@ type DiscMode = "AMOUNT" | "PERCENT";
 const TICKET_KEY = "cb-pos-register-ticket-v1";
 
 interface TicketSnapshot {
+  // Whoever was signed in when this was saved — a different cashier logging
+  // in on the same device should never inherit their in-progress sale.
+  userId: string | null;
   cart: CartLine[];
   shippingCents: number;
   custId: string | null;
@@ -191,6 +194,9 @@ export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
   const [role, setRole] = useState<Role | null>(null);
   const [meId, setMeId] = useState<string | null>(null);
+  // True once /api/auth/me has answered — the saved-ticket rehydrate waits on
+  // this so it knows who's actually signed in before deciding whose cart it is.
+  const [authChecked, setAuthChecked] = useState(false);
   const [meName, setMeName] = useState<string | null>(null);
   const [storeName, setStoreName] = useState<string | null>(null);
   const [storeTaxRateBps, setStoreTaxRateBps] = useState<number | null>(null);
@@ -301,8 +307,9 @@ export default function RegisterPage() {
             .then((s) => setStores(s.stores))
             .catch(() => {});
         }
+        setAuthChecked(true);
       })
-      .catch(() => {});
+      .catch(() => setAuthChecked(true));
     api<{ company: Company }>("/api/company")
       .then((r) => setCompany(r.company))
       .catch(() => {});
@@ -335,14 +342,20 @@ export default function RegisterPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Rehydrate the in-progress ticket from the last visit.
+  // Rehydrate the in-progress ticket from the last visit — but only once we
+  // know who's signed in, and only if it was this same cashier's. A different
+  // cashier logging in on the same device gets a fresh register instead of
+  // inheriting whatever was left in the cart.
   useEffect(() => {
+    if (!authChecked || ticketHydrated.current) return;
     /* eslint-disable react-hooks/set-state-in-effect */
     try {
       const raw = localStorage.getItem(TICKET_KEY);
       if (raw) {
         const s = JSON.parse(raw) as Partial<TicketSnapshot>;
-        if (Array.isArray(s.cart) && s.cart.length > 0) {
+        if (s.userId !== meId) {
+          localStorage.removeItem(TICKET_KEY);
+        } else if (Array.isArray(s.cart) && s.cart.length > 0) {
           setCart(s.cart as CartLine[]);
           setShippingCents(s.shippingCents ?? 0);
           setCustId(s.custId ?? null);
@@ -372,7 +385,7 @@ export default function RegisterPage() {
     }
     ticketHydrated.current = true;
     /* eslint-enable react-hooks/set-state-in-effect */
-  }, []);
+  }, [authChecked, meId]);
 
   // Save the ticket on every change; drop it once the cart is empty.
   useEffect(() => {
@@ -383,6 +396,7 @@ export default function RegisterPage() {
         return;
       }
       const snap: TicketSnapshot = {
+        userId: meId,
         cart,
         shippingCents,
         custId,
@@ -411,6 +425,7 @@ export default function RegisterPage() {
       /* storage full or unavailable — non-fatal */
     }
   }, [
+    meId,
     cart,
     shippingCents,
     custId,
