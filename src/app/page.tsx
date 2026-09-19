@@ -1356,7 +1356,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="grid w-full flex-1 gap-3 p-3 sm:p-4 lg:grid-cols-[minmax(0,1fr)_460px] lg:gap-4">
+    <div className="grid w-full flex-1 gap-3 p-3 pb-20 sm:p-4 lg:grid-cols-[minmax(0,1fr)_460px] lg:gap-4 lg:pb-4">
       {/* Catalog */}
       <section className="flex min-h-0 min-w-0 flex-col">
         <div className="mb-3 flex gap-2">
@@ -1541,7 +1541,7 @@ export default function RegisterPage() {
       </section>
 
       {/* Ticket */}
-      <section className="flex min-h-0 min-w-0 flex-col gap-3">
+      <section id="current-sale" className="flex min-h-0 min-w-0 flex-col gap-3">
         <ShiftWidget shift={shift} stats={shiftStats} onChanged={loadShift} />
 
         <div className="card flex min-h-0 flex-1 flex-col">
@@ -2182,6 +2182,31 @@ export default function RegisterPage() {
           </div>
         </div>
       </section>
+
+      {/* Mobile only (the cart sits beside the catalog at lg+, so there's
+         nothing to scroll past there). Keeps the current sale one tap away
+         while browsing/adding items, instead of scrolling past the catalog. */}
+      {cart.length > 0 && (
+        <button
+          type="button"
+          onClick={() =>
+            document.getElementById("current-sale")?.scrollIntoView({ behavior: "smooth", block: "start" })
+          }
+          className="fixed inset-x-3 bottom-3 z-30 flex items-center justify-between rounded-lg bg-zinc-900 px-4 py-3 text-sm font-medium text-white shadow-lg lg:hidden"
+        >
+          <span>
+            {cart.reduce((n, l) => n + l.quantity, 0)} item{cart.reduce((n, l) => n + l.quantity, 0) === 1 ? "" : "s"}
+            {" — "}
+            {formatMoney(totals.total)}
+          </span>
+          <span className="flex items-center gap-1 text-zinc-300">
+            View sale
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M4 2.5 9.5 7 4 11.5" />
+            </svg>
+          </span>
+        </button>
+      )}
 
       {heldOpen && (
         <HeldSalesModal
