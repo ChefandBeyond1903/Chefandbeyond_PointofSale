@@ -136,10 +136,9 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
-  // The catalog (category filters + product grid) is hidden by default so the
-  // register opens straight to the search box and the current sale. A search
-  // always reveals its results regardless.
-  const [catalogOpen, setCatalogOpen] = useState(false);
+  // Favorite category tiles show by default; the cashier can hide/reshow
+  // them with the "Catalog"/"Hide" button.
+  const [catalogOpen, setCatalogOpen] = useState(true);
   // Brief "Added ✓" flash on the last-tapped catalog card.
   const [flashId, setFlashId] = useState<string | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
