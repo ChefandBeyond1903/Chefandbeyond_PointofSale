@@ -818,7 +818,8 @@ export function CustomersView({
                   ) : (
                     <ul className="max-h-56 divide-y divide-zinc-100 overflow-y-auto text-sm">
                       {custSales.map((s) => {
-                        const overdue = !!s.dueDate && new Date(s.dueDate) < new Date();
+                        const overdue =
+                          s.status === "INVOICED" && !!s.dueDate && new Date(s.dueDate) < new Date();
                         return (
                         <li key={s.id}>
                           <button

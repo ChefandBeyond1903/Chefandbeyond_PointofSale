@@ -102,7 +102,10 @@ export function InvoicesView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const isOverdue = (s: Sale) => !!s.dueDate && new Date(s.dueDate) < new Date();
+  // Only an invoice still owing money can be overdue -- a paid one keeps its
+  // dueDate on record, but that's history, not a debt past due.
+  const isOverdue = (s: Sale) =>
+    s.status === "INVOICED" && !!s.dueDate && new Date(s.dueDate) < new Date();
   const rows = overdueOnly ? sales.filter(isOverdue) : sales;
   const pg = usePaged(rows);
   const showStore = isAdmin && !storeId; // redundant once a store is chosen
