@@ -11,6 +11,8 @@ import { SaleStatusPill } from "@/components/SaleStatusPill";
 import { Badge } from "@/components/Badge";
 import { ListHeader, SearchBox, FilterChips, FilterToggle } from "@/components/ListToolbar";
 import { LoadingRow, EmptyRow } from "@/components/TableState";
+import { DateRangePicker } from "@/components/DateRangePicker";
+import type { DateRange } from "@/lib/dateRange";
 import type { Sale, Store } from "@/lib/types";
 
 type Filter = "OPEN" | "PAID" | "REFUNDED" | "ALL";
@@ -35,6 +37,10 @@ export function InvoicesView({
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [storeId, setStoreId] = useState(""); // "" = every store (admin only)
   const [stores, setStores] = useState<Store[]>([]);
+  // null = no date filter (every invoice, the long-standing default) — set
+  // once the picker is touched.
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
+  const [dateLabel, setDateLabel] = useState("");
   const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,6 +55,10 @@ export function InvoicesView({
       if (f?.status) qs.set("status", f.status);
       if (query.trim()) qs.set("q", query.trim());
       if (storeId) qs.set("storeId", storeId);
+      if (dateRange) {
+        qs.set("from", dateRange.from.toISOString());
+        qs.set("to", dateRange.to.toISOString());
+      }
       const res = await api<{ sales: Sale[] }>(`/api/sales?${qs.toString()}`);
       setSales(res.sales);
     } catch (err) {
@@ -56,7 +66,7 @@ export function InvoicesView({
     } finally {
       setLoading(false);
     }
-  }, [filter, query, storeId]);
+  }, [filter, query, storeId, dateRange]);
 
   useEffect(() => {
     load();
@@ -130,8 +140,29 @@ export function InvoicesView({
           >
             Overdue
           </FilterToggle>
+          <DateRangePicker
+            defaultPreset="this_month"
+            onChange={(r, l) => {
+              setDateRange(r);
+              setDateLabel(l);
+            }}
+          />
+          {dateRange && (
+            <button
+              onClick={() => {
+                setDateRange(null);
+                setDateLabel("");
+              }}
+              className="btn-ghost text-xs"
+            >
+              Clear dates
+            </button>
+          )}
         </div>
       </ListHeader>
+      {dateRange && (
+        <p className="mb-2 text-xs text-zinc-400">Showing {dateLabel.toLowerCase()}</p>
+      )}
 
       {error && (
         <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
