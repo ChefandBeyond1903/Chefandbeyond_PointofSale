@@ -86,147 +86,7 @@ export function ReceiptModal({
               id="receipt"
               className={`rounded-md border border-zinc-200 p-4 font-mono text-xs receipt-${paper}`}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/logo-header.webp"
-                alt="Chef and Beyond"
-                className="mx-auto mb-2 h-10 w-auto"
-                onError={(e) => {
-                  e.currentTarget.style.display = "none";
-                }}
-              />
-              {sale.storeNameSnapshot ? (
-                <p className="text-center text-zinc-500">{sale.storeNameSnapshot}</p>
-              ) : null}
-              {(sale.storeAddressSnapshot || company?.address) && (
-                <p className="text-center text-zinc-500">
-                  {sale.storeAddressSnapshot || company?.address}
-                </p>
-              )}
-              {(sale.storePhoneSnapshot || company?.phone) && (
-                <p className="text-center text-zinc-500">
-                  {sale.storePhoneSnapshot || company?.phone}
-                </p>
-              )}
-              <p className="text-center text-zinc-500">Sale #{sale.number}</p>
-              <p className="text-center text-zinc-500">
-                {new Date(sale.createdAt).toLocaleString()}
-              </p>
-              {sale.salesperson?.name ? (
-                <p className="text-center text-zinc-500">Served by: {sale.salesperson.name}</p>
-              ) : null}
-              {sale.customerCompanySnapshot || sale.customerNameSnapshot ? (
-                <p className="text-center text-zinc-500">
-                  Customer: {sale.customerCompanySnapshot || sale.customerNameSnapshot}
-                  {sale.customerCompanySnapshot &&
-                  sale.customerNameSnapshot &&
-                  sale.customerNameSnapshot !== sale.customerCompanySnapshot
-                    ? ` (${sale.customerNameSnapshot})`
-                    : ""}
-                  {sale.customerLocationSnapshot ? ` — ${sale.customerLocationSnapshot}` : ""}
-                </p>
-              ) : null}
-              {sale.customerLocationSnapshot && sale.customerAddressSnapshot ? (
-                <p className="text-center text-zinc-500">{sale.customerAddressSnapshot}</p>
-              ) : null}
-              {sale.dueDate ? (
-                <p className="text-center text-zinc-500">
-                  {sale.termsSnapshot ? `${sale.termsSnapshot} — ` : ""}Due{" "}
-                  {formatDateOnly(sale.dueDate)}
-                </p>
-              ) : null}
-              {sale.customerTaxExemptSnapshot ? (
-                <p className="text-center text-zinc-500">Tax-exempt sale</p>
-              ) : null}
-              {sale.note ? (
-                <p className="mt-1 whitespace-pre-line text-center text-zinc-600">{sale.note}</p>
-              ) : null}
-              <hr className="my-2 border-dashed" />
-              {sale.items.map((it) => (
-                <div key={it.id}>
-                  <div className="flex justify-between">
-                    <span>
-                      {it.quantity}× {it.nameSnapshot}
-                    </span>
-                    <span>{formatMoney(it.lineTotalCents)}</span>
-                  </div>
-                  {it.serialNumber ? (
-                    <div className="text-[10px] text-zinc-500">S/N: {it.serialNumber}</div>
-                  ) : null}
-                </div>
-              ))}
-              <hr className="my-2 border-dashed" />
-              <div className="flex justify-between">
-                <span>Subtotal</span>
-                <span>{formatMoney(sale.subtotalCents)}</span>
-              </div>
-              {sale.discountCents !== 0 && (
-                <div className="flex justify-between">
-                  <span>Discount</span>
-                  <span>− {formatMoney(sale.discountCents)}</span>
-                </div>
-              )}
-              <div className="flex justify-between">
-                <span>Tax{sale.taxRateBps ? ` (${formatBps(sale.taxRateBps)})` : ""}</span>
-                <span>{formatMoney(sale.taxCents)}</span>
-              </div>
-              {sale.shippingCents > 0 && (
-                <div className="flex justify-between">
-                  <span>Shipping</span>
-                  <span>{formatMoney(sale.shippingCents)}</span>
-                </div>
-              )}
-              <div className="flex justify-between font-bold">
-                <span>Total</span>
-                <span>{formatMoney(sale.totalCents)}</span>
-              </div>
-              {sale.status === "INVOICED" && (sale.amountPaidCents ?? 0) < sale.totalCents ? (
-                <>
-                  <div className="flex justify-between">
-                    <span>{(sale.amountPaidCents ?? 0) > 0 ? "Deposit paid" : "Paid"}</span>
-                    <span>{formatMoney(sale.amountPaidCents ?? 0)}</span>
-                  </div>
-                  <div className="flex justify-between font-bold">
-                    <span>Balance due</span>
-                    <span>{formatMoney(sale.totalCents - (sale.amountPaidCents ?? 0))}</span>
-                  </div>
-                  {sale.dueDate ? (
-                    <div className="flex justify-between">
-                      <span>Due by</span>
-                      <span>{formatDateOnly(sale.dueDate)}</span>
-                    </div>
-                  ) : null}
-                </>
-              ) : (
-                <div className="flex justify-between">
-                  <span>
-                    {sale.paymentMethod === "CHECK" && sale.checkNumber
-                      ? `Check #${sale.checkNumber}`
-                      : cardLabel(sale) ?? sale.paymentMethod}
-                  </span>
-                  <span>{formatMoney(sale.tenderedCents)}</span>
-                </div>
-              )}
-              {sale.changeCents > 0 && (
-                <div className="flex justify-between">
-                  <span>Change</span>
-                  <span>{formatMoney(sale.changeCents)}</span>
-                </div>
-              )}
-              <p className="mt-3 text-center text-zinc-500">Thank you!</p>
-              {(() => {
-                const listSub = sale.listSubtotalCents || sale.subtotalCents;
-                const saved = listSub - (sale.subtotalCents - sale.discountCents);
-                if (saved <= 0) return null;
-                return (
-                  <p className="mt-1 text-center font-bold">
-                    You saved {formatMoney(saved)}
-                    {listSub > 0 ? ` (${Math.round((saved / listSub) * 100)}% off)` : ""}
-                  </p>
-                );
-              })()}
-              <hr className="my-2 border-dashed" />
-              <p className="text-[10px] leading-snug text-zinc-500">{INVOICE_FINE_PRINT}</p>
+              <ReceiptBody sale={sale} company={company} />
             </div>
           )}
 
@@ -257,4 +117,154 @@ function cardLabel(sale: { paymentMethod: string; payments?: { method: string; c
   const p = sale.payments?.find((x) => x.method === "CARD" && x.cardLast4);
   if (!p) return null;
   return `${p.cardBrand || "Card"} •••• ${p.cardLast4}`;
+}
+
+/**
+ * The receipt/invoice content, without the outer printable wrapper — shared
+ * by the single-sale ReceiptModal (which wraps it in #receipt) and
+ * BulkReceiptModal (which prints several at once, one per page).
+ */
+export function ReceiptBody({ sale, company }: { sale: Sale; company: Company | null }) {
+  return (
+    <>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/logo-header.webp"
+        alt="Chef and Beyond"
+        className="mx-auto mb-2 h-10 w-auto"
+        onError={(e) => {
+          e.currentTarget.style.display = "none";
+        }}
+      />
+      {sale.storeNameSnapshot ? (
+        <p className="text-center text-zinc-500">{sale.storeNameSnapshot}</p>
+      ) : null}
+      {(sale.storeAddressSnapshot || company?.address) && (
+        <p className="text-center text-zinc-500">
+          {sale.storeAddressSnapshot || company?.address}
+        </p>
+      )}
+      {(sale.storePhoneSnapshot || company?.phone) && (
+        <p className="text-center text-zinc-500">
+          {sale.storePhoneSnapshot || company?.phone}
+        </p>
+      )}
+      <p className="text-center text-zinc-500">Sale #{sale.number}</p>
+      <p className="text-center text-zinc-500">{new Date(sale.createdAt).toLocaleString()}</p>
+      {sale.salesperson?.name ? (
+        <p className="text-center text-zinc-500">Served by: {sale.salesperson.name}</p>
+      ) : null}
+      {sale.customerCompanySnapshot || sale.customerNameSnapshot ? (
+        <p className="text-center text-zinc-500">
+          Customer: {sale.customerCompanySnapshot || sale.customerNameSnapshot}
+          {sale.customerCompanySnapshot &&
+          sale.customerNameSnapshot &&
+          sale.customerNameSnapshot !== sale.customerCompanySnapshot
+            ? ` (${sale.customerNameSnapshot})`
+            : ""}
+          {sale.customerLocationSnapshot ? ` — ${sale.customerLocationSnapshot}` : ""}
+        </p>
+      ) : null}
+      {sale.customerLocationSnapshot && sale.customerAddressSnapshot ? (
+        <p className="text-center text-zinc-500">{sale.customerAddressSnapshot}</p>
+      ) : null}
+      {sale.dueDate ? (
+        <p className="text-center text-zinc-500">
+          {sale.termsSnapshot ? `${sale.termsSnapshot} — ` : ""}Due {formatDateOnly(sale.dueDate)}
+        </p>
+      ) : null}
+      {sale.customerTaxExemptSnapshot ? (
+        <p className="text-center text-zinc-500">Tax-exempt sale</p>
+      ) : null}
+      {sale.note ? (
+        <p className="mt-1 whitespace-pre-line text-center text-zinc-600">{sale.note}</p>
+      ) : null}
+      <hr className="my-2 border-dashed" />
+      {sale.items.map((it) => (
+        <div key={it.id}>
+          <div className="flex justify-between">
+            <span>
+              {it.quantity}× {it.nameSnapshot}
+            </span>
+            <span>{formatMoney(it.lineTotalCents)}</span>
+          </div>
+          {it.serialNumber ? (
+            <div className="text-[10px] text-zinc-500">S/N: {it.serialNumber}</div>
+          ) : null}
+        </div>
+      ))}
+      <hr className="my-2 border-dashed" />
+      <div className="flex justify-between">
+        <span>Subtotal</span>
+        <span>{formatMoney(sale.subtotalCents)}</span>
+      </div>
+      {sale.discountCents !== 0 && (
+        <div className="flex justify-between">
+          <span>Discount</span>
+          <span>− {formatMoney(sale.discountCents)}</span>
+        </div>
+      )}
+      <div className="flex justify-between">
+        <span>Tax{sale.taxRateBps ? ` (${formatBps(sale.taxRateBps)})` : ""}</span>
+        <span>{formatMoney(sale.taxCents)}</span>
+      </div>
+      {sale.shippingCents > 0 && (
+        <div className="flex justify-between">
+          <span>Shipping</span>
+          <span>{formatMoney(sale.shippingCents)}</span>
+        </div>
+      )}
+      <div className="flex justify-between font-bold">
+        <span>Total</span>
+        <span>{formatMoney(sale.totalCents)}</span>
+      </div>
+      {sale.status === "INVOICED" && (sale.amountPaidCents ?? 0) < sale.totalCents ? (
+        <>
+          <div className="flex justify-between">
+            <span>{(sale.amountPaidCents ?? 0) > 0 ? "Deposit paid" : "Paid"}</span>
+            <span>{formatMoney(sale.amountPaidCents ?? 0)}</span>
+          </div>
+          <div className="flex justify-between font-bold">
+            <span>Balance due</span>
+            <span>{formatMoney(sale.totalCents - (sale.amountPaidCents ?? 0))}</span>
+          </div>
+          {sale.dueDate ? (
+            <div className="flex justify-between">
+              <span>Due by</span>
+              <span>{formatDateOnly(sale.dueDate)}</span>
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <div className="flex justify-between">
+          <span>
+            {sale.paymentMethod === "CHECK" && sale.checkNumber
+              ? `Check #${sale.checkNumber}`
+              : (cardLabel(sale) ?? sale.paymentMethod)}
+          </span>
+          <span>{formatMoney(sale.tenderedCents)}</span>
+        </div>
+      )}
+      {sale.changeCents > 0 && (
+        <div className="flex justify-between">
+          <span>Change</span>
+          <span>{formatMoney(sale.changeCents)}</span>
+        </div>
+      )}
+      <p className="mt-3 text-center text-zinc-500">Thank you!</p>
+      {(() => {
+        const listSub = sale.listSubtotalCents || sale.subtotalCents;
+        const saved = listSub - (sale.subtotalCents - sale.discountCents);
+        if (saved <= 0) return null;
+        return (
+          <p className="mt-1 text-center font-bold">
+            You saved {formatMoney(saved)}
+            {listSub > 0 ? ` (${Math.round((saved / listSub) * 100)}% off)` : ""}
+          </p>
+        );
+      })()}
+      <hr className="my-2 border-dashed" />
+      <p className="text-[10px] leading-snug text-zinc-500">{INVOICE_FINE_PRINT}</p>
+    </>
+  );
 }

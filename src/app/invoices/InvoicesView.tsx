@@ -7,6 +7,7 @@ import { formatDateOnly } from "@/lib/date";
 import { usePaged } from "@/lib/usePaged";
 import { Pager } from "@/components/Pager";
 import { InvoiceModal } from "@/components/InvoiceModal";
+import { BulkReceiptModal } from "@/components/BulkReceiptModal";
 import { SaleStatusPill } from "@/components/SaleStatusPill";
 import { Badge } from "@/components/Badge";
 import { ListHeader, SearchBox, FilterChips, FilterToggle } from "@/components/ListToolbar";
@@ -45,6 +46,8 @@ export function InvoicesView({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkPrintOpen, setBulkPrintOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -103,7 +106,28 @@ export function InvoicesView({
   const rows = overdueOnly ? sales.filter(isOverdue) : sales;
   const pg = usePaged(rows);
   const showStore = isAdmin && !storeId; // redundant once a store is chosen
-  const cols = showStore ? 7 : 6;
+  const cols = showStore ? 8 : 7;
+  const selectedSales = sales.filter((s) => selected.has(s.id));
+  const pageIds = pg.pageItems.map((s) => s.id);
+  const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
+
+  function toggleOne(id: string) {
+    setSelected((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function togglePage() {
+    setSelected((cur) => {
+      const next = new Set(cur);
+      if (allPageSelected) pageIds.forEach((id) => next.delete(id));
+      else pageIds.forEach((id) => next.add(id));
+      return next;
+    });
+  }
 
   return (
     <div className="w-full flex-1 p-4">
@@ -158,6 +182,16 @@ export function InvoicesView({
               Clear dates
             </button>
           )}
+          {selected.size > 0 && (
+            <>
+              <button onClick={() => setBulkPrintOpen(true)} className="btn-primary text-xs">
+                Print selected ({selected.size})
+              </button>
+              <button onClick={() => setSelected(new Set())} className="btn-ghost text-xs">
+                Clear selection
+              </button>
+            </>
+          )}
         </div>
       </ListHeader>
       {dateRange && (
@@ -179,6 +213,14 @@ export function InvoicesView({
         <table className="w-full min-w-[640px] text-sm">
           <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
             <tr>
+              <th className="w-8 px-4 py-2.5">
+                <input
+                  type="checkbox"
+                  checked={allPageSelected}
+                  onChange={togglePage}
+                  aria-label="Select all invoices on this page"
+                />
+              </th>
               <th className="px-4 py-2.5">#</th>
               <th className="px-4 py-2.5">Date</th>
               <th className="px-4 py-2.5">Customer</th>
@@ -208,6 +250,14 @@ export function InvoicesView({
                     onClick={() => setOpenInvoiceId(s.id)}
                     className="cursor-pointer hover:bg-zinc-50"
                   >
+                    <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(s.id)}
+                        onChange={() => toggleOne(s.id)}
+                        aria-label={`Select invoice #${s.number}`}
+                      />
+                    </td>
                     <td className="px-4 py-2.5 font-medium">#{s.number}</td>
                     <td className="px-4 py-2.5 text-zinc-500">
                       {new Date(s.createdAt).toLocaleDateString([], {
@@ -262,6 +312,10 @@ export function InvoicesView({
           canManage={canManage}
           isAdmin={isAdmin}
         />
+      )}
+
+      {bulkPrintOpen && (
+        <BulkReceiptModal sales={selectedSales} onClose={() => setBulkPrintOpen(false)} />
       )}
     </div>
   );

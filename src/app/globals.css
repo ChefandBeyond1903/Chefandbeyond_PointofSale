@@ -252,6 +252,57 @@ body {
     width: 80mm;
   }
 
+  /* Bulk invoice printing: one receipt per page, same layout rules as the
+     single #receipt above but scoped to a class (several print at once, so
+     no duplicate ids). */
+  body:has(#bulk-receipts) * {
+    visibility: hidden;
+  }
+  body:has(#bulk-receipts) #bulk-receipts,
+  body:has(#bulk-receipts) #bulk-receipts * {
+    visibility: visible;
+  }
+  body:has(#bulk-receipts) #bulk-receipts {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+  }
+  body:has(#bulk-receipts) .bulk-receipt-doc {
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    color: #000;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    page-break-after: always;
+    break-after: page;
+  }
+  body:has(#bulk-receipts) .bulk-receipt-doc:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+  body:has(#bulk-receipts) .bulk-receipt-doc.receipt-thermal {
+    width: 80mm;
+    padding: 3mm !important;
+    font-size: 9pt;
+  }
+  body:has(#bulk-receipts) .bulk-receipt-doc.receipt-full {
+    width: auto;
+    max-width: 175mm;
+    margin: 0 auto;
+    padding: 12mm !important;
+    font-family: var(--font-geist-sans), system-ui, Arial, sans-serif;
+    font-size: 11pt;
+    line-height: 1.55;
+  }
+  body:has(#bulk-receipts) .bulk-receipt-doc.receipt-full hr {
+    border-style: solid;
+  }
+  body:has(#bulk-receipts) .bulk-receipt-doc.receipt-full img {
+    height: 56px;
+  }
+
   /* The Profit & Loss statement modal: print just the sheet, full page. */
   body:has(#pnl-print) * {
     visibility: hidden;
