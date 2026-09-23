@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
 import { formatDateOnly } from "@/lib/date";
@@ -103,6 +103,37 @@ export function ExpensesPanel({
   }, [load, isAdmin]);
 
   const total = useMemo(() => rows.reduce((s, r) => s + r.amountCents, 0), [rows]);
+
+  // One row per category, A–Z, each holding its bills newest-first and a
+  // running total — the source of truth for both the category subtotal and
+  // the grand total below, so nothing here is ever a hardcoded figure.
+  const groupedByCategory = useMemo(() => {
+    const byCategory = new Map<string, Expense[]>();
+    for (const r of rows) {
+      const list = byCategory.get(r.category) ?? [];
+      list.push(r);
+      byCategory.set(r.category, list);
+    }
+    return [...byCategory.entries()]
+      .map(([category, items]) => ({
+        category,
+        items: [...items].sort(
+          (a, b) => new Date(b.expenseDate).getTime() - new Date(a.expenseDate).getTime(),
+        ),
+        totalCents: items.reduce((s, r) => s + r.amountCents, 0),
+      }))
+      .sort((a, b) => a.category.localeCompare(b.category));
+  }, [rows]);
+
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  function toggleExpanded(category: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(category)) next.delete(category);
+      else next.add(category);
+      return next;
+    });
+  }
 
   // Persists a category typed into any of the pickers below so it's in the
   // dropdown/datalist from then on — a no-op (upsert) if it already exists.
@@ -327,73 +358,110 @@ export function ExpensesPanel({
       </form>
 
       <div className="card overflow-x-auto">
-        <table className="w-full min-w-[720px] text-sm">
-          <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
-            <tr>
-              <th className="px-4 py-2.5">Date</th>
-              <th className="px-4 py-2.5">Category</th>
-              <th className="px-4 py-2.5">Payee</th>
-              <th className="px-4 py-2.5">Memo</th>
-              <th className="px-4 py-2.5">Store</th>
-              <th className="px-4 py-2.5 text-right">Amount</th>
-              <th className="px-4 py-2.5">Status</th>
-              <th className="px-4 py-2.5"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-zinc-100">
-            {loading ? (
-              <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-zinc-400">
-                  Loading…
+        {loading ? (
+          <p className="px-4 py-8 text-center text-sm text-zinc-400">Loading…</p>
+        ) : rows.length === 0 ? (
+          <p className="px-4 py-8 text-center text-sm text-zinc-400">No expenses recorded yet.</p>
+        ) : (
+          <table className="w-full min-w-[720px] text-sm">
+            <tbody className="divide-y divide-zinc-100">
+              {groupedByCategory.map(({ category, items, totalCents }) => {
+                const isOpen = expanded.has(category);
+                return (
+                  <Fragment key={category}>
+                    <tr
+                      onClick={() => toggleExpanded(category)}
+                      className="cursor-pointer bg-zinc-50 hover:bg-zinc-100"
+                    >
+                      <td className="px-4 py-2.5 font-medium" colSpan={6}>
+                        <span className="mr-2 inline-block w-3 text-zinc-400">
+                          {isOpen ? "▾" : "▸"}
+                        </span>
+                        {category}
+                        <span className="ml-2 text-xs font-normal text-zinc-400">
+                          {items.length} bill{items.length === 1 ? "" : "s"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-semibold">
+                        {formatMoney(totalCents)}
+                      </td>
+                    </tr>
+                    {isOpen && (
+                      <tr>
+                        <td colSpan={7} className="bg-white p-0">
+                          <table className="w-full text-sm">
+                            <thead className="text-left text-xs uppercase tracking-wide text-zinc-400">
+                              <tr>
+                                <th className="px-4 py-2 pl-10">Date paid</th>
+                                <th className="px-4 py-2">Vendor</th>
+                                <th className="px-4 py-2">Notes</th>
+                                <th className="px-4 py-2">Store</th>
+                                <th className="px-4 py-2 text-right">Amount</th>
+                                <th className="px-4 py-2">Status</th>
+                                <th className="px-4 py-2"></th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-zinc-100">
+                              {items.map((r) => (
+                                <tr key={r.id}>
+                                  <td className="px-4 py-2 pl-10 text-zinc-500">
+                                    {fmtDate(r.expenseDate)}
+                                  </td>
+                                  <td className="px-4 py-2 text-zinc-700">{r.payee || "—"}</td>
+                                  <td className="px-4 py-2 text-zinc-500">{r.memo || "—"}</td>
+                                  <td className="px-4 py-2 text-zinc-500">
+                                    {r.store?.name.replace(/^Chef and Beyond - /, "") ??
+                                      "Company-wide"}
+                                  </td>
+                                  <td className="px-4 py-2 text-right font-medium">
+                                    {formatMoney(r.amountCents)}
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    <span
+                                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                                        r.status === "PAID"
+                                          ? "bg-green-100 text-green-700"
+                                          : "bg-amber-100 text-amber-700"
+                                      }`}
+                                    >
+                                      {r.status}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-2 text-right whitespace-nowrap">
+                                    <button
+                                      onClick={() => startEdit(r)}
+                                      className="btn-ghost px-2 py-0.5 text-xs text-indigo-600"
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      onClick={() => remove(r.id)}
+                                      className="btn-ghost px-2 py-0.5 text-xs text-red-500"
+                                    >
+                                      Delete
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-zinc-200">
+                <td className="px-4 py-3 font-semibold" colSpan={6}>
+                  Grand total
                 </td>
+                <td className="px-4 py-3 text-right text-base font-bold">{formatMoney(total)}</td>
               </tr>
-            ) : rows.length === 0 ? (
-              <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-zinc-400">
-                  No expenses recorded yet.
-                </td>
-              </tr>
-            ) : (
-              rows.map((r) => (
-                <tr key={r.id}>
-                  <td className="px-4 py-2.5 text-zinc-500">{fmtDate(r.expenseDate)}</td>
-                  <td className="px-4 py-2.5 font-medium">{r.category}</td>
-                  <td className="px-4 py-2.5 text-zinc-500">{r.payee || "—"}</td>
-                  <td className="px-4 py-2.5 text-zinc-500">{r.memo || "—"}</td>
-                  <td className="px-4 py-2.5 text-zinc-500">
-                    {r.store?.name.replace(/^Chef and Beyond - /, "") ?? "Company-wide"}
-                  </td>
-                  <td className="px-4 py-2.5 text-right font-medium">{formatMoney(r.amountCents)}</td>
-                  <td className="px-4 py-2.5">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                        r.status === "PAID"
-                          ? "bg-green-100 text-green-700"
-                          : "bg-amber-100 text-amber-700"
-                      }`}
-                    >
-                      {r.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                    <button
-                      onClick={() => startEdit(r)}
-                      className="btn-ghost px-2 py-0.5 text-xs text-indigo-600"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => remove(r.id)}
-                      className="btn-ghost px-2 py-0.5 text-xs text-red-500"
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+            </tfoot>
+          </table>
+        )}
       </div>
 
       {edit && (
@@ -640,6 +708,25 @@ function RecurringExpensesSection({
   const isDue = (r: RecurringExpense) =>
     r.active && new Date(r.nextDate).getTime() <= Date.now();
 
+  // Normalizes every active template to a monthly-equivalent amount so mixed
+  // frequencies (weekly, quarterly, yearly…) roll up into one comparable
+  // "what will this cost me per month" figure.
+  const monthlyEquivalentCents = (r: RecurringExpense) => {
+    switch (r.frequency) {
+      case "WEEKLY":
+        return (r.amountCents * 52) / 12;
+      case "QUARTERLY":
+        return r.amountCents / 3;
+      case "YEARLY":
+        return r.amountCents / 12;
+      default:
+        return r.amountCents;
+    }
+  };
+  const monthlyTotalCents = Math.round(
+    rows.filter((r) => r.active).reduce((s, r) => s + monthlyEquivalentCents(r), 0),
+  );
+
   return (
     <div className="card mb-4 p-4">
       <div className="mb-2 flex flex-wrap items-center gap-3">
@@ -647,6 +734,11 @@ function RecurringExpensesSection({
         <span className="text-xs text-zinc-400">
           {rows.length} template{rows.length === 1 ? "" : "s"}
         </span>
+        {rows.some((r) => r.active) && (
+          <span className="text-xs font-medium text-zinc-600">
+            ≈ {formatMoney(monthlyTotalCents)}/mo
+          </span>
+        )}
         {dueCount > 0 && (
           <button onClick={postDue} disabled={posting} className="btn-primary ml-auto h-8 text-xs">
             {posting ? "Posting…" : `Post ${dueCount} due`}
