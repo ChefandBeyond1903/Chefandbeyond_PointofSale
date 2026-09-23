@@ -440,11 +440,13 @@ export default function RegisterPage() {
     taxOverrideReason,
   ]);
 
-  // A line may never be priced below its minimum (UMRP). Rather than snapping
-  // on every keystroke (which makes the field impossible to edit), this runs
-  // only when the user commits an edit — see snapLineToUmrp, wired to the
-  // price/discount inputs' onCommit.
+  // A line may never be priced below its minimum (UMRP) — except an admin,
+  // who's only warned (see totals.umrpViolations below) and may knowingly
+  // override it. Rather than snapping on every keystroke (which makes the
+  // field impossible to edit), this runs only when the user commits an edit —
+  // see snapLineToUmrp, wired to the price/discount inputs' onCommit.
   function snapLineToUmrp(productId: string) {
+    if (isAdmin) return;
     setCart((cur) =>
       cur.map((l) => {
         if (l.product.id !== productId) return l;
@@ -2070,6 +2072,9 @@ export default function RegisterPage() {
             {totals.umrpViolations.length > 0 && (
               <p className="text-xs text-red-700">
                 One or more items are below their minimum price — see the flagged lines above.
+                {isAdmin
+                  ? " As an admin you can still complete this sale."
+                  : " Ask an admin to override this sale."}
               </p>
             )}
 
@@ -2094,7 +2099,7 @@ export default function RegisterPage() {
                 disabled={
                   cart.length === 0 ||
                   savingQuote ||
-                  totals.umrpViolations.length > 0 ||
+                  (!isAdmin && totals.umrpViolations.length > 0) ||
                   locationNeeded ||
                   (isAdmin && !sellStoreId)
                 }
@@ -2128,7 +2133,7 @@ export default function RegisterPage() {
               onClick={() => setPayOpen(true)}
               disabled={
                 cart.length === 0 ||
-                totals.umrpViolations.length > 0 ||
+                (!isAdmin && totals.umrpViolations.length > 0) ||
                 totals.noCostItems.length > 0 ||
                 locationNeeded ||
                 customerMissing ||

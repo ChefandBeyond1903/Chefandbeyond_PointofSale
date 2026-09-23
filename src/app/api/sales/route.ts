@@ -244,19 +244,22 @@ export async function POST(req: NextRequest) {
     const computed = computeSale(priced, body.orderDiscountCents, taxRateBps, body.shippingCents);
 
     // UMRP floor: after every discount, no line may fall below the product's
-    // minimum resale price. Hard stop — this is never bypassable.
+    // minimum resale price — unless an admin is knowingly overriding it (the
+    // register warns them but lets them proceed; everyone else is hard-stopped).
     const umrpById = new Map(products.map((p) => [p.id, p.umrpCents]));
-    for (const l of computed.lines) {
-      const umrp = umrpById.get(l.productId) ?? 0;
-      if (umrp <= 0) continue;
-      const netCents = l.unitPriceCents * l.quantity - l.discountCents;
-      if (netCents < umrp * l.quantity) {
-        const eachCents = Math.floor(netCents / l.quantity);
-        throw new HttpError(
-          400,
-          `"${l.nameSnapshot}" can't be sold below its minimum price of ${formatMoney(umrp)} each ` +
-            `(this sale works out to ${formatMoney(eachCents)}). Reduce the discount.`,
-        );
+    if (user.role !== "ADMIN") {
+      for (const l of computed.lines) {
+        const umrp = umrpById.get(l.productId) ?? 0;
+        if (umrp <= 0) continue;
+        const netCents = l.unitPriceCents * l.quantity - l.discountCents;
+        if (netCents < umrp * l.quantity) {
+          const eachCents = Math.floor(netCents / l.quantity);
+          throw new HttpError(
+            400,
+            `"${l.nameSnapshot}" can't be sold below its minimum price of ${formatMoney(umrp)} each ` +
+              `(this sale works out to ${formatMoney(eachCents)}). Reduce the discount.`,
+          );
+        }
       }
     }
 

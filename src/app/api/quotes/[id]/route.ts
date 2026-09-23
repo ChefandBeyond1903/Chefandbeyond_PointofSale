@@ -204,19 +204,22 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
         const computed = computeSale(priced, 0, taxRateBps, quote.shippingCents);
 
-        // UMRP floor — same hard stop as creating a quote.
+        // UMRP floor — same hard stop as creating a quote, except an admin
+        // may override it.
         const umrpById = new Map(products.map((p) => [p.id, p.umrpCents]));
-        for (const l of computed.lines) {
-          const umrp = umrpById.get(l.productId) ?? 0;
-          if (umrp <= 0) continue;
-          const netCents = l.unitPriceCents * l.quantity - l.discountCents;
-          if (netCents < umrp * l.quantity) {
-            const eachCents = Math.floor(netCents / l.quantity);
-            throw new HttpError(
-              400,
-              `"${l.nameSnapshot}" can't be quoted below its minimum price of ${formatMoney(umrp)} ` +
-                `each (this quote works out to ${formatMoney(eachCents)}). Reduce the discount.`,
-            );
+        if (actor.role !== "ADMIN") {
+          for (const l of computed.lines) {
+            const umrp = umrpById.get(l.productId) ?? 0;
+            if (umrp <= 0) continue;
+            const netCents = l.unitPriceCents * l.quantity - l.discountCents;
+            if (netCents < umrp * l.quantity) {
+              const eachCents = Math.floor(netCents / l.quantity);
+              throw new HttpError(
+                400,
+                `"${l.nameSnapshot}" can't be quoted below its minimum price of ${formatMoney(umrp)} ` +
+                  `each (this quote works out to ${formatMoney(eachCents)}). Reduce the discount.`,
+              );
+            }
           }
         }
 
