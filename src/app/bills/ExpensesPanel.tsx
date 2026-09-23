@@ -271,13 +271,6 @@ export function ExpensesPanel({
 
       {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      <RecurringExpensesSection
-        isAdmin={isAdmin}
-        ensureCategory={ensureCategory}
-        stores={stores}
-        onPosted={load}
-      />
-
       <form onSubmit={submit} className="card mb-4 grid gap-3 p-4 sm:grid-cols-6">
         <div className="sm:col-span-2">
           <label className="label">Category</label>
@@ -463,6 +456,13 @@ export function ExpensesPanel({
           </table>
         )}
       </div>
+
+      <RecurringExpensesSection
+        isAdmin={isAdmin}
+        ensureCategory={ensureCategory}
+        stores={stores}
+        onPosted={load}
+      />
 
       {edit && (
         <div
