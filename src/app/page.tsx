@@ -2320,6 +2320,7 @@ export default function RegisterPage() {
         <QuickAddProductModal
           initialName={query.trim()}
           categories={categories}
+          isAdmin={isAdmin}
           onClose={() => setQuickAddOpen(false)}
           onCreated={(product) => {
             addToCart(product);
