@@ -418,6 +418,8 @@ export interface SaleRefund {
 export interface Sale {
   id: string;
   number: number;
+  // Website store only: the order number/id the website's own checkout assigned.
+  websiteOrderNumber?: string;
   status: string;
   subtotalCents: number;
   listSubtotalCents: number;

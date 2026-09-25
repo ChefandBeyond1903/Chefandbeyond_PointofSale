@@ -489,7 +489,14 @@ export function InvoiceModal({
           <>
             <div className="mb-4 flex items-start justify-between">
               <div>
-                <h2 className="text-lg font-semibold">Invoice #{sale.number}</h2>
+                <h2 className="text-lg font-semibold">
+                  Invoice #{sale.number}
+                  {sale.websiteOrderNumber && (
+                    <span className="ml-2 text-sm font-normal text-zinc-500">
+                      · Website order {sale.websiteOrderNumber}
+                    </span>
+                  )}
+                </h2>
                 <p className="text-sm text-zinc-500">
                   {new Date(sale.createdAt).toLocaleString()} ·{" "}
                   {sale.salesperson?.name ?? sale.cashier?.name ?? "—"}

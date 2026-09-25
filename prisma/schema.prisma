@@ -365,6 +365,10 @@ model Sale {
   paymentMethod   String
   // Set when the whole sale was settled by a single check.
   checkNumber     String           @default("")
+  // Website store only: the order number/id the website's own checkout
+  // already assigned (often has a letter prefix, unlike `number` which is a
+  // plain auto-incrementing int) — pasted in free-text to match records up.
+  websiteOrderNumber String        @default("")
   tenderedCents   Int              @default(0)
   changeCents     Int              @default(0)
   note            String?

@@ -168,9 +168,9 @@ export default function RegisterPage() {
   const [manualTaxState, setManualTaxState] = useState("");
   const [manualTaxCents, setManualTaxCents] = useState(0);
 
-  // Website store only: match the sale's number to the website's own order
-  // number, and/or backdate it — these are often entered days/weeks late.
-  const [manualNumber, setManualNumber] = useState("");
+  // Website store only: paste the website's own order number (often starts
+  // with letters, so free text) and/or backdate it — entered days/weeks late.
+  const [manualWebsiteOrderNumber, setManualWebsiteOrderNumber] = useState("");
   const [manualSaleDate, setManualSaleDate] = useState("");
 
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -1162,7 +1162,9 @@ export default function RegisterPage() {
       ...(manualTaxOpen
         ? { manualTaxCents: totals.tax, taxState: manualTaxState.trim().toUpperCase() }
         : {}),
-      ...(isWebsiteStore && manualNumber.trim() ? { number: Number(manualNumber.trim()) } : {}),
+      ...(isWebsiteStore && manualWebsiteOrderNumber.trim()
+        ? { websiteOrderNumber: manualWebsiteOrderNumber.trim() }
+        : {}),
       ...(isWebsiteStore && manualSaleDate ? { saleDate: manualSaleDate } : {}),
       ...customerPayload(),
     };
@@ -1174,9 +1176,6 @@ export default function RegisterPage() {
   function deliveryValidationError(): string | null {
     if (manualTaxOpen && manualTaxState.trim().length !== 2) {
       return "Enter the 2-letter state this tax was collected for.";
-    }
-    if (isWebsiteStore && manualNumber.trim() && !/^\d+$/.test(manualNumber.trim())) {
-      return "Invoice # must be a whole number.";
     }
     if (!homeJurisdiction) return null;
     if (deliveryMethod === "DELIVERY") {
@@ -2067,19 +2066,18 @@ export default function RegisterPage() {
             <div className="space-y-2 border-t border-zinc-100 px-4 py-3 text-sm">
               <span className="font-medium text-zinc-700">Match the website order</span>
               <p className="text-[11px] text-zinc-500">
-                Optional — enter the order number the website already assigned, and/or the date it
-                actually happened (useful when this is entered days or weeks later). Leave either
-                blank to use the normal next number / today.
+                Optional — paste the order number/id the website already assigned (letters and all),
+                and/or set the date it actually happened (useful when this is entered days or weeks
+                later). Leave either blank to skip it.
               </p>
               <div className="flex gap-2">
                 <div className="flex-1">
-                  <label className="label">Invoice #</label>
+                  <label className="label">Website order #</label>
                   <input
                     className="input h-8"
-                    inputMode="numeric"
-                    placeholder="e.g. 30412"
-                    value={manualNumber}
-                    onChange={(e) => setManualNumber(e.target.value.replace(/[^\d]/g, ""))}
+                    placeholder="e.g. WEB-30412"
+                    value={manualWebsiteOrderNumber}
+                    onChange={(e) => setManualWebsiteOrderNumber(e.target.value)}
                   />
                 </div>
                 <div className="flex-1">

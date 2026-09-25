@@ -56,6 +56,7 @@ export async function GET(req: NextRequest) {
         { customerCompanySnapshot: { contains: q, mode: "insensitive" } },
         { customerEmailSnapshot: { contains: q, mode: "insensitive" } },
         { customerPhoneSnapshot: { contains: q, mode: "insensitive" } },
+        { websiteOrderNumber: { contains: q, mode: "insensitive" } },
         { items: { some: { serialNumber: { contains: q, mode: "insensitive" } } } },
       ];
       if (Number.isInteger(asNumber) && asNumber > 0) or.push({ number: asNumber });
@@ -109,10 +110,10 @@ export async function POST(req: NextRequest) {
     // website store — everywhere else keeps the normal auto-numbered, "now"
     // behavior.
     const isWebsiteStore = sellStore?.name === "Chef and Beyond - Website";
-    if ((body.number !== undefined || body.saleDate) && !isWebsiteStore) {
+    if ((body.websiteOrderNumber || body.saleDate) && !isWebsiteStore) {
       throw new HttpError(
         400,
-        "A custom invoice number or date can only be used for the Website store.",
+        "A website order number or custom date can only be used for the Website store.",
       );
     }
 
@@ -412,15 +413,8 @@ export async function POST(req: NextRequest) {
     if (body.dryRun) return ok({ ok: true, totalCents: total });
 
     const sale = await prisma.$transaction(async (tx) => {
-      let number: number;
-      if (body.number !== undefined) {
-        const clash = await tx.sale.findUnique({ where: { number: body.number }, select: { id: true } });
-        if (clash) throw new HttpError(400, `Invoice #${body.number} already exists.`);
-        number = body.number;
-      } else {
-        const last = await tx.sale.findFirst({ orderBy: { number: "desc" }, select: { number: true } });
-        number = (last?.number ?? 0) + 1;
-      }
+      const last = await tx.sale.findFirst({ orderBy: { number: "desc" }, select: { number: true } });
+      const number = (last?.number ?? 0) + 1;
       const saleDate = body.saleDate ? parseEventDate(body.saleDate) : new Date();
 
       // Resolve the customer: use the given id, else match by name/email, else
@@ -531,6 +525,7 @@ export async function POST(req: NextRequest) {
           paidAt: settledNow ? saleDate : null,
           checkNumber:
             payMethod === "CHECK" ? (paymentList[0]?.checkNumber ?? "") : "",
+          websiteOrderNumber: body.websiteOrderNumber ?? "",
           subtotalCents: computed.subtotalCents,
           listSubtotalCents,
           discountCents: computed.discountCents,
