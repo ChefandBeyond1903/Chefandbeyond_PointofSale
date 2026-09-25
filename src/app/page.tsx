@@ -1254,6 +1254,7 @@ export default function RegisterPage() {
     tenderedCents: number,
     checkNumber?: string,
     stripePaymentIntentId?: string,
+    note?: string,
   ) {
     setError(null);
     if (isAdmin && !sellStoreId) {
@@ -1275,6 +1276,7 @@ export default function RegisterPage() {
           tenderedCents,
           ...(method === "CHECK" ? { checkNumber } : {}),
           ...(stripePaymentIntentId ? { stripePaymentIntentId } : {}),
+          ...(note ? { note } : {}),
         }),
       });
       afterSaleSaved(res.sale);
@@ -1319,6 +1321,7 @@ export default function RegisterPage() {
     tenderedCents: number,
     checkNumber?: string,
     stripePaymentIntentId?: string,
+    note?: string,
   ) {
     setError(null);
     if (isAdmin && !sellStoreId) {
@@ -1339,6 +1342,7 @@ export default function RegisterPage() {
           tenderedCents,
           ...(paymentMethod === "CHECK" ? { checkNumber } : {}),
           ...(stripePaymentIntentId ? { stripePaymentIntentId } : {}),
+          ...(note ? { note } : {}),
         }),
       });
       afterSaleSaved(res.sale);
@@ -2341,6 +2345,7 @@ function PaymentModal({
     tenderedCents: number,
     checkNumber?: string,
     stripePaymentIntentId?: string,
+    note?: string,
   ) => Promise<void>;
   onDeposit: (
     method: string,
@@ -2348,6 +2353,7 @@ function PaymentModal({
     tenderedCents: number,
     checkNumber?: string,
     stripePaymentIntentId?: string,
+    note?: string,
   ) => Promise<void>;
   onSplit: (
     payments: {
@@ -2396,6 +2402,11 @@ function PaymentModal({
   // for a card run on the old standalone terminal.
   const [cardPaid, setCardPaid] = useState<CardPaid | null>(null);
   const [manualCard, setManualCard] = useState(false);
+  // A charge already collected elsewhere (the website's own checkout) — no
+  // card is run here at all, just the receipt/reference pasted in for the
+  // record. Only offered on the plain Card tab.
+  const [websiteCharged, setWebsiteCharged] = useState(false);
+  const [websiteRef, setWebsiteRef] = useState("");
 
   const collectNow = mode === "DEPOSIT" ? deposit : total;
   const quick = [collectNow, 2000, 5000, 10000, 20000, 50000];
@@ -2412,8 +2423,12 @@ function PaymentModal({
   const useReader = cardTab && readers.length > 0 && !manualCard;
   // A real Stripe charge (reader or typed-card) is pending — don't let the
   // cashier complete the sale until it's actually gone through.
+  const cardAlreadyCharged = tab === "CARD" && websiteCharged;
   const cardVerificationPending =
-    cardTab && !cardPaid && (useReader || (readers.length === 0 && manualCardAvailable()));
+    cardTab &&
+    !cardPaid &&
+    !cardAlreadyCharged &&
+    (useReader || (readers.length === 0 && manualCardAvailable()));
   async function go(intentOverride?: string) {
     // The reader flow passes the intent straight in (state isn't updated yet).
     const intentId = intentOverride ?? cardPaid?.paymentIntentId;
@@ -2443,14 +2458,16 @@ function PaymentModal({
           deposit,
           tab === "CASH" ? tendered : deposit,
           tab === "CHECK" ? checkNo.trim() : undefined,
-          tab === "CARD" ? intentId : undefined,
+          tab === "CARD" && !cardAlreadyCharged ? intentId : undefined,
+          cardAlreadyCharged ? websiteRef.trim() : undefined,
         );
       } else {
         await onConfirm(
           tab,
           tab === "CASH" ? tendered : total,
           tab === "CHECK" ? checkNo.trim() : undefined,
-          tab === "CARD" ? intentId : undefined,
+          tab === "CARD" && !cardAlreadyCharged ? intentId : undefined,
+          cardAlreadyCharged ? websiteRef.trim() : undefined,
         );
       }
     } finally {
@@ -2645,7 +2662,22 @@ function PaymentModal({
           </div>
         ) : tab === "CARD" ? (
           <div>
-            {useReader ? (
+            {websiteCharged ? (
+              <div className="space-y-1">
+                <label className="label">Reference / receipt details</label>
+                <textarea
+                  className="input min-h-[90px]"
+                  value={websiteRef}
+                  onChange={(e) => setWebsiteRef(e.target.value)}
+                  placeholder="Paste the card details from the website's payment receipt (last 4, transaction id, name on card, etc.)"
+                  autoFocus
+                />
+                <p className="text-xs text-zinc-500">
+                  No card is charged here — this just records that the customer already paid by
+                  card on the website.
+                </p>
+              </div>
+            ) : useReader ? (
               <CardReaderPanel
                 amountCents={cardAmount}
                 readers={readers}
@@ -2671,9 +2703,20 @@ function PaymentModal({
                 Run the card on your terminal, then confirm below.
               </p>
             )}
-            {!cardPaid && readers.length > 0 && (
+            {!cardPaid && !websiteCharged && readers.length > 0 && (
               <button type="button" onClick={() => setManualCard((v) => !v)} className="btn-ghost mt-1 w-full text-[11px]">
                 {useReader ? "Card was run on another terminal — record it by hand" : "Use the card reader instead"}
+              </button>
+            )}
+            {!cardPaid && (
+              <button
+                type="button"
+                onClick={() => setWebsiteCharged((v) => !v)}
+                className="btn-ghost mt-1 w-full text-[11px]"
+              >
+                {websiteCharged
+                  ? "Actually, charge a card here instead"
+                  : "Already charged on the website — just record it"}
               </button>
             )}
           </div>
@@ -2699,7 +2742,8 @@ function PaymentModal({
                   (creditRemaining > 0 && restTab === "CASH" && restTendered < creditRemaining))) ||
               (tab !== "CREDIT" && mode === "DEPOSIT" && !depositValid) ||
               (tab === "CASH" && tendered < collectNow) ||
-              (tab === "CHECK" && !checkNo.trim())
+              (tab === "CHECK" && !checkNo.trim()) ||
+              (cardAlreadyCharged && !websiteRef.trim())
             }
             className="btn-primary flex-1"
           >
