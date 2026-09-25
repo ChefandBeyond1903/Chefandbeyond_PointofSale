@@ -299,6 +299,11 @@ export const saleCreateSchema = z.object({
   // computed tax entirely rather than being calculated from a rate.
   manualTaxCents: z.number().int().min(0).optional(),
   taxState: z.string().trim().max(2).optional(),
+  // Website-store only: match this sale's number to the order number the
+  // website itself already assigned, and/or backdate it to when that website
+  // order actually happened (these are often entered days or weeks later).
+  number: z.number().int().positive().optional(),
+  saleDate: z.string().trim().optional(),
   // Omitted when saving an unpaid invoice for a terms customer.
   paymentMethod: paymentMethodSchema.optional(),
   tenderedCents: z.number().int().min(0).default(0),

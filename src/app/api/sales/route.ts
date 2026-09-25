@@ -15,6 +15,7 @@ import { formatMoney } from "@/lib/money";
 import { formatAddress } from "@/lib/address";
 import { ok, toErrorResponse } from "@/lib/api";
 import { verifyPaidIntent } from "@/lib/terminal";
+import { parseEventDate } from "@/lib/date";
 
 export async function GET(req: NextRequest) {
   try {
@@ -102,6 +103,18 @@ export async function POST(req: NextRequest) {
     }
     let taxRateBps = sellStore?.taxRateBps ?? 0;
     const storeId = sellStore?.id ?? null;
+
+    // Matching the website's own order number, and backdating to when that
+    // order actually happened, only makes sense for sales rung against the
+    // website store — everywhere else keeps the normal auto-numbered, "now"
+    // behavior.
+    const isWebsiteStore = sellStore?.name === "Chef and Beyond - Website";
+    if ((body.number !== undefined || body.saleDate) && !isWebsiteStore) {
+      throw new HttpError(
+        400,
+        "A custom invoice number or date can only be used for the Website store.",
+      );
+    }
 
     // KY/TN delivery-based tax jurisdiction — only engages for a store whose
     // rate matches a known profile; every other store keeps its flat rate
@@ -399,8 +412,16 @@ export async function POST(req: NextRequest) {
     if (body.dryRun) return ok({ ok: true, totalCents: total });
 
     const sale = await prisma.$transaction(async (tx) => {
-      const last = await tx.sale.findFirst({ orderBy: { number: "desc" }, select: { number: true } });
-      const number = (last?.number ?? 0) + 1;
+      let number: number;
+      if (body.number !== undefined) {
+        const clash = await tx.sale.findUnique({ where: { number: body.number }, select: { id: true } });
+        if (clash) throw new HttpError(400, `Invoice #${body.number} already exists.`);
+        number = body.number;
+      } else {
+        const last = await tx.sale.findFirst({ orderBy: { number: "desc" }, select: { number: true } });
+        number = (last?.number ?? 0) + 1;
+      }
+      const saleDate = body.saleDate ? parseEventDate(body.saleDate) : new Date();
 
       // Resolve the customer: use the given id, else match by name/email, else
       // auto-create. Blank fields on an existing record get filled in.
@@ -505,8 +526,9 @@ export async function POST(req: NextRequest) {
       const created = await tx.sale.create({
         data: {
           number,
+          createdAt: saleDate,
           status: settledNow ? "COMPLETED" : "INVOICED",
-          paidAt: settledNow ? new Date() : null,
+          paidAt: settledNow ? saleDate : null,
           checkNumber:
             payMethod === "CHECK" ? (paymentList[0]?.checkNumber ?? "") : "",
           subtotalCents: computed.subtotalCents,
@@ -593,7 +615,7 @@ export async function POST(req: NextRequest) {
             amountCents: p.amountCents,
             method: p.method,
             checkNumber: p.checkNumber,
-            paidAt: new Date(),
+            paidAt: saleDate,
             isDeposit: !settledNow,
             createdById: user.id,
             shiftId: p.method === "CREDIT" ? null : (openShift?.id ?? null),

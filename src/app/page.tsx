@@ -168,6 +168,11 @@ export default function RegisterPage() {
   const [manualTaxState, setManualTaxState] = useState("");
   const [manualTaxCents, setManualTaxCents] = useState(0);
 
+  // Website store only: match the sale's number to the website's own order
+  // number, and/or backdate it — these are often entered days/weeks late.
+  const [manualNumber, setManualNumber] = useState("");
+  const [manualSaleDate, setManualSaleDate] = useState("");
+
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [custId, setCustId] = useState<string | null>(null);
   const [custName, setCustName] = useState("");
@@ -670,6 +675,9 @@ export default function RegisterPage() {
   const isAdmin = role === "ADMIN";
   const sellStore = isAdmin ? (stores.find((s) => s.id === sellStoreId) ?? null) : null;
   const sellStoreTaxRateBps = isAdmin ? (sellStore?.taxRateBps ?? null) : storeTaxRateBps;
+  // Matching the website's own order number/date is only offered when
+  // actually selling from that store.
+  const isWebsiteStore = (isAdmin ? sellStore?.name : storeName) === "Chef and Beyond - Website";
 
   // KY/TN delivery-based tax jurisdiction — only engages when the selling
   // store's rate matches a known profile; every other store keeps its flat
@@ -1154,6 +1162,8 @@ export default function RegisterPage() {
       ...(manualTaxOpen
         ? { manualTaxCents: totals.tax, taxState: manualTaxState.trim().toUpperCase() }
         : {}),
+      ...(isWebsiteStore && manualNumber.trim() ? { number: Number(manualNumber.trim()) } : {}),
+      ...(isWebsiteStore && manualSaleDate ? { saleDate: manualSaleDate } : {}),
       ...customerPayload(),
     };
   }
@@ -1164,6 +1174,9 @@ export default function RegisterPage() {
   function deliveryValidationError(): string | null {
     if (manualTaxOpen && manualTaxState.trim().length !== 2) {
       return "Enter the 2-letter state this tax was collected for.";
+    }
+    if (isWebsiteStore && manualNumber.trim() && !/^\d+$/.test(manualNumber.trim())) {
+      return "Invoice # must be a whole number.";
     }
     if (!homeJurisdiction) return null;
     if (deliveryMethod === "DELIVERY") {
@@ -2047,6 +2060,38 @@ export default function RegisterPage() {
                   </p>
                 </div>
               )}
+            </div>
+          )}
+
+          {isWebsiteStore && (
+            <div className="space-y-2 border-t border-zinc-100 px-4 py-3 text-sm">
+              <span className="font-medium text-zinc-700">Match the website order</span>
+              <p className="text-[11px] text-zinc-500">
+                Optional — enter the order number the website already assigned, and/or the date it
+                actually happened (useful when this is entered days or weeks later). Leave either
+                blank to use the normal next number / today.
+              </p>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <label className="label">Invoice #</label>
+                  <input
+                    className="input h-8"
+                    inputMode="numeric"
+                    placeholder="e.g. 30412"
+                    value={manualNumber}
+                    onChange={(e) => setManualNumber(e.target.value.replace(/[^\d]/g, ""))}
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="label">Invoice date</label>
+                  <input
+                    type="date"
+                    className="input h-8"
+                    value={manualSaleDate}
+                    onChange={(e) => setManualSaleDate(e.target.value)}
+                  />
+                </div>
+              </div>
             </div>
           )}
 
