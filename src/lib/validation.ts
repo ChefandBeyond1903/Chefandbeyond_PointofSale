@@ -394,6 +394,9 @@ export const salePaymentSchema = z.object({
   // fully paid — on the date of the payment that clears the balance.
   paidAt: dateInput.optional(),
   tenderedCents: z.number().int().min(0).default(0),
+  // A card charged elsewhere (the website's own checkout) — the pasted
+  // receipt/reference, kept on the payment record instead of running a card here.
+  note: z.string().trim().max(500).optional(),
 });
 
 // Edit an invoice's note, bill-to details and credited salesperson (does not

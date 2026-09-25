@@ -89,6 +89,10 @@ export function InvoiceModal({
   const [payDate, setPayDate] = useState(todayInputValue);
   const [payAmount, setPayAmount] = useState(0);
   const [payBusy, setPayBusy] = useState(false);
+  // A charge already collected on the website — no card is run here, just
+  // the receipt/reference pasted in for the record.
+  const [payWebsiteCharged, setPayWebsiteCharged] = useState(false);
+  const [payWebsiteRef, setPayWebsiteRef] = useState("");
 
   // Editing the invoice's note / bill-to details / salesperson / items (managers).
   const [editOpen, setEditOpen] = useState(false);
@@ -292,6 +296,8 @@ export function InvoiceModal({
 
   async function recordPayment(amountCents?: number, card?: CardPaid) {
     if (!detail) return;
+    const websiteNote =
+      payMethod === "CARD" && payWebsiteCharged && payWebsiteRef.trim() ? payWebsiteRef.trim() : undefined;
     setPayBusy(true);
     setErr(null);
     try {
@@ -303,9 +309,12 @@ export function InvoiceModal({
           ...(card ? { stripePaymentIntentId: card.paymentIntentId } : {}),
           paidAt: payDate,
           ...(amountCents ? { amountCents } : {}),
+          ...(websiteNote ? { note: websiteNote } : {}),
         }),
       });
       setPayAmount(0);
+      setPayWebsiteCharged(false);
+      setPayWebsiteRef("");
       await load();
       onChanged?.();
     } catch (e) {
@@ -768,10 +777,15 @@ export function InvoiceModal({
               const paid = sale.amountPaidCents ?? 0;
               const balance = sale.totalCents - paid;
               const invoiceReaders = readers.filter((r) => !sale.storeId || r.storeId === sale.storeId);
-              const useInvoiceReader = payMethod === "CARD" && invoiceReaders.length > 0 && !manualCard;
+              const payCardAlreadyCharged = payMethod === "CARD" && payWebsiteCharged;
+              const useInvoiceReader =
+                payMethod === "CARD" && !payCardAlreadyCharged && invoiceReaders.length > 0 && !manualCard;
               // No paired reader — fall back to typed-card entry via Stripe.
               const showInvoiceManualCard =
-                payMethod === "CARD" && invoiceReaders.length === 0 && manualCardAvailable();
+                payMethod === "CARD" &&
+                !payCardAlreadyCharged &&
+                invoiceReaders.length === 0 &&
+                manualCardAvailable();
               const payments = sale.payments ?? [];
               if (sale.status === "INVOICED") {
                 return (
@@ -792,7 +806,7 @@ export function InvoiceModal({
                     {payments.length > 0 && (
                       <ul className="mt-2 space-y-0.5 text-xs text-amber-800">
                         {payments.map((p) => (
-                          <li key={p.id} className="flex items-center gap-2">
+                          <li key={p.id} className="flex flex-wrap items-center gap-x-2">
                             <span>
                               {p.isDeposit ? "Deposit" : "Payment"} {formatMoney(p.amountCents)} ·{" "}
                               {p.method === "CHECK" && p.checkNumber
@@ -811,6 +825,11 @@ export function InvoiceModal({
                               >
                                 Remove
                               </button>
+                            )}
+                            {p.note && (
+                              <span className="w-full whitespace-pre-line text-amber-700/80">
+                                {p.note}
+                              </span>
                             )}
                           </li>
                         ))}
@@ -871,13 +890,14 @@ export function InvoiceModal({
                             placeholder={(balance / 100).toFixed(2)}
                           />
                         </div>
-                        {!useInvoiceReader && !showInvoiceManualCard && (
+                        {(!useInvoiceReader && !showInvoiceManualCard) || payCardAlreadyCharged ? (
                           <button
                             onClick={() => recordPayment(payAmount || undefined)}
                             disabled={
                               payBusy ||
                               (payAmount > 0 && payAmount > balance) ||
-                              (payMethod === "CHECK" && !payCheckNo.trim())
+                              (payMethod === "CHECK" && !payCheckNo.trim()) ||
+                              (payCardAlreadyCharged && !payWebsiteRef.trim())
                             }
                             className="btn-primary h-8"
                           >
@@ -887,40 +907,75 @@ export function InvoiceModal({
                                 ? `Record ${formatMoney(payAmount)}`
                                 : "Pay balance"}
                           </button>
-                        )}
-                      </div>
-                    )}
-                    {canManage && payMethod === "CARD" && (invoiceReaders.length > 0 || showInvoiceManualCard) && (
-                      <div className="mt-2 max-w-md">
-                        {useInvoiceReader ? (
-                          <CardReaderPanel
-                            amountCents={payAmount > 0 ? Math.min(payAmount, balance) : balance}
-                            readers={invoiceReaders}
-                            testMode={readerTestMode}
-                            description={`Invoice #${sale.number} — ${sale.customerCompanySnapshot || sale.customerNameSnapshot || "customer"}`}
-                            paid={null}
-                            onPaid={(card) => recordPayment(payAmount > 0 ? Math.min(payAmount, balance) : undefined, card)}
-                          />
-                        ) : showInvoiceManualCard ? (
-                          <ManualCardPanel
-                            amountCents={payAmount > 0 ? Math.min(payAmount, balance) : balance}
-                            paid={null}
-                            onPaid={(card) => recordPayment(payAmount > 0 ? Math.min(payAmount, balance) : undefined, card)}
-                          />
                         ) : null}
-                        {invoiceReaders.length > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => setManualCard((v) => !v)}
-                            className="btn-ghost mt-1 px-1 text-[11px]"
-                          >
-                            {useInvoiceReader
-                              ? "Card was run on another terminal — record it by hand"
-                              : "Use the card reader instead"}
-                          </button>
-                        )}
                       </div>
                     )}
+                    {canManage && payMethod === "CARD" && payCardAlreadyCharged && (
+                      <div className="mt-2 max-w-md space-y-1">
+                        <label className="label">Reference / receipt details</label>
+                        <textarea
+                          className="input min-h-[80px]"
+                          value={payWebsiteRef}
+                          onChange={(e) => setPayWebsiteRef(e.target.value)}
+                          placeholder="Paste the card details from the website's payment receipt (last 4, transaction id, name on card, etc.)"
+                          autoFocus
+                        />
+                        <p className="text-[11px] text-amber-700">
+                          No card is charged here — this just records that the customer already
+                          paid by card on the website.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setPayWebsiteCharged(false)}
+                          className="btn-ghost px-1 text-[11px]"
+                        >
+                          Actually, charge a card here instead
+                        </button>
+                      </div>
+                    )}
+                    {canManage &&
+                      payMethod === "CARD" &&
+                      !payCardAlreadyCharged &&
+                      (invoiceReaders.length > 0 || showInvoiceManualCard) && (
+                        <div className="mt-2 max-w-md">
+                          {useInvoiceReader ? (
+                            <CardReaderPanel
+                              amountCents={payAmount > 0 ? Math.min(payAmount, balance) : balance}
+                              readers={invoiceReaders}
+                              testMode={readerTestMode}
+                              description={`Invoice #${sale.number} — ${sale.customerCompanySnapshot || sale.customerNameSnapshot || "customer"}`}
+                              paid={null}
+                              onPaid={(card) => recordPayment(payAmount > 0 ? Math.min(payAmount, balance) : undefined, card)}
+                            />
+                          ) : showInvoiceManualCard ? (
+                            <ManualCardPanel
+                              amountCents={payAmount > 0 ? Math.min(payAmount, balance) : balance}
+                              paid={null}
+                              onPaid={(card) => recordPayment(payAmount > 0 ? Math.min(payAmount, balance) : undefined, card)}
+                            />
+                          ) : null}
+                          <div className="mt-1 flex flex-wrap gap-2">
+                            {invoiceReaders.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setManualCard((v) => !v)}
+                                className="btn-ghost px-1 text-[11px]"
+                              >
+                                {useInvoiceReader
+                                  ? "Card was run on another terminal — record it by hand"
+                                  : "Use the card reader instead"}
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setPayWebsiteCharged(true)}
+                              className="btn-ghost px-1 text-[11px]"
+                            >
+                              Already charged on the website — just record it
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     <p className="mt-1 text-[11px] text-amber-700">
                       Deposits are held; the sale counts as revenue on the day the balance is
                       cleared. Leave Amount blank to pay the whole balance.

@@ -395,6 +395,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           stripePaymentIntentId,
           cardBrand: card.cardBrand,
           cardLast4: card.cardLast4,
+          note: body.note ?? "",
         },
       });
       if (body.paymentMethod === "CREDIT" && sale.customerId) {
