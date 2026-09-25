@@ -293,6 +293,12 @@ export const saleCreateSchema = z.object({
   // Staff-initiated override of the auto-selected tax jurisdiction. Present
   // only when the operator explicitly changed it; logged with a reason.
   taxOverride: taxOverrideSchema.optional(),
+  // A sale already taxed for a state this store has no rate profile for (e.g.
+  // a website order taxed by the site's own checkout) — the cashier types the
+  // exact amount collected and the state it belongs to; it replaces the
+  // computed tax entirely rather than being calculated from a rate.
+  manualTaxCents: z.number().int().min(0).optional(),
+  taxState: z.string().trim().max(2).optional(),
   // Omitted when saving an unpaid invoice for a terms customer.
   paymentMethod: paymentMethodSchema.optional(),
   tenderedCents: z.number().int().min(0).default(0),

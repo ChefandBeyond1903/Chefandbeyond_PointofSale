@@ -161,6 +161,13 @@ export default function RegisterPage() {
   const [taxOverrideReason, setTaxOverrideReason] = useState("");
   const [taxOverrideOpen, setTaxOverrideOpen] = useState(false);
 
+  // A sale already taxed for a state we have no rate profile for (a website
+  // order, taxed by the site's own checkout) — the cashier types the exact
+  // amount collected instead of it being calculated from a rate.
+  const [manualTaxOpen, setManualTaxOpen] = useState(false);
+  const [manualTaxState, setManualTaxState] = useState("");
+  const [manualTaxCents, setManualTaxCents] = useState(0);
+
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [custId, setCustId] = useState<string | null>(null);
   const [custName, setCustName] = useState("");
@@ -751,7 +758,9 @@ export default function RegisterPage() {
     }[] = [];
     cart.forEach((line, idx) => {
       const net = perLineAfter[idx];
-      tax += taxOn(net, rateBps);
+      // A manually-entered tax (website order taxed elsewhere) replaces the
+      // rate-based calculation entirely.
+      tax += manualTaxOpen ? 0 : taxOn(net, rateBps);
 
       const umrp = line.product.umrpCents ?? 0;
       if (umrp > 0 && line.quantity > 0 && net < umrp * line.quantity) {
@@ -770,6 +779,7 @@ export default function RegisterPage() {
       .filter((l) => (l.product.costCents ?? 0) <= 0)
       .map((l) => ({ productId: l.product.id, name: l.product.name }));
 
+    if (manualTaxOpen) tax = manualTaxCents;
     const discount = lineAdjust;
     const shipping = Math.max(0, shippingCents);
     const total = subtotal - discount + tax + shipping;
@@ -790,7 +800,7 @@ export default function RegisterPage() {
       savedCents,
       savedPct,
     };
-  }, [cart, effectiveTaxRateBps, shippingCents]);
+  }, [cart, effectiveTaxRateBps, shippingCents, manualTaxOpen, manualTaxCents]);
 
   function addToCart(product: Product) {
     setError(null);
@@ -1141,6 +1151,9 @@ export default function RegisterPage() {
               : {}),
           }
         : {}),
+      ...(manualTaxOpen
+        ? { manualTaxCents: totals.tax, taxState: manualTaxState.trim().toUpperCase() }
+        : {}),
       ...customerPayload(),
     };
   }
@@ -1149,6 +1162,9 @@ export default function RegisterPage() {
   // full address, a Tennessee-jurisdiction delivery needs a county, and a
   // manual tax override needs a reason (it's logged with it).
   function deliveryValidationError(): string | null {
+    if (manualTaxOpen && manualTaxState.trim().length !== 2) {
+      return "Enter the 2-letter state this tax was collected for.";
+    }
     if (!homeJurisdiction) return null;
     if (deliveryMethod === "DELIVERY") {
       if (!deliveryStreet.trim() || !deliveryCity.trim() || !deliveryZip.trim()) {
@@ -2033,6 +2049,46 @@ export default function RegisterPage() {
               )}
             </div>
           )}
+
+          <div className="space-y-2 border-t border-zinc-100 px-4 py-3 text-sm">
+            <button
+              type="button"
+              onClick={() => {
+                if (!manualTaxOpen) setManualTaxState(resolveState(custState, custStateOther));
+                setManualTaxOpen((v) => !v);
+              }}
+              className="flex w-full items-center justify-between text-left"
+            >
+              <span className="font-medium text-zinc-700">Tax collected for another state</span>
+              <span className="text-xs text-indigo-600 underline">
+                {manualTaxOpen ? "Cancel" : "Enter manually"}
+              </span>
+            </button>
+            {manualTaxOpen && (
+              <div className="space-y-1.5 rounded-md bg-amber-50 p-2">
+                <p className="text-[11px] text-zinc-500">
+                  For a website order already taxed elsewhere — enter the state and the exact tax
+                  collected; it replaces the calculated tax on this sale and is broken out by state
+                  under Reports → Tax by state.
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    className="input h-8 w-16 text-center text-xs uppercase"
+                    maxLength={2}
+                    placeholder="NY"
+                    value={manualTaxState}
+                    onChange={(e) => setManualTaxState(e.target.value.toUpperCase())}
+                  />
+                  <MoneyInput
+                    cents={manualTaxCents}
+                    onCentsChange={setManualTaxCents}
+                    className="input h-8 flex-1 text-right"
+                    placeholder="Tax collected"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
 
           <div className="space-y-2 border-t border-zinc-100 px-4 py-3 text-sm">
             <Row label="Subtotal (list)" value={formatMoney(totals.subtotal)} />

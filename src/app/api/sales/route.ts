@@ -123,6 +123,18 @@ export async function POST(req: NextRequest) {
     }
     if (taxJurisdiction) taxRateBps = jurisdictionRateBps(taxJurisdiction);
 
+    // A manual tax entry (website order already taxed for a state we have no
+    // rate profile for) overrides the rate entirely — compute the sale at 0%
+    // below, then substitute the typed amount and mark the sale with that state.
+    const manualTaxRequested = body.manualTaxCents !== undefined;
+    const manualTaxState = manualTaxRequested ? body.taxState?.trim().toUpperCase() : undefined;
+    if (manualTaxRequested) {
+      if (!manualTaxState || manualTaxState.length !== 2) {
+        throw new HttpError(400, "Enter the 2-letter state this tax was collected for.");
+      }
+      taxRateBps = 0;
+    }
+
     if (homeJurisdiction && body.deliveryMethod === "DELIVERY") {
       if (!body.deliveryStreet || !body.deliveryCity || !body.deliveryState || !body.deliveryZip) {
         throw new HttpError(400, "Enter the full delivery address.");
@@ -243,6 +255,14 @@ export async function POST(req: NextRequest) {
 
     const computed = computeSale(priced, body.orderDiscountCents, taxRateBps, body.shippingCents);
 
+    // Substitute the manually-typed tax now that the rest of the math (at 0%
+    // tax) is settled — the total is recomputed off that real figure.
+    const finalTaxCents = manualTaxRequested ? body.manualTaxCents! : computed.taxCents;
+    const finalTotalCents = manualTaxRequested
+      ? computed.subtotalCents - computed.discountCents + finalTaxCents + computed.shippingCents
+      : computed.totalCents;
+    const finalTaxJurisdiction: string = manualTaxRequested ? manualTaxState! : (taxJurisdiction ?? "");
+
     // UMRP floor: after every discount, no line may fall below the product's
     // minimum resale price — unless an admin is knowingly overriding it (the
     // register warns them but lets them proceed; everyone else is hard-stopped).
@@ -267,7 +287,7 @@ export async function POST(req: NextRequest) {
       products.map((p) => [p.id, { sku: p.sku, vendor: p.vendor, costCents: p.costCents }]),
     );
 
-    const total = computed.totalCents;
+    const total = finalTotalCents;
     const isTermsInvoice = customerTerms !== "";
 
     // Normalise every way the client can send money into one list of payments.
@@ -492,16 +512,16 @@ export async function POST(req: NextRequest) {
           subtotalCents: computed.subtotalCents,
           listSubtotalCents,
           discountCents: computed.discountCents,
-          taxCents: computed.taxCents,
+          taxCents: finalTaxCents,
           taxRateBps: computed.taxRateBps,
           shippingCents: computed.shippingCents,
-          totalCents: computed.totalCents,
+          totalCents: finalTotalCents,
           deliveryMethod: body.deliveryMethod,
           deliveryStreet: body.deliveryMethod === "DELIVERY" ? body.deliveryStreet : "",
           deliveryCity: body.deliveryMethod === "DELIVERY" ? body.deliveryCity : "",
           deliveryState: body.deliveryMethod === "DELIVERY" ? body.deliveryState : "",
           deliveryZip: body.deliveryMethod === "DELIVERY" ? body.deliveryZip : "",
-          taxJurisdiction: taxJurisdiction ?? "",
+          taxJurisdiction: finalTaxJurisdiction,
           taxOverridden,
           paymentMethod: payMethod,
           tenderedCents,

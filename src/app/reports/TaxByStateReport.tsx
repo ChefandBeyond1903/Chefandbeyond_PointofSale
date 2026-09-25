@@ -160,13 +160,58 @@ export function TaxByStateReport({ isAdmin }: { isAdmin: boolean }) {
             </div>
           </div>
 
+          {data.otherStates.length > 0 && (
+            <div className="card overflow-hidden">
+              <h2 className="border-b border-zinc-100 px-4 py-3 font-semibold">
+                Other states (manually taxed)
+              </h2>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[560px] text-sm">
+                  <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
+                    <tr>
+                      <th className="px-4 py-2">State</th>
+                      <th className="px-4 py-2 text-right">Gross sales</th>
+                      <th className="px-4 py-2 text-right">Taxable sales</th>
+                      <th className="px-4 py-2 text-right">Tax collected</th>
+                      <th className="px-4 py-2 text-right">Transactions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100">
+                    {data.otherStates.map((s) => (
+                      <tr key={s.state}>
+                        <td className="px-4 py-2 font-medium">{s.state}</td>
+                        <td className="px-4 py-2 text-right">{formatMoney(s.grossSalesCents)}</td>
+                        <td className="px-4 py-2 text-right">{formatMoney(s.taxableSalesCents)}</td>
+                        <td className="px-4 py-2 text-right">{formatMoney(s.taxCollectedCents)}</td>
+                        <td className="px-4 py-2 text-right">{s.saleCount}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           {data.unassigned.saleCount > 0 && (
             <p className="rounded bg-zinc-50 px-3 py-2 text-xs text-zinc-500">
               {data.unassigned.saleCount} sale(s) totaling {formatMoney(data.unassigned.grossSalesCents)}{" "}
-              in this period carry no KY/TN jurisdiction tag (rung at a store outside that scheme, or
-              before this feature existed) and aren&apos;t counted above.
+              in this period carry no jurisdiction tag (rung at a store outside the KY/TN scheme with
+              no manual tax entered, or before this feature existed) and are included only in the
+              total below.
             </p>
           )}
+
+          <div className="card overflow-hidden border-2 border-zinc-900">
+            <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-3">
+              <h2 className="font-semibold">Total — every state combined</h2>
+            </div>
+            <dl className="grid grid-cols-2 gap-3 p-4 text-sm md:grid-cols-4">
+              <Stat label="Gross sales" value={formatMoney(data.total.grossSalesCents)} />
+              <Stat label="Taxable sales" value={formatMoney(data.total.taxableSalesCents)} />
+              <Stat label="Tax collected" value={formatMoney(data.total.taxCollectedCents)} />
+              <Stat label="Transactions" value={String(data.total.saleCount)} />
+            </dl>
+          </div>
 
           <div className="card overflow-hidden">
             <h2 className="border-b border-zinc-100 px-4 py-3 font-semibold">

@@ -61,18 +61,40 @@ export async function GET(req: NextRequest) {
     function blank() {
       return { grossSalesCents: 0, taxableSalesCents: 0, taxCollectedCents: 0, saleCount: 0 };
     }
-    const ky = blank();
-    const tn = blank();
-    const unassigned = blank();
-
+    // Every distinct jurisdiction tag seen — not just KY/TN — so a website
+    // order manually taxed for, say, New York shows up as its own line.
+    const buckets = new Map<string, ReturnType<typeof blank>>();
     for (const s of sales) {
       const grossCents = s.subtotalCents - s.discountCents + s.shippingCents;
-      const bucket = s.taxJurisdiction === "KY" ? ky : s.taxJurisdiction === "TN" ? tn : unassigned;
+      const key = s.taxJurisdiction || "UNASSIGNED";
+      const bucket = buckets.get(key) ?? blank();
       bucket.grossSalesCents += grossCents;
       bucket.taxCollectedCents += s.taxCents;
       bucket.saleCount += 1;
       if (!s.customerTaxExemptSnapshot) bucket.taxableSalesCents += grossCents;
+      buckets.set(key, bucket);
     }
+
+    const ky = buckets.get("KY") ?? blank();
+    const tn = buckets.get("TN") ?? blank();
+    const unassigned = buckets.get("UNASSIGNED") ?? blank();
+    // Any other state tagged manually (a website order taxed elsewhere),
+    // listed separately and sorted alphabetically.
+    const otherStates = [...buckets.entries()]
+      .filter(([key]) => key !== "KY" && key !== "TN" && key !== "UNASSIGNED")
+      .map(([state, v]) => ({ state, ...v }))
+      .sort((a, b) => a.state.localeCompare(b.state));
+
+    const allBuckets = [ky, tn, unassigned, ...otherStates];
+    const total = allBuckets.reduce(
+      (t, b) => ({
+        grossSalesCents: t.grossSalesCents + b.grossSalesCents,
+        taxableSalesCents: t.taxableSalesCents + b.taxableSalesCents,
+        taxCollectedCents: t.taxCollectedCents + b.taxCollectedCents,
+        saleCount: t.saleCount + b.saleCount,
+      }),
+      blank(),
+    );
 
     const storeName = storeId ? (stores.find((s) => s.id === storeId)?.name ?? "") : "";
 
@@ -87,6 +109,8 @@ export async function GET(req: NextRequest) {
       ky,
       tn,
       unassigned,
+      otherStates,
+      total,
       overrides: overrideLogs.map((l) => ({
         id: l.id,
         saleId: l.saleId,

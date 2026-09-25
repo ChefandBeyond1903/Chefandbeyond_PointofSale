@@ -494,6 +494,11 @@ export interface TaxByStateReport {
   ky: TaxByStateJurisdiction;
   tn: TaxByStateJurisdiction;
   unassigned: TaxByStateJurisdiction;
+  // Every other state a sale was manually tagged with (a website order taxed
+  // elsewhere), one entry per state, sorted alphabetically.
+  otherStates: (TaxByStateJurisdiction & { state: string })[];
+  // KY + TN + every other state + unassigned, combined.
+  total: TaxByStateJurisdiction;
   overrides: TaxOverrideLog[];
 }
 
