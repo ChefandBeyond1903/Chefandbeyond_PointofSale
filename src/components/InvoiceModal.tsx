@@ -368,7 +368,7 @@ export function InvoiceModal({
       { productId: string; name: string; sku: string; available: number; unitCostCents: number }
     >();
     for (const it of detail?.sale.items ?? []) {
-      if ((it.vendorSnapshot || "") !== vendor) continue;
+      if ((it.vendorSnapshot || it.product?.vendor || "") !== vendor) continue;
       const g = byProduct.get(it.productId) ?? {
         productId: it.productId,
         name: it.nameSnapshot,
@@ -490,11 +490,15 @@ export function InvoiceModal({
             <div className="mb-4 flex items-start justify-between">
               <div>
                 <h2 className="text-lg font-semibold">
-                  Invoice #{sale.number}
-                  {sale.websiteOrderNumber && (
-                    <span className="ml-2 text-sm font-normal text-zinc-500">
-                      · Website order {sale.websiteOrderNumber}
-                    </span>
+                  {sale.websiteOrderNumber ? (
+                    <>
+                      Invoice {sale.websiteOrderNumber}
+                      <span className="ml-2 text-sm font-normal text-zinc-400">
+                        (internal #{sale.number})
+                      </span>
+                    </>
+                  ) : (
+                    `Invoice #${sale.number}`
                   )}
                 </h2>
                 <p className="text-sm text-zinc-500">
@@ -576,8 +580,8 @@ export function InvoiceModal({
                     onClick={async () => {
                       if (
                         !confirm(
-                          `Delete invoice #${sale.number}? This can't be undone — items go back ` +
-                            `into stock and any store credit used is returned.`,
+                          `Delete invoice ${sale.websiteOrderNumber || `#${sale.number}`}? This can't ` +
+                            `be undone — items go back into stock and any store credit used is returned.`,
                         )
                       )
                         return;
@@ -950,7 +954,7 @@ export function InvoiceModal({
                               amountCents={payAmount > 0 ? Math.min(payAmount, balance) : balance}
                               readers={invoiceReaders}
                               testMode={readerTestMode}
-                              description={`Invoice #${sale.number} — ${sale.customerCompanySnapshot || sale.customerNameSnapshot || "customer"}`}
+                              description={`Invoice ${sale.websiteOrderNumber || `#${sale.number}`} — ${sale.customerCompanySnapshot || sale.customerNameSnapshot || "customer"}`}
                               paid={null}
                               onPaid={(card) => recordPayment(payAmount > 0 ? Math.min(payAmount, balance) : undefined, card)}
                             />
@@ -1227,7 +1231,9 @@ export function InvoiceModal({
                         <span className="block text-xs text-zinc-500">S/N: {it.serialNumber}</span>
                       ) : null}
                     </td>
-                    <td className="py-1.5 text-zinc-500">{it.vendorSnapshot || "—"}</td>
+                    <td className="py-1.5 text-zinc-500">
+                      {it.vendorSnapshot || it.product?.vendor || "—"}
+                    </td>
                     <td className="py-1.5 text-right">{formatMoney(it.unitPriceCents)}</td>
                     <td className="py-1.5 text-right">{formatMoney(it.lineTotalCents)}</td>
                   </tr>

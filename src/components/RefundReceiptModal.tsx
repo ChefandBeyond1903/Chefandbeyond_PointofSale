@@ -104,7 +104,9 @@ export function RefundReceiptModal({
               )}
 
               <p className="mt-2 text-center text-sm font-bold tracking-wide">REFUND</p>
-              <p className="text-center text-zinc-500">against Sale #{sale.number}</p>
+              <p className="text-center text-zinc-500">
+                against Sale {sale.websiteOrderNumber || `#${sale.number}`}
+              </p>
               <p className="text-center text-zinc-500">{new Date(refund.refundedAt).toLocaleString()}</p>
               {refund.createdBy?.name ? (
                 <p className="text-center text-zinc-500">Processed by: {refund.createdBy.name}</p>

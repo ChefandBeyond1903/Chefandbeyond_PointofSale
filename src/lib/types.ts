@@ -226,6 +226,10 @@ export interface SaleItem {
   discountCents: number;
   taxRateBps: number;
   lineTotalCents: number;
+  // Only present on the single-invoice GET — the product's current vendor,
+  // used as a fallback when this item's snapshot predates the product having
+  // one (so setting a vendor after the sale still unblocks raising a PO).
+  product?: { vendor: string };
 }
 
 export type PurchaseOrderStatus =

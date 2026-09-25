@@ -149,7 +149,9 @@ export function ReceiptBody({ sale, company }: { sale: Sale; company: Company | 
           {sale.storePhoneSnapshot || company?.phone}
         </p>
       )}
-      <p className="text-center text-zinc-500">Sale #{sale.number}</p>
+      <p className="text-center text-zinc-500">
+        Sale {sale.websiteOrderNumber || `#${sale.number}`}
+      </p>
       <p className="text-center text-zinc-500">{new Date(sale.createdAt).toLocaleString()}</p>
       {sale.salesperson?.name ? (
         <p className="text-center text-zinc-500">Served by: {sale.salesperson.name}</p>

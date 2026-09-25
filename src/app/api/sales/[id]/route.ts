@@ -18,7 +18,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     const sale = await prisma.sale.findUnique({
       where: { id },
       include: {
-        items: true,
+        items: { include: { product: { select: { vendor: true } } } },
         payments: {
           orderBy: { paidAt: "asc" },
           include: { createdBy: { select: { id: true, name: true } } },
@@ -43,10 +43,13 @@ export async function GET(_req: NextRequest, { params }: Params) {
       throw new HttpError(404, "Sale not found");
     }
 
-    // Group line items by vendor so the UI can offer one PO per vendor.
+    // Group line items by vendor so the UI can offer one PO per vendor. A
+    // sale rung before the product had a vendor set carries an empty
+    // snapshot forever — fall back to the product's current vendor so
+    // setting one after the fact actually unblocks raising a PO.
     const vendorMap = new Map<string, { vendor: string; quantity: number; costCents: number }>();
     for (const it of sale.items) {
-      const v = it.vendorSnapshot || "";
+      const v = it.vendorSnapshot || it.product.vendor || "";
       const g = vendorMap.get(v) ?? { vendor: v, quantity: 0, costCents: 0 };
       g.quantity += it.quantity;
       g.costCents += it.unitCostCents * it.quantity;

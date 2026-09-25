@@ -261,7 +261,9 @@ export function InvoicesView({
                         aria-label={`Select invoice #${s.number}`}
                       />
                     </td>
-                    <td className="px-4 py-2.5 font-medium">#{s.number}</td>
+                    <td className="px-4 py-2.5 font-medium">
+                      {s.websiteOrderNumber || `#${s.number}`}
+                    </td>
                     <td className="px-4 py-2.5 text-zinc-500">
                       {new Date(s.createdAt).toLocaleDateString([], {
                         month: "short",
