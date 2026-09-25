@@ -17,7 +17,10 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     const sale = await prisma.sale.findUnique({
       where: { id },
-      include: { items: true, purchaseOrders: { select: { vendor: true } } },
+      include: {
+        items: { include: { product: { select: { vendor: true } } } },
+        purchaseOrders: { select: { vendor: true } },
+      },
     });
     if (!sale) throw new HttpError(404, "Invoice not found");
 
@@ -28,14 +31,19 @@ export async function POST(req: NextRequest, { params }: Params) {
       throw new HttpError(409, `A purchase order for "${body.vendor}" already exists on this invoice`);
     }
 
-    const vendorItems = sale.items.filter((it) => (it.vendorSnapshot || "") === body.vendor);
+    // A sale rung before the product had a vendor set carries an empty
+    // snapshot forever — fall back to the product's current vendor so
+    // setting one after the fact actually unblocks raising a PO.
+    const itemVendor = (it: (typeof sale.items)[number]) => it.vendorSnapshot || it.product.vendor || "";
+
+    const vendorItems = sale.items.filter((it) => itemVendor(it) === body.vendor);
     if (vendorItems.length === 0) {
       throw new HttpError(400, `No items from "${body.vendor}" on this invoice`);
     }
 
     // Letter suffix: this vendor's position among all distinct vendors on the sale, A-Z.
     const distinctVendors = [
-      ...new Set(sale.items.map((it) => it.vendorSnapshot || "").filter(Boolean)),
+      ...new Set(sale.items.map(itemVendor).filter(Boolean)),
     ].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
     const index = distinctVendors.indexOf(body.vendor);
     if (index < 0) throw new HttpError(400, `"${body.vendor}" is not a vendor on this invoice`);
