@@ -6,7 +6,9 @@ import { ok, toErrorResponse } from "@/lib/api";
 
 // What we've actually paid each vendor, grouped by vendor — PAID bills only
 // (an open/unpaid bill isn't money out the door yet), and only real vendor
-// bills, never operating expenses. Money-sensitive: manager/admin only.
+// bills, never operating expenses. Grouped into the period by due date (or
+// paid date when there's no due date), not by whenever it actually got paid.
+// Money-sensitive: manager/admin only.
 export async function GET(req: NextRequest) {
   try {
     const user = await requireScopedRole("MANAGER", "ADMIN");
@@ -20,21 +22,28 @@ export async function GET(req: NextRequest) {
     const storeId = user.role === "ADMIN" ? requestedStore : scoped;
     const noStoreAssigned = scoped === "__none__";
 
-    // A bill counts for the period it was paid in, not raised — mirrors how a
-    // sale counts on paidAt elsewhere in Reports.
-    const where: Prisma.BillWhereInput = {
-      status: "PAID",
-      paidAt: { gte: from, lte: to },
-    };
+    // A bill counts for the period it was DUE, not when it happened to get
+    // paid — a bill due in August that isn't paid until September still
+    // belongs to August's report. Falls back to the paid date for a bill
+    // with no due date at all (e.g. "due on receipt").
+    const where: Prisma.BillWhereInput = { status: "PAID" };
     if (storeId) where.storeId = storeId;
 
-    const [bills, stores, vendors] = await Promise.all([
+    const [allPaidBills, stores, vendors] = await Promise.all([
       noStoreAssigned
         ? Promise.resolve([])
-        : prisma.bill.findMany({ where, select: { vendor: true, subtotalCents: true } }),
+        : prisma.bill.findMany({
+            where,
+            select: { vendor: true, subtotalCents: true, dueDate: true, paidAt: true },
+          }),
       prisma.store.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
       prisma.vendor.findMany({ select: { name: true, rebateBps: true } }),
     ]);
+
+    const bills = allPaidBills.filter((b) => {
+      const effective = b.dueDate ?? b.paidAt;
+      return !!effective && effective >= from && effective <= to;
+    });
 
     const rebateByVendor = new Map(vendors.map((v) => [v.name.trim().toLowerCase(), v.rebateBps]));
 
