@@ -279,6 +279,7 @@ export interface Bill {
   memo: string;
   status: BillStatus;
   paidAt: string | null;
+  paymentMethod: string;
   subtotalCents: number;
   storeId: string | null;
   poId: string | null;
@@ -610,6 +611,8 @@ export interface AdminOverview {
     /** Margin taken back out by refunds — deducted from gross profit. */
     refundedProfitCents: number;
     netProfitCents: number;
+    /** This month's operating expenses grouped by how they were paid. */
+    expensesByPaymentMethod: { method: string; amountCents: number; count: number }[];
   };
   payables: {
     openBills: { count: number; amountCents: number };

@@ -7,8 +7,6 @@ import { InvoiceModal } from "@/components/InvoiceModal";
 import { ReceiptModal } from "@/components/ReceiptModal";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { PnlPrintModal } from "@/components/PnlPrintModal";
-import { usePaymentMethods } from "@/components/PaymentMethodPicker";
-import { methodLabel } from "@/lib/payments";
 import { SalesByVendorReport } from "./SalesByVendorReport";
 import { PurchasesByVendorReport } from "./PurchasesByVendorReport";
 import { TaxByStateReport } from "./TaxByStateReport";
@@ -562,7 +560,6 @@ function ProfitLoss({
 }) {
   const t = data.totals;
   const grossSales = t.subtotalCents - t.discountCents;
-  const [customPaymentMethods] = usePaymentMethods();
   return (
     <div className="card p-4">
       <div className="mb-2 flex items-center justify-between">
@@ -630,23 +627,6 @@ function ProfitLoss({
           border
           negative
         />
-
-        <div className="mt-3 pt-1 text-xs font-medium uppercase tracking-wide text-zinc-400">
-          Operating expenses by payment method
-        </div>
-        {data.expensesByPaymentMethod.length === 0 ? (
-          <PLRow label="None recorded" value={formatMoney(0)} indent />
-        ) : (
-          data.expensesByPaymentMethod.map((e) => (
-            <PLRow
-              key={e.method}
-              label={`${methodLabel(e.method, customPaymentMethods)} (${e.count})`}
-              value={`(${formatMoney(e.amountCents)})`}
-              indent
-              negative
-            />
-          ))
-        )}
 
         <div className="mt-3 pt-1 text-xs font-medium uppercase tracking-wide text-zinc-400">
           Card processing

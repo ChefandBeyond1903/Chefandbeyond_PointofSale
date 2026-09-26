@@ -51,6 +51,7 @@ export async function GET() {
       recentSales,
       recentExpenses,
       monthRefunds,
+      monthExpensesByMethod,
     ] = await Promise.all([
       prisma.sale.findMany({
         // A sale counts for the day it was paid, not rung.
@@ -165,6 +166,12 @@ export async function GET() {
           },
         },
       }),
+      prisma.expense.groupBy({
+        by: ["paymentMethod"],
+        where: { expenseDate: { gte: startMonth, lte: now } },
+        _sum: { amountCents: true },
+        _count: { _all: true },
+      }),
     ]);
 
     // Roll the month's sales into today / week / month windows.
@@ -263,6 +270,13 @@ export async function GET() {
           monthRefundedProfitCents -
           monthExpensesCents -
           monthCardFeeCents,
+        expensesByPaymentMethod: monthExpensesByMethod
+          .map((r) => ({
+            method: r.paymentMethod,
+            amountCents: r._sum.amountCents ?? 0,
+            count: r._count._all,
+          }))
+          .sort((a, b) => b.amountCents - a.amountCents),
       },
       payables: {
         openBills: {

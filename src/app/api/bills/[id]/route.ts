@@ -61,6 +61,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       data.status = body.status;
       data.paidAt = body.status === "PAID" ? new Date() : null;
     }
+    if (body.paymentMethod !== undefined) data.paymentMethod = body.paymentMethod;
 
     const bill = await prisma.$transaction(async (tx) => {
       const current = await tx.bill.findUnique({

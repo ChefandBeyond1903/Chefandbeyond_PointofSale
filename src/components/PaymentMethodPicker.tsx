@@ -29,6 +29,7 @@ export function PaymentMethodSelect({
   onAdded,
   excludeCodes = ["CREDIT"],
   className = "input",
+  disabled = false,
 }: {
   value: string;
   onChange: (code: string) => void;
@@ -38,6 +39,7 @@ export function PaymentMethodSelect({
   // by default; pass [] to show every built-in.
   excludeCodes?: string[];
   className?: string;
+  disabled?: boolean;
 }) {
   const [adding, setAdding] = useState(false);
   const [label, setLabel] = useState("");
@@ -113,6 +115,7 @@ export function PaymentMethodSelect({
     <select
       className={className}
       value={value}
+      disabled={disabled}
       onChange={(e) => {
         if (e.target.value === "__add__") setAdding(true);
         else onChange(e.target.value);

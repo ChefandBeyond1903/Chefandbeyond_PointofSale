@@ -649,6 +649,9 @@ model Bill {
   memo          String    @default("")
   status        String    @default("OPEN")
   paidAt        DateTime?
+  // How this bill was paid — "CASH" | "CARD" | "CHECK", or a custom method's
+  // code from PaymentMethod (e.g. "ZELLE"). Set when marked paid.
+  paymentMethod String    @default("CASH")
   subtotalCents Int       @default(0)
   // Whether creating this bill also received its items (bumped
   // PurchaseOrderItem.receivedQuantity / store inventory). A "Copy to bill"

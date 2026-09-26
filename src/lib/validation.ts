@@ -189,6 +189,7 @@ export const billUpdateSchema = z.object({
   terms: z.string().trim().max(40).optional(),
   memo: z.string().trim().max(2000).optional(),
   status: z.enum(["OPEN", "PAID"]).optional(),
+  paymentMethod: paymentMethodSchema.optional(),
   // Correct a mis-entered line: new quantity / unit cost per existing bill item.
   // A quantity change also adjusts stock and the linked PO's received amount.
   lines: z

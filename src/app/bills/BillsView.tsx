@@ -10,6 +10,7 @@ import { BILL_TERMS } from "@/lib/terms";
 import { usePaged } from "@/lib/usePaged";
 import { Pager } from "@/components/Pager";
 import { DateRangePicker } from "@/components/DateRangePicker";
+import { PaymentMethodSelect, usePaymentMethods } from "@/components/PaymentMethodPicker";
 import type { DateRange } from "@/lib/dateRange";
 import { ExpensesPanel } from "./ExpensesPanel";
 import type { Bill, Store } from "@/lib/types";
@@ -301,7 +302,9 @@ function BillDetailModal({
     dueDate: "",
     billDate: "",
     memo: "",
+    paymentMethod: "CASH",
   });
+  const [paymentMethods, setPaymentMethods] = usePaymentMethods();
   // id -> { qty text, unit cost cents } for the line-item corrections.
   const [lineEdits, setLineEdits] = useState<
     Record<string, { quantity: string; unitCostCents: number }>
@@ -318,6 +321,7 @@ function BillDetailModal({
         dueDate: res.bill.dueDate ? res.bill.dueDate.slice(0, 10) : "",
         billDate: res.bill.billDate ? res.bill.billDate.slice(0, 10) : "",
         memo: res.bill.memo,
+        paymentMethod: res.bill.paymentMethod || "CASH",
       });
       setLineEdits(
         Object.fromEntries(
@@ -445,6 +449,17 @@ function BillDetailModal({
                   onChange={(e) => setEdit({ ...edit, dueDate: e.target.value })}
                 />
               </div>
+              <div>
+                <label className="label">Payment method</label>
+                <PaymentMethodSelect
+                  value={edit.paymentMethod}
+                  onChange={(code) => setEdit({ ...edit, paymentMethod: code })}
+                  methods={paymentMethods}
+                  onAdded={(m) => setPaymentMethods((cur) => [...cur, m])}
+                  disabled={!canManage}
+                  className={`input ${canManage ? "" : "bg-zinc-50 text-zinc-400"}`}
+                />
+              </div>
             </div>
 
             <div className="overflow-x-auto">
@@ -562,6 +577,7 @@ function BillDetailModal({
                       billDate: edit.billDate || undefined,
                       dueDate: edit.dueDate || null,
                       memo: edit.memo.trim(),
+                      paymentMethod: edit.paymentMethod,
                       lines: (bill.items ?? []).map((it) => {
                         const le = lineEdits[it.id];
                         return {
@@ -579,7 +595,7 @@ function BillDetailModal({
                 </button>
                 {bill.status === "OPEN" ? (
                   <button
-                    onClick={() => patch({ status: "PAID" })}
+                    onClick={() => patch({ status: "PAID", paymentMethod: edit.paymentMethod })}
                     disabled={busy}
                     className="btn-primary"
                   >

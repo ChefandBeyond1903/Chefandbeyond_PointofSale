@@ -5,6 +5,8 @@ import Link from "next/link";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
 import { formatDateOnly } from "@/lib/date";
+import { methodLabel } from "@/lib/payments";
+import { usePaymentMethods } from "@/components/PaymentMethodPicker";
 import type { AdminOverview, OverviewWindow } from "@/lib/types";
 
 function fmtDateTime(s: string) {
@@ -20,6 +22,7 @@ export function OverviewView() {
   const [data, setData] = useState<AdminOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [customPaymentMethods] = usePaymentMethods();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -105,6 +108,14 @@ export function OverviewView() {
                   />
                 )}
                 <Line label="Operating expenses (month)" value={`(${formatMoney(data.month.expensesCents)})`} negative />
+                {data.month.expensesByPaymentMethod.map((e) => (
+                  <Line
+                    key={e.method}
+                    label={`  ${methodLabel(e.method, customPaymentMethods)} (${e.count})`}
+                    value={`(${formatMoney(e.amountCents)})`}
+                    negative
+                  />
+                ))}
                 <Line label="Card processing fees (3%)" value={`(${formatMoney(data.month.cardFeeCents)})`} negative />
                 <Line label="Net profit (month)" value={formatMoney(data.month.netProfitCents)} strong />
               </div>
