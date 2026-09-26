@@ -652,7 +652,18 @@ model Bill {
   // How this bill was paid — "CASH" | "CARD" | "CHECK", or a custom method's
   // code from PaymentMethod (e.g. "ZELLE"). Set when marked paid.
   paymentMethod String    @default("CASH")
+  // Amount payable: items + fees (+ any legacy PO tax/other costs) - discount - vendor credit.
   subtotalCents Int       @default(0)
+  // Fees billed on top of the items. Each is mirrored as an operating Expense
+  // (linked by Expense.billId) so it shows in Reports → Operating expenses.
+  shippingCents       Int @default(0)
+  minOrderFeeCents    Int @default(0)
+  dropShipFeeCents    Int @default(0)
+  // Early-pay discount in basis points (200 = 2.00%) of the item total, for
+  // vendors who give extra off when paid within terms (e.g. Net 15).
+  earlyPayDiscountBps Int @default(0)
+  // Vendor credit (returns, allowances) applied against this bill.
+  vendorCreditCents   Int @default(0)
   // Whether creating this bill also received its items (bumped
   // PurchaseOrderItem.receivedQuantity / store inventory). A "Copy to bill"
   // entry made before the goods shipped is false — deleting or editing it
@@ -676,6 +687,7 @@ model Bill {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
   items       BillItem[]
+  expenses    Expense[]
 
   @@index([vendor])
   @@index([storeId])
@@ -726,11 +738,17 @@ model Expense {
   poId String?
   po   PurchaseOrder? @relation(fields: [poId], references: [id], onDelete: SetNull)
 
+  // Set on fee expenses (shipping / minimum order / drop ship) generated from
+  // a vendor bill; they follow that bill's edits, paid state and deletion.
+  billId String?
+  bill   Bill?   @relation(fields: [billId], references: [id], onDelete: Cascade)
+
   createdById String
   createdBy   User     @relation(fields: [createdById], references: [id])
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  @@index([billId])
   @@index([category])
   @@index([storeId])
   @@index([expenseDate])

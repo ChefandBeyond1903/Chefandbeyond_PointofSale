@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
 import { MoneyInput } from "@/components/MoneyInput";
+import { BillAdjustments, type BillAdjustmentValues } from "@/components/BillAdjustments";
+import { earlyPayDiscountCents } from "@/lib/billFees";
 import { BILL_TERMS, dueDateFromTerms } from "@/lib/terms";
 import type { PurchaseOrder, SessionUser, Store } from "@/lib/types";
 
@@ -62,6 +64,13 @@ export function BillModal({
   const [dueDate, setDueDate] = useState("");
   const [dueTouched, setDueTouched] = useState(false);
   const [memo, setMemo] = useState("");
+  const [adj, setAdj] = useState<BillAdjustmentValues>({
+    shippingCents: 0,
+    minOrderFeeCents: 0,
+    dropShipFeeCents: 0,
+    earlyPayDiscountBps: 0,
+    vendorCreditCents: 0,
+  });
 
   const load = useCallback(async () => {
     try {
@@ -72,6 +81,15 @@ export function BillModal({
       const purchaseOrder = res.purchaseOrder;
       setPo(purchaseOrder);
       setStoreId(purchaseOrder.storeId ?? "");
+      // The PO's shipping and drop-ship fee belong on its first bill; pre-fill
+      // them there (editable) so they're booked once as operating expenses.
+      if ((purchaseOrder.bills?.length ?? 0) === 0) {
+        setAdj((a) => ({
+          ...a,
+          shippingCents: purchaseOrder.shippingCents ?? 0,
+          dropShipFeeCents: purchaseOrder.dropShipFeeCents ?? 0,
+        }));
+      }
       // Carry the PO's own date and due date over automatically — a vendor
       // bill is naturally dated to when the order was placed / due, not to
       // whenever someone happens to get around to copying it to a bill.
@@ -131,17 +149,19 @@ export function BillModal({
   }
 
   const itemsTotal = lines.reduce((s, l) => s + (parseInt(l.now || "0", 10) || 0) * l.costCents, 0);
-  // Shipping, drop-ship fee, tax, and any "other cost" expenses logged on the
-  // PO are one-time charges — the first bill against this PO picks them up
-  // automatically; a later bill or receipt doesn't repeat them.
+  // Tax and any "other cost" expenses logged on the PO are one-time charges —
+  // the first bill against this PO picks them up automatically; a later bill
+  // or receipt doesn't repeat them. (Shipping / drop-ship are in the fee
+  // inputs below.)
   const isFirstBill = (po?.bills?.length ?? 0) === 0;
   const poExtraChargesCents =
-    (po?.shippingCents ?? 0) +
-    (po?.dropShipFeeCents ?? 0) +
-    (po?.taxCents ?? 0) +
-    (po?.expenses?.reduce((s, e) => s + e.amountCents, 0) ?? 0);
+    (po?.taxCents ?? 0) + (po?.expenses?.reduce((s, e) => s + e.amountCents, 0) ?? 0);
   const extraChargesCents = recordBill && isFirstBill ? poExtraChargesCents : 0;
-  const total = itemsTotal + extraChargesCents;
+  const feesCents = recordBill ? adj.shippingCents + adj.minOrderFeeCents + adj.dropShipFeeCents : 0;
+  const discountCents = recordBill ? earlyPayDiscountCents(itemsTotal, adj.earlyPayDiscountBps) : 0;
+  const creditCents = recordBill ? adj.vendorCreditCents : 0;
+  const total = itemsTotal + extraChargesCents + feesCents - discountCents - creditCents;
+  const hasBreakdown = extraChargesCents + feesCents + discountCents + creditCents > 0;
 
   async function submit() {
     const payload = lines
@@ -168,6 +188,7 @@ export function BillModal({
           dueDate: dueDate || null,
           terms,
           memo: memo.trim(),
+          ...(recordBill ? adj : {}),
           ...(isAdmin && storeId ? { storeId } : {}),
           lines: payload,
         }),
@@ -219,7 +240,7 @@ export function BillModal({
 
             {recordBill && !isFirstBill && poExtraChargesCents > 0 && (
               <p className="mb-4 text-xs text-zinc-400">
-                This PO&rsquo;s shipping, drop-ship fee, tax, and other logged costs (
+                This PO&rsquo;s tax and other logged costs (
                 {formatMoney(poExtraChargesCents)}) were already added to its first bill — not
                 repeated here.
               </p>
@@ -356,7 +377,7 @@ export function BillModal({
                     })}
                   </tbody>
                   <tfoot>
-                    {extraChargesCents > 0 && (
+                    {hasBreakdown && (
                       <>
                         <tr>
                           <td colSpan={5} className="pt-2 text-right text-zinc-500">
@@ -366,14 +387,46 @@ export function BillModal({
                             {formatMoney(itemsTotal)}
                           </td>
                         </tr>
-                        <tr>
-                          <td colSpan={5} className="py-1 text-right text-zinc-500">
-                            Shipping, drop-ship fee, tax &amp; other logged costs
-                          </td>
-                          <td className="py-1 text-right tabular-nums text-zinc-500">
-                            {formatMoney(extraChargesCents)}
-                          </td>
-                        </tr>
+                        {extraChargesCents > 0 && (
+                          <tr>
+                            <td colSpan={5} className="py-1 text-right text-zinc-500">
+                              Tax &amp; other logged costs
+                            </td>
+                            <td className="py-1 text-right tabular-nums text-zinc-500">
+                              {formatMoney(extraChargesCents)}
+                            </td>
+                          </tr>
+                        )}
+                        {feesCents > 0 && (
+                          <tr>
+                            <td colSpan={5} className="py-1 text-right text-zinc-500">
+                              Shipping &amp; fees
+                            </td>
+                            <td className="py-1 text-right tabular-nums text-zinc-500">
+                              {formatMoney(feesCents)}
+                            </td>
+                          </tr>
+                        )}
+                        {discountCents > 0 && (
+                          <tr>
+                            <td colSpan={5} className="py-1 text-right text-zinc-500">
+                              Early-pay discount ({adj.earlyPayDiscountBps / 100}%)
+                            </td>
+                            <td className="py-1 text-right tabular-nums text-green-700">
+                              -{formatMoney(discountCents)}
+                            </td>
+                          </tr>
+                        )}
+                        {creditCents > 0 && (
+                          <tr>
+                            <td colSpan={5} className="py-1 text-right text-zinc-500">
+                              Vendor credit
+                            </td>
+                            <td className="py-1 text-right tabular-nums text-green-700">
+                              -{formatMoney(creditCents)}
+                            </td>
+                          </tr>
+                        )}
                       </>
                     )}
                     <tr>
@@ -388,6 +441,10 @@ export function BillModal({
                   Fill remaining
                 </button>
               </div>
+            )}
+
+            {recordBill && (
+              <BillAdjustments values={adj} onChange={setAdj} itemsCents={itemsTotal} />
             )}
 
             {recordBill && (

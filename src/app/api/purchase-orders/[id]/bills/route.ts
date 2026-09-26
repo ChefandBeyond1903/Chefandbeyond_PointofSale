@@ -5,6 +5,7 @@ import { requireScopedUser, requireScopedRole, scopeStoreId } from "@/lib/scope"
 import { billCreateSchema } from "@/lib/validation";
 import { parseDateInput } from "@/lib/date";
 import { ensureVendor } from "@/lib/vendors";
+import { earlyPayDiscountCents, syncBillFeeExpenses } from "@/lib/billFees";
 import { ok, toErrorResponse } from "@/lib/api";
 
 type Params = { params: Promise<{ id: string }> };
@@ -96,13 +97,15 @@ export async function POST(req: NextRequest, { params }: Params) {
     const billDate = body.billDate ? parseDateInput(body.billDate) : new Date();
     const dueDate = body.dueDate ? parseDateInput(body.dueDate) : null;
     const itemsCents = lines.reduce((s, l) => s + l.receiveQty * l.unitCostCents, 0);
-    // Shipping, drop-ship fee, tax, and any "other cost" expenses logged on
-    // the PO are one-time charges for the whole order — fold them into the
-    // first bill recorded against it so they aren't asked for again, and
-    // don't double them up on a later bill or receipt.
-    const extraChargesCents =
-      po.shippingCents + po.dropShipFeeCents + po.taxCents +
-      po.expenses.reduce((s, e) => s + e.amountCents, 0);
+    // Tax and any "other cost" expenses logged on the PO are one-time charges
+    // for the whole order — fold them into the first bill recorded against it
+    // so they aren't asked for again, and don't double them up on a later
+    // bill or receipt. Shipping / drop-ship / minimum-order fees and the
+    // discount / vendor credit are entered per bill (the form pre-fills the
+    // PO's shipping and drop-ship fee on its first bill).
+    const extraChargesCents = po.taxCents + po.expenses.reduce((s, e) => s + e.amountCents, 0);
+    const feesCents = body.shippingCents + body.minOrderFeeCents + body.dropShipFeeCents;
+    const discountCents = earlyPayDiscountCents(itemsCents, body.earlyPayDiscountBps);
 
     // The bill inherits the PO's vendor — make sure it's in the directory.
     if (body.recordBill) await ensureVendor(po.vendor);
@@ -111,7 +114,12 @@ export async function POST(req: NextRequest, { params }: Params) {
       let created = null;
       if (body.recordBill) {
         const priorBillCount = await tx.bill.count({ where: { poId: po.id } });
-        const subtotalCents = itemsCents + (priorBillCount === 0 ? extraChargesCents : 0);
+        const subtotalCents =
+          itemsCents +
+          (priorBillCount === 0 ? extraChargesCents : 0) +
+          feesCents -
+          discountCents -
+          body.vendorCreditCents;
         created = await tx.bill.create({
           data: {
             billNumber: body.billNumber,
@@ -121,6 +129,11 @@ export async function POST(req: NextRequest, { params }: Params) {
             terms: body.terms,
             memo: body.memo,
             subtotalCents,
+            shippingCents: body.shippingCents,
+            minOrderFeeCents: body.minOrderFeeCents,
+            dropShipFeeCents: body.dropShipFeeCents,
+            earlyPayDiscountBps: body.earlyPayDiscountBps,
+            vendorCreditCents: body.vendorCreditCents,
             storeId,
             poId: po.id,
             receivedItems: body.receiveItems,
@@ -141,35 +154,10 @@ export async function POST(req: NextRequest, { params }: Params) {
           include: { items: true, po: { select: { id: true, poNumber: true } } },
         });
 
-        // Shipping and drop-ship fee are real operating costs, not part of
-        // what the vendor's items themselves cost — mirror them as their own
-        // Expense rows (once, on the first bill) so they show up under
-        // Reports → Operating expenses. Deliberately NOT linked via poId:
-        // the PO's own subtotal already counts shippingCents/dropShipFeeCents
-        // natively, so linking these here would double them into it via
-        // recomputePoSubtotalCents.
-        if (priorBillCount === 0) {
-          const extras: { category: string; amountCents: number }[] = [];
-          if (po.shippingCents > 0) extras.push({ category: "Shipping & postage", amountCents: po.shippingCents });
-          if (po.dropShipFeeCents > 0) extras.push({ category: "Drop Ship Fee", amountCents: po.dropShipFeeCents });
-          for (const e of extras) {
-            await tx.expense.create({
-              data: {
-                category: e.category,
-                payee: po.vendor,
-                amountCents: e.amountCents,
-                expenseDate: billDate,
-                // Matches the bill's own starting state — it's marked paid
-                // separately when the vendor invoice actually gets paid.
-                status: "UNPAID",
-                paymentMethod: "CASH",
-                memo: `${e.category} on PO ${po.poNumber}`,
-                storeId,
-                createdById: actor.id,
-              },
-            });
-          }
-        }
+        // Shipping, minimum-order and drop-ship fees are real operating costs,
+        // not part of what the items cost — mirror them as Expense rows linked
+        // to this bill so they show under Reports → Operating expenses.
+        await syncBillFeeExpenses(tx, created, actor.id);
       }
 
       if (body.receiveItems) {

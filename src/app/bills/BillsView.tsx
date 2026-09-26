@@ -5,6 +5,8 @@ import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
 import { formatDateOnly } from "@/lib/date";
 import { MoneyInput } from "@/components/MoneyInput";
+import { BillAdjustments, type BillAdjustmentValues } from "@/components/BillAdjustments";
+import { earlyPayDiscountCents } from "@/lib/billFees";
 import { VendorPicker } from "@/components/VendorPicker";
 import { BILL_TERMS } from "@/lib/terms";
 import { usePaged } from "@/lib/usePaged";
@@ -304,6 +306,13 @@ function BillDetailModal({
     memo: "",
     paymentMethod: "CASH",
   });
+  const [adj, setAdj] = useState<BillAdjustmentValues>({
+    shippingCents: 0,
+    minOrderFeeCents: 0,
+    dropShipFeeCents: 0,
+    earlyPayDiscountBps: 0,
+    vendorCreditCents: 0,
+  });
   const [paymentMethods, setPaymentMethods] = usePaymentMethods();
   // id -> { qty text, unit cost cents } for the line-item corrections.
   const [lineEdits, setLineEdits] = useState<
@@ -322,6 +331,13 @@ function BillDetailModal({
         billDate: res.bill.billDate ? res.bill.billDate.slice(0, 10) : "",
         memo: res.bill.memo,
         paymentMethod: res.bill.paymentMethod || "CASH",
+      });
+      setAdj({
+        shippingCents: res.bill.shippingCents ?? 0,
+        minOrderFeeCents: res.bill.minOrderFeeCents ?? 0,
+        dropShipFeeCents: res.bill.dropShipFeeCents ?? 0,
+        earlyPayDiscountBps: res.bill.earlyPayDiscountBps ?? 0,
+        vendorCreditCents: res.bill.vendorCreditCents ?? 0,
       });
       setLineEdits(
         Object.fromEntries(
@@ -367,6 +383,26 @@ function BillDetailModal({
       setBusy(false);
     }
   }
+
+  // Live totals from the (possibly edited) lines and fee inputs. "Other" is the
+  // legacy PO tax / logged-cost portion baked into the saved total.
+  const itemsCents = (bill?.items ?? []).reduce((s, it) => {
+    const le = lineEdits[it.id];
+    const qty = le ? parseInt(le.quantity, 10) || 0 : it.quantity;
+    const unit = le ? le.unitCostCents : it.unitCostCents;
+    return s + qty * unit;
+  }, 0);
+  const savedItemsCents = (bill?.items ?? []).reduce((s, it) => s + it.lineCostCents, 0);
+  const otherCents = bill
+    ? bill.subtotalCents -
+      savedItemsCents -
+      (bill.shippingCents + bill.minOrderFeeCents + bill.dropShipFeeCents) +
+      earlyPayDiscountCents(savedItemsCents, bill.earlyPayDiscountBps) +
+      bill.vendorCreditCents
+    : 0;
+  const feesCents = adj.shippingCents + adj.minOrderFeeCents + adj.dropShipFeeCents;
+  const discountCents = earlyPayDiscountCents(itemsCents, adj.earlyPayDiscountBps);
+  const totalCents = itemsCents + otherCents + feesCents - discountCents - adj.vendorCreditCents;
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
@@ -531,18 +567,59 @@ function BillDetailModal({
                 </tbody>
                 <tfoot>
                   <tr>
+                    <td colSpan={3} className="pt-2 text-right text-zinc-500">
+                      Items
+                    </td>
+                    <td className="pt-2 text-right tabular-nums text-zinc-500">
+                      {formatMoney(itemsCents)}
+                    </td>
+                  </tr>
+                  {otherCents !== 0 && (
+                    <tr>
+                      <td colSpan={3} className="py-1 text-right text-zinc-500">
+                        Tax &amp; other logged costs
+                      </td>
+                      <td className="py-1 text-right tabular-nums text-zinc-500">
+                        {formatMoney(otherCents)}
+                      </td>
+                    </tr>
+                  )}
+                  {feesCents > 0 && (
+                    <tr>
+                      <td colSpan={3} className="py-1 text-right text-zinc-500">
+                        Shipping &amp; fees
+                      </td>
+                      <td className="py-1 text-right tabular-nums text-zinc-500">
+                        {formatMoney(feesCents)}
+                      </td>
+                    </tr>
+                  )}
+                  {discountCents > 0 && (
+                    <tr>
+                      <td colSpan={3} className="py-1 text-right text-zinc-500">
+                        Early-pay discount ({adj.earlyPayDiscountBps / 100}%)
+                      </td>
+                      <td className="py-1 text-right tabular-nums text-green-700">
+                        -{formatMoney(discountCents)}
+                      </td>
+                    </tr>
+                  )}
+                  {adj.vendorCreditCents > 0 && (
+                    <tr>
+                      <td colSpan={3} className="py-1 text-right text-zinc-500">
+                        Vendor credit
+                      </td>
+                      <td className="py-1 text-right tabular-nums text-green-700">
+                        -{formatMoney(adj.vendorCreditCents)}
+                      </td>
+                    </tr>
+                  )}
+                  <tr>
                     <td colSpan={3} className="py-2 text-right font-medium">
                       Total
                     </td>
                     <td className="py-2 text-right text-base font-bold tabular-nums">
-                      {formatMoney(
-                        (bill.items ?? []).reduce((s, it) => {
-                          const le = lineEdits[it.id];
-                          const qty = le ? parseInt(le.quantity, 10) || 0 : it.quantity;
-                          const unit = le ? le.unitCostCents : it.unitCostCents;
-                          return s + qty * unit;
-                        }, 0),
-                      )}
+                      {formatMoney(totalCents)}
                     </td>
                   </tr>
                 </tfoot>
@@ -554,6 +631,13 @@ function BillDetailModal({
                 purchase order&rsquo;s received amount. Unit-cost edits change the bill only.
               </p>
             )}
+
+            <BillAdjustments
+              values={adj}
+              onChange={setAdj}
+              itemsCents={itemsCents}
+              disabled={!canManage}
+            />
 
             <div className="mt-3">
               <label className="label">Memo</label>
@@ -578,6 +662,7 @@ function BillDetailModal({
                       dueDate: edit.dueDate || null,
                       memo: edit.memo.trim(),
                       paymentMethod: edit.paymentMethod,
+                      ...adj,
                       lines: (bill.items ?? []).map((it) => {
                         const le = lineEdits[it.id];
                         return {

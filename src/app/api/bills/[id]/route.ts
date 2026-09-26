@@ -5,6 +5,7 @@ import { requireScopedUser, requireScopedRole, scopeStoreId } from "@/lib/scope"
 import { billUpdateSchema } from "@/lib/validation";
 import { parseDateInput } from "@/lib/date";
 import { ensureVendor } from "@/lib/vendors";
+import { earlyPayDiscountCents, syncBillFeeExpenses } from "@/lib/billFees";
 import { ok, toErrorResponse } from "@/lib/api";
 
 type Params = { params: Promise<{ id: string }> };
@@ -62,6 +63,17 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       data.paidAt = body.status === "PAID" ? new Date() : null;
     }
     if (body.paymentMethod !== undefined) data.paymentMethod = body.paymentMethod;
+    if (body.shippingCents !== undefined) data.shippingCents = body.shippingCents;
+    if (body.minOrderFeeCents !== undefined) data.minOrderFeeCents = body.minOrderFeeCents;
+    if (body.dropShipFeeCents !== undefined) data.dropShipFeeCents = body.dropShipFeeCents;
+    if (body.earlyPayDiscountBps !== undefined) data.earlyPayDiscountBps = body.earlyPayDiscountBps;
+    if (body.vendorCreditCents !== undefined) data.vendorCreditCents = body.vendorCreditCents;
+    const adjustsTotal =
+      body.shippingCents !== undefined ||
+      body.minOrderFeeCents !== undefined ||
+      body.dropShipFeeCents !== undefined ||
+      body.earlyPayDiscountBps !== undefined ||
+      body.vendorCreditCents !== undefined;
 
     const bill = await prisma.$transaction(async (tx) => {
       const current = await tx.bill.findUnique({
@@ -72,13 +84,6 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
       let qtyChanged = false;
       if (body.lines && body.lines.length > 0) {
-        // Shipping / drop-ship fee / tax / logged PO "other cost" expenses are
-        // folded into subtotalCents at bill creation, but never become their
-        // own BillItem rows — recomputing the total from line items alone
-        // (below) would silently wipe them out. Preserve whatever portion of
-        // the current total ISN'T accounted for by line items and add it back.
-        const originalItemsCents = current.items.reduce((s, it) => s + it.lineCostCents, 0);
-        const extraChargesCents = current.subtotalCents - originalItemsCents;
         const byId = new Map(current.items.map((it) => [it.id, it]));
         for (const line of body.lines) {
           const it = byId.get(line.id);
@@ -121,13 +126,42 @@ export async function PATCH(req: NextRequest, { params }: Params) {
             }
           }
         }
-        // Recompute the bill total from every line (edited or not), plus
-        // whatever extra charges were already baked in.
+      }
+
+      // Recompute the payable total when lines or any fee / discount / credit
+      // changed. Legacy PO tax and logged "other cost" expenses are folded
+      // into subtotalCents at creation but have no field of their own, so
+      // preserve whatever portion of the current total the items, fees,
+      // discount and credit don't account for.
+      if ((body.lines && body.lines.length > 0) || adjustsTotal) {
+        const originalItemsCents = current.items.reduce((s, it) => s + it.lineCostCents, 0);
+        const legacyExtraCents =
+          current.subtotalCents -
+          originalItemsCents -
+          (current.shippingCents + current.minOrderFeeCents + current.dropShipFeeCents) +
+          earlyPayDiscountCents(originalItemsCents, current.earlyPayDiscountBps) +
+          current.vendorCreditCents;
         const fresh = await tx.billItem.findMany({
           where: { billId: id },
           select: { lineCostCents: true },
         });
-        data.subtotalCents = fresh.reduce((s, l) => s + l.lineCostCents, 0) + extraChargesCents;
+        const itemsCents = fresh.reduce((s, l) => s + l.lineCostCents, 0);
+        const num = (
+          k:
+            | "shippingCents"
+            | "minOrderFeeCents"
+            | "dropShipFeeCents"
+            | "earlyPayDiscountBps"
+            | "vendorCreditCents",
+        ) => (data[k] as number | undefined) ?? current[k];
+        data.subtotalCents =
+          itemsCents +
+          legacyExtraCents +
+          num("shippingCents") +
+          num("minOrderFeeCents") +
+          num("dropShipFeeCents") -
+          earlyPayDiscountCents(itemsCents, num("earlyPayDiscountBps")) -
+          num("vendorCreditCents");
       }
 
       // Reopening a PAID bill that actually received goods reverses that
@@ -193,6 +227,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           createdBy: { select: { id: true, name: true } },
         },
       });
+
+      await syncBillFeeExpenses(tx, updated, actor.id);
 
       // Roll the linked PO's status forward/back to match the new received qtys.
       if (qtyChanged && current.poId) {

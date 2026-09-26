@@ -106,6 +106,11 @@ export const billCreateSchema = z
     // later, or receive items now against a bill already recorded earlier.
     recordBill: z.boolean().default(true),
     receiveItems: z.boolean().default(true),
+    shippingCents: z.number().int().min(0).default(0),
+    minOrderFeeCents: z.number().int().min(0).default(0),
+    dropShipFeeCents: z.number().int().min(0).default(0),
+    earlyPayDiscountBps: z.number().int().min(0).max(10_000).default(0),
+    vendorCreditCents: z.number().int().min(0).default(0),
     lines: z
       .array(
         z.object({
@@ -190,6 +195,11 @@ export const billUpdateSchema = z.object({
   memo: z.string().trim().max(2000).optional(),
   status: z.enum(["OPEN", "PAID"]).optional(),
   paymentMethod: paymentMethodSchema.optional(),
+  shippingCents: z.number().int().min(0).optional(),
+  minOrderFeeCents: z.number().int().min(0).optional(),
+  dropShipFeeCents: z.number().int().min(0).optional(),
+  earlyPayDiscountBps: z.number().int().min(0).max(10_000).optional(),
+  vendorCreditCents: z.number().int().min(0).optional(),
   // Correct a mis-entered line: new quantity / unit cost per existing bill item.
   // A quantity change also adjusts stock and the linked PO's received amount.
   lines: z

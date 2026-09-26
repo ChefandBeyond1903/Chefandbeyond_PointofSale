@@ -281,6 +281,11 @@ export interface Bill {
   paidAt: string | null;
   paymentMethod: string;
   subtotalCents: number;
+  shippingCents: number;
+  minOrderFeeCents: number;
+  dropShipFeeCents: number;
+  earlyPayDiscountBps: number;
+  vendorCreditCents: number;
   storeId: string | null;
   poId: string | null;
   createdAt: string;
