@@ -917,6 +917,11 @@ export default function RegisterPage() {
     setTaxOverrideCode("");
     setTaxOverrideReason("");
     setTaxOverrideOpen(false);
+    setManualTaxOpen(false);
+    setManualTaxState("");
+    setManualTaxCents(0);
+    setManualWebsiteOrderNumber("");
+    setManualSaleDate("");
   }
 
   function customerPayload() {
