@@ -658,6 +658,13 @@ model Bill {
   // entry made before the goods shipped is false — deleting or editing it
   // must not touch receiving, unlike a normal receive-and-bill.
   receivedItems Boolean   @default(true)
+  // Whether receivedItems' effect is currently reflected in inventory right
+  // now. True from creation on a normal receive-and-bill. Reopening a PAID
+  // bill reverses it (false) so the goods aren't double-counted while it's
+  // being fixed; marking it PAID again re-applies it (true) using whatever
+  // quantities are on the bill at that moment. Meaningless when
+  // receivedItems is false (a bill-only entry never touched inventory).
+  inventoryApplied Boolean @default(true)
 
   storeId String?
   store   Store?         @relation(fields: [storeId], references: [id])

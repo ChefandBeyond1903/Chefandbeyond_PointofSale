@@ -13,7 +13,7 @@ async function loadPoScoped(id: string, actor: Awaited<ReturnType<typeof require
   const po = await prisma.purchaseOrder.findUnique({
     where: { id },
     select: {
-      id: true, vendor: true, storeId: true, shipTo: true, status: true, items: true,
+      id: true, poNumber: true, vendor: true, storeId: true, shipTo: true, status: true, items: true,
       shippingCents: true, dropShipFeeCents: true, taxCents: true,
       expenses: { select: { amountCents: true } },
     },
@@ -124,6 +124,7 @@ export async function POST(req: NextRequest, { params }: Params) {
             storeId,
             poId: po.id,
             receivedItems: body.receiveItems,
+            inventoryApplied: body.receiveItems,
             createdById: actor.id,
             items: {
               create: lines.map((l) => ({
@@ -139,6 +140,36 @@ export async function POST(req: NextRequest, { params }: Params) {
           },
           include: { items: true, po: { select: { id: true, poNumber: true } } },
         });
+
+        // Shipping and drop-ship fee are real operating costs, not part of
+        // what the vendor's items themselves cost — mirror them as their own
+        // Expense rows (once, on the first bill) so they show up under
+        // Reports → Operating expenses. Deliberately NOT linked via poId:
+        // the PO's own subtotal already counts shippingCents/dropShipFeeCents
+        // natively, so linking these here would double them into it via
+        // recomputePoSubtotalCents.
+        if (priorBillCount === 0) {
+          const extras: { category: string; amountCents: number }[] = [];
+          if (po.shippingCents > 0) extras.push({ category: "Shipping & postage", amountCents: po.shippingCents });
+          if (po.dropShipFeeCents > 0) extras.push({ category: "Drop Ship Fee", amountCents: po.dropShipFeeCents });
+          for (const e of extras) {
+            await tx.expense.create({
+              data: {
+                category: e.category,
+                payee: po.vendor,
+                amountCents: e.amountCents,
+                expenseDate: billDate,
+                // Matches the bill's own starting state — it's marked paid
+                // separately when the vendor invoice actually gets paid.
+                status: "UNPAID",
+                paymentMethod: "CASH",
+                memo: `${e.category} on PO ${po.poNumber}`,
+                storeId,
+                createdById: actor.id,
+              },
+            });
+          }
+        }
       }
 
       if (body.receiveItems) {

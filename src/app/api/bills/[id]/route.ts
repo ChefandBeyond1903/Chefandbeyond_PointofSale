@@ -72,6 +72,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
       let qtyChanged = false;
       if (body.lines && body.lines.length > 0) {
+        // Shipping / drop-ship fee / tax / logged PO "other cost" expenses are
+        // folded into subtotalCents at bill creation, but never become their
+        // own BillItem rows — recomputing the total from line items alone
+        // (below) would silently wipe them out. Preserve whatever portion of
+        // the current total ISN'T accounted for by line items and add it back.
+        const originalItemsCents = current.items.reduce((s, it) => s + it.lineCostCents, 0);
+        const extraChargesCents = current.subtotalCents - originalItemsCents;
         const byId = new Map(current.items.map((it) => [it.id, it]));
         for (const line of body.lines) {
           const it = byId.get(line.id);
@@ -87,8 +94,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           });
           // A "Copy to bill" entry (receivedItems: false) never bumped
           // receiving in the first place — editing its quantity shouldn't
-          // either.
-          if (deltaQty !== 0 && current.receivedItems) {
+          // either. Nor should editing while the bill is reopened (its
+          // received effect is currently reversed) — the corrected
+          // quantities get applied in full when it's marked paid again.
+          if (deltaQty !== 0 && current.receivedItems && current.inventoryApplied) {
             qtyChanged = true;
             // Keep the PO's received count and store stock in step with the fix.
             if (it.poItemId) {
@@ -112,12 +121,66 @@ export async function PATCH(req: NextRequest, { params }: Params) {
             }
           }
         }
-        // Recompute the bill total from every line (edited or not).
+        // Recompute the bill total from every line (edited or not), plus
+        // whatever extra charges were already baked in.
         const fresh = await tx.billItem.findMany({
           where: { billId: id },
           select: { lineCostCents: true },
         });
-        data.subtotalCents = fresh.reduce((s, l) => s + l.lineCostCents, 0);
+        data.subtotalCents = fresh.reduce((s, l) => s + l.lineCostCents, 0) + extraChargesCents;
+      }
+
+      // Reopening a PAID bill that actually received goods reverses that
+      // receipt (so it isn't sitting double-counted while something about
+      // the bill gets fixed); marking it PAID again re-applies it using
+      // whatever quantities are on the bill at that moment. A no-op if
+      // nothing about the lines changed in between.
+      if (body.status !== undefined && current.receivedItems && current.storeId) {
+        const linesNow =
+          body.lines && body.lines.length > 0
+            ? await tx.billItem.findMany({
+                where: { billId: id },
+                select: { poItemId: true, productId: true, quantity: true },
+              })
+            : current.items;
+
+        if (body.status === "OPEN" && current.status !== "OPEN" && current.inventoryApplied) {
+          for (const it of linesNow) {
+            if (it.poItemId) {
+              await tx.purchaseOrderItem.update({
+                where: { id: it.poItemId },
+                data: { receivedQuantity: { decrement: it.quantity } },
+              });
+            }
+            if (it.productId) {
+              await tx.storeInventory.upsert({
+                where: { productId_storeId: { productId: it.productId, storeId: current.storeId } },
+                create: { productId: it.productId, storeId: current.storeId, quantity: -it.quantity },
+                update: { quantity: { decrement: it.quantity } },
+              });
+            }
+          }
+          data.inventoryApplied = false;
+          qtyChanged = true;
+        } else if (body.status === "PAID" && current.status !== "PAID" && !current.inventoryApplied) {
+          for (const it of linesNow) {
+            if (it.poItemId) {
+              await tx.purchaseOrderItem.update({
+                where: { id: it.poItemId },
+                data: { receivedQuantity: { increment: it.quantity } },
+              });
+            }
+            if (it.productId) {
+              await tx.storeInventory.upsert({
+                where: { productId_storeId: { productId: it.productId, storeId: current.storeId } },
+                create: { productId: it.productId, storeId: current.storeId, quantity: it.quantity },
+                update: { quantity: { increment: it.quantity } },
+              });
+            }
+          }
+          data.inventoryApplied = true;
+          qtyChanged = true;
+        }
       }
 
       const updated = await tx.bill.update({
@@ -165,8 +228,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 // Deleting a bill reverses its receipt — PO line receivedQuantity and store
 // inventory both move back by the billed amounts — but only if creating this
 // bill actually received those items in the first place (see
-// Bill.receivedItems); a "Copy to bill" entry made before the goods shipped
-// never touched receiving, so undoing it must leave receiving alone.
+// Bill.receivedItems) AND that receipt is still currently reflected in
+// inventory (see Bill.inventoryApplied — a reopened bill already reversed
+// it, so deleting it from there must not reverse it a second time).
 export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
     const actor = await requireScopedRole("MANAGER", "ADMIN");
@@ -180,7 +244,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     if (!bill) throw new HttpError(404, "Bill not found");
 
     await prisma.$transaction(async (tx) => {
-      if (bill.receivedItems) {
+      if (bill.receivedItems && bill.inventoryApplied) {
         for (const it of bill.items) {
           if (it.poItemId) {
             await tx.purchaseOrderItem.update({

@@ -72,6 +72,16 @@ export function BillModal({
       const purchaseOrder = res.purchaseOrder;
       setPo(purchaseOrder);
       setStoreId(purchaseOrder.storeId ?? "");
+      // Carry the PO's own date and due date over automatically — a vendor
+      // bill is naturally dated to when the order was placed / due, not to
+      // whenever someone happens to get around to copying it to a bill.
+      if (recordBill) {
+        if (purchaseOrder.poDate) setBillDate(toISO(new Date(purchaseOrder.poDate)));
+        if (purchaseOrder.dueDate) {
+          setDueDate(toISO(new Date(purchaseOrder.dueDate)));
+          setDueTouched(true);
+        }
+      }
       setLines(
         (purchaseOrder.items ?? []).map((it) => ({
           id: it.id,
