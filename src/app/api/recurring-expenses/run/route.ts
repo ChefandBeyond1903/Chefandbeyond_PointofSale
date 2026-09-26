@@ -30,6 +30,7 @@ export async function POST() {
               expenseDate: next,
               memo: r.memo,
               status: r.status,
+              paymentMethod: r.paymentMethod,
               storeId: r.storeId,
               createdById: actor.id,
             },

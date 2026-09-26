@@ -186,16 +186,29 @@ export async function GET(req: NextRequest) {
       expenseDate: { gte: from, lte: to },
     };
     if (storeId) expenseWhere.storeId = storeId;
-    const expenseRows = limited
-      ? []
-      : await prisma.expense.groupBy({
-          by: ["category"],
-          where: expenseWhere,
-          _sum: { amountCents: true },
-        });
+    const [expenseRows, expenseByMethodRows] = limited
+      ? [[], []]
+      : await Promise.all([
+          prisma.expense.groupBy({
+            by: ["category"],
+            where: expenseWhere,
+            _sum: { amountCents: true },
+          }),
+          prisma.expense.groupBy({
+            by: ["paymentMethod"],
+            where: expenseWhere,
+            _sum: { amountCents: true },
+            _count: { _all: true },
+          }),
+        ]);
     const expensesByCategory = expenseRows.map((r) => ({
       category: r.category,
       amountCents: r._sum.amountCents ?? 0,
+    }));
+    const expensesByPaymentMethod = expenseByMethodRows.map((r) => ({
+      method: r.paymentMethod,
+      amountCents: r._sum.amountCents ?? 0,
+      count: r._count._all,
     }));
     // Card-processing fee (3% of the ticket total on every card sale) is added
     // below once the card total is known from the sales loop.
@@ -319,6 +332,7 @@ export async function GET(req: NextRequest) {
     // Operating expenses = the real expense categories only. The 3% card-
     // processing fee is tracked on its own line, not lumped in here.
     expensesByCategory.sort((a, b) => b.amountCents - a.amountCents);
+    expensesByPaymentMethod.sort((a, b) => b.amountCents - a.amountCents);
     const expensesCents = expensesByCategory.reduce((s, e) => s + e.amountCents, 0);
     const cardSalesCents = byMethod.get("CARD")?.totalCents ?? 0;
     const cardFeeCentsTotal = limited ? 0 : cardFeeCents(cardSalesCents);
@@ -413,6 +427,7 @@ export async function GET(req: NextRequest) {
           netProfitCents: 0,
         },
         expensesByCategory: [],
+        expensesByPaymentMethod: [],
         byStore: [],
         byStaff: [],
         byPaymentMethod: [],
@@ -455,6 +470,7 @@ export async function GET(req: NextRequest) {
           profitCents - refundedProfitCents - expensesCents - cardFeeCentsTotal,
       },
       expensesByCategory,
+      expensesByPaymentMethod,
       byStore: toRows(byStore),
       byStaff: toRows(byStaff),
       byPaymentMethod: [...byMethod.entries()].map(([method, v]) => ({

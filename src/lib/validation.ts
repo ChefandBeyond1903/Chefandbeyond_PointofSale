@@ -1,5 +1,16 @@
 import { z } from "zod";
 
+// A payment method code: one of the built-in four (CASH/CARD/CHECK/CREDIT) or
+// a custom one added in Settings (ZELLE, …). Not checked against the custom
+// list here — the pickers only ever offer real ones, and any value that
+// isn't CARD/CREDIT/CHECK is handled as plain tender.
+export const paymentMethodSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(40)
+  .transform((s) => s.toUpperCase());
+
 export const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
@@ -117,6 +128,9 @@ export const expenseCreateSchema = z.object({
   expenseDate: dateInput.optional(),
   memo: z.string().trim().max(2000).default(""),
   status: z.enum(["PAID", "UNPAID"]).default("PAID"),
+  // How this bill was paid — one of the built-in three (Cash/Card/Check) or a
+  // custom method added in Settings. Defaults to Cash when not given.
+  paymentMethod: paymentMethodSchema.default("CASH"),
   // Admin only: which store the expense belongs to. A manager's expenses are
   // pinned to their own store.
   storeId: z.string().trim().min(1).optional().or(z.literal("")).transform((v) => (v ? v : undefined)),
@@ -132,6 +146,7 @@ export const expenseUpdateSchema = z.object({
   expenseDate: dateInput.optional(),
   memo: z.string().trim().max(2000).optional(),
   status: z.enum(["PAID", "UNPAID"]).optional(),
+  paymentMethod: paymentMethodSchema.optional(),
   storeId: z.string().trim().max(64).nullable().optional(),
 });
 
@@ -146,6 +161,7 @@ export const recurringExpenseCreateSchema = z.object({
   amountCents: z.number().int().min(1).max(100_000_000_00),
   memo: z.string().trim().max(2000).default(""),
   status: z.enum(["PAID", "UNPAID"]).default("PAID"),
+  paymentMethod: paymentMethodSchema.default("CASH"),
   frequency: z.enum(["WEEKLY", "MONTHLY", "QUARTERLY", "YEARLY"]).default("MONTHLY"),
   // The first date to post it for (and every `frequency` thereafter).
   nextDate: dateInput.refine((s) => !!s, "Pick a start date"),
@@ -158,6 +174,7 @@ export const recurringExpenseUpdateSchema = z.object({
   amountCents: z.number().int().min(1).max(100_000_000_00).optional(),
   memo: z.string().trim().max(2000).optional(),
   status: z.enum(["PAID", "UNPAID"]).optional(),
+  paymentMethod: paymentMethodSchema.optional(),
   frequency: z.enum(["WEEKLY", "MONTHLY", "QUARTERLY", "YEARLY"]).optional(),
   nextDate: dateInput.optional(),
   active: z.boolean().optional(),
@@ -257,17 +274,6 @@ export const saleCustomerSchema = z.object({
   ...structuredAddressFields,
   company: z.string().trim().max(160).default(""),
 });
-
-// A payment method code: one of the built-in four (CASH/CARD/CHECK/CREDIT) or
-// a custom one added in Settings (ZELLE, …). Not checked against the custom
-// list here — the pickers only ever offer real ones, and any value that
-// isn't CARD/CREDIT/CHECK is handled as plain tender.
-export const paymentMethodSchema = z
-  .string()
-  .trim()
-  .min(1)
-  .max(40)
-  .transform((s) => s.toUpperCase());
 
 // KY/TN delivery-based tax jurisdiction, sent by the register only for a
 // store whose rate matches a known profile (see src/lib/taxJurisdiction.ts) —

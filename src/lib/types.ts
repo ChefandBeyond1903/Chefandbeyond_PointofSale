@@ -300,6 +300,7 @@ export interface Expense {
   expenseDate: string;
   memo: string;
   status: ExpenseStatus;
+  paymentMethod: string;
   storeId: string | null;
   store?: { id: string; name: string } | null;
   poId?: string | null;
@@ -316,6 +317,7 @@ export interface RecurringExpense {
   amountCents: number;
   memo: string;
   status: ExpenseStatus;
+  paymentMethod: string;
   frequency: RecurFrequency;
   nextDate: string;
   active: boolean;
@@ -709,6 +711,8 @@ export interface ReportSummary {
   };
   /** Operating expenses grouped by category, largest first. */
   expensesByCategory: { category: string; amountCents: number }[];
+  /** Operating expenses grouped by how they were paid, largest first. */
+  expensesByPaymentMethod: { method: string; amountCents: number; count: number }[];
   byStore: ProfitRow[];
   byStaff: ProfitRow[];
   byPaymentMethod: { method: string; count: number; totalCents: number }[];

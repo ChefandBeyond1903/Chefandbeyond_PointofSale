@@ -6,6 +6,8 @@ import { formatMoney } from "@/lib/money";
 import { formatDateOnly } from "@/lib/date";
 import { MoneyInput } from "@/components/MoneyInput";
 import { RECUR_FREQUENCY_LABEL } from "@/lib/recur";
+import { methodLabel } from "@/lib/payments";
+import { PaymentMethodSelect, usePaymentMethods } from "@/components/PaymentMethodPicker";
 import type { DateRange } from "@/lib/dateRange";
 import type { Expense, RecurringExpense, Store } from "@/lib/types";
 
@@ -51,10 +53,13 @@ export function ExpensesPanel({
     expenseDate: string;
     memo: string;
     status: "PAID" | "UNPAID";
+    paymentMethod: string;
     storeId: string;
   };
   const [edit, setEdit] = useState<EditForm | null>(null);
   const [editBusy, setEditBusy] = useState(false);
+
+  const [paymentMethods, setPaymentMethods] = usePaymentMethods();
 
   const [form, setForm] = useState({
     category: "",
@@ -65,6 +70,7 @@ export function ExpensesPanel({
     expenseDate: "",
     memo: "",
     status: "PAID" as "PAID" | "UNPAID",
+    paymentMethod: "CASH",
     storeId: "",
   });
 
@@ -175,6 +181,7 @@ export function ExpensesPanel({
           expenseDate: form.expenseDate,
           memo: form.memo.trim(),
           status: form.status,
+          paymentMethod: form.paymentMethod,
           ...(isAdmin && form.storeId ? { storeId: form.storeId } : {}),
         }),
       });
@@ -185,6 +192,7 @@ export function ExpensesPanel({
         expenseDate: todayInput(),
         memo: "",
         status: "PAID",
+        paymentMethod: "CASH",
         storeId: "",
       });
       load();
@@ -215,6 +223,7 @@ export function ExpensesPanel({
       expenseDate: r.expenseDate ? r.expenseDate.slice(0, 10) : todayInput(),
       memo: r.memo,
       status: r.status,
+      paymentMethod: r.paymentMethod || "CASH",
       storeId: r.storeId ?? "",
     });
   }
@@ -236,6 +245,7 @@ export function ExpensesPanel({
           expenseDate: edit.expenseDate,
           memo: edit.memo.trim(),
           status: edit.status,
+          paymentMethod: edit.paymentMethod,
           ...(isAdmin ? { storeId: edit.storeId || null } : {}),
         }),
       });
@@ -326,6 +336,15 @@ export function ExpensesPanel({
             <option value="UNPAID">Unpaid</option>
           </select>
         </div>
+        <div>
+          <label className="label">Payment method</label>
+          <PaymentMethodSelect
+            value={form.paymentMethod}
+            onChange={(code) => setForm({ ...form, paymentMethod: code })}
+            methods={paymentMethods}
+            onAdded={(m) => setPaymentMethods((cur) => [...cur, m])}
+          />
+        </div>
         {isAdmin && (
           <div>
             <label className="label">Store</label>
@@ -389,6 +408,7 @@ export function ExpensesPanel({
                                 <th className="px-4 py-2">Vendor</th>
                                 <th className="px-4 py-2">Notes</th>
                                 <th className="px-4 py-2">Store</th>
+                                <th className="px-4 py-2">Payment</th>
                                 <th className="px-4 py-2 text-right">Amount</th>
                                 <th className="px-4 py-2">Status</th>
                                 <th className="px-4 py-2"></th>
@@ -405,6 +425,9 @@ export function ExpensesPanel({
                                   <td className="px-4 py-2 text-zinc-500">
                                     {r.store?.name.replace(/^Chef and Beyond - /, "") ??
                                       "Company-wide"}
+                                  </td>
+                                  <td className="px-4 py-2 text-zinc-500">
+                                    {methodLabel(r.paymentMethod, paymentMethods)}
                                   </td>
                                   <td className="px-4 py-2 text-right font-medium">
                                     {formatMoney(r.amountCents)}
@@ -553,6 +576,15 @@ export function ExpensesPanel({
                     </select>
                   </div>
                 )}
+                <div>
+                  <label className="label">Payment method</label>
+                  <PaymentMethodSelect
+                    value={edit.paymentMethod}
+                    onChange={(code) => setEdit({ ...edit, paymentMethod: code })}
+                    methods={paymentMethods}
+                    onAdded={(m) => setPaymentMethods((cur) => [...cur, m])}
+                  />
+                </div>
               </div>
             </div>
             <div className="mt-5 flex gap-2">
@@ -584,6 +616,7 @@ type RecurForm = {
   amountCents: number;
   memo: string;
   status: "PAID" | "UNPAID";
+  paymentMethod: string;
   frequency: (typeof FREQUENCIES)[number];
   nextDate: string;
   storeId: string;
@@ -595,6 +628,7 @@ const emptyRecurForm = (): RecurForm => ({
   amountCents: 0,
   memo: "",
   status: "PAID",
+  paymentMethod: "CASH",
   frequency: "MONTHLY",
   nextDate: recurTodayISO(),
   storeId: "",
@@ -620,6 +654,7 @@ function RecurringExpensesSection({
   const [busy, setBusy] = useState(false);
   const [posting, setPosting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [paymentMethods, setPaymentMethods] = usePaymentMethods();
 
   const load = useCallback(async () => {
     try {
@@ -653,6 +688,7 @@ function RecurringExpensesSection({
           amountCents: form.amountCents,
           memo: form.memo.trim(),
           status: form.status,
+          paymentMethod: form.paymentMethod,
           frequency: form.frequency,
           nextDate: form.nextDate,
           ...(isAdmin && form.storeId ? { storeId: form.storeId } : {}),
@@ -820,6 +856,15 @@ function RecurringExpensesSection({
               <option value="UNPAID">Unpaid</option>
             </select>
           </div>
+          <div>
+            <label className="label">Payment method</label>
+            <PaymentMethodSelect
+              value={form.paymentMethod}
+              onChange={(code) => setForm({ ...form, paymentMethod: code })}
+              methods={paymentMethods}
+              onAdded={(m) => setPaymentMethods((cur) => [...cur, m])}
+            />
+          </div>
           <div className={isAdmin ? "sm:col-span-2" : "sm:col-span-3"}>
             <label className="label">Memo (optional)</label>
             <input
@@ -861,6 +906,7 @@ function RecurringExpensesSection({
                 <th className="py-1.5">Category</th>
                 <th className="py-1.5">Payee</th>
                 <th className="py-1.5">Repeats</th>
+                <th className="py-1.5">Payment</th>
                 <th className="py-1.5">Next</th>
                 <th className="py-1.5 text-right">Amount</th>
                 <th className="py-1.5"></th>
@@ -872,6 +918,7 @@ function RecurringExpensesSection({
                   <td className="py-2 font-medium">{r.category}</td>
                   <td className="py-2 text-zinc-500">{r.payee || "—"}</td>
                   <td className="py-2 text-zinc-500">{RECUR_FREQUENCY_LABEL[r.frequency]}</td>
+                  <td className="py-2 text-zinc-500">{methodLabel(r.paymentMethod, paymentMethods)}</td>
                   <td
                     className={`py-2 ${isDue(r) ? "font-medium text-amber-700" : "text-zinc-500"}`}
                   >

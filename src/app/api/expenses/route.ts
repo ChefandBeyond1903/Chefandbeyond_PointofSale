@@ -15,6 +15,7 @@ const expenseSelect = {
   expenseDate: true,
   memo: true,
   status: true,
+  paymentMethod: true,
   storeId: true,
   store: { select: { id: true, name: true } },
   poId: true,
@@ -30,12 +31,14 @@ export async function GET(req: NextRequest) {
     const storeParam = searchParams.get("storeId")?.trim();
     const from = searchParams.get("from");
     const to = searchParams.get("to");
+    const paymentMethod = searchParams.get("paymentMethod")?.trim();
 
     const where: Prisma.ExpenseWhereInput = {};
     const scoped = scopeStoreId(actor);
     if (scoped) where.storeId = scoped;
     else if (storeParam) where.storeId = storeParam;
     if (status === "PAID" || status === "UNPAID") where.status = status;
+    if (paymentMethod) where.paymentMethod = paymentMethod.toUpperCase();
     if (from || to) {
       where.expenseDate = {};
       if (from) where.expenseDate.gte = new Date(from);
@@ -73,6 +76,7 @@ export async function POST(req: NextRequest) {
           expenseDate: f.expenseDate ? parseDateInput(f.expenseDate) : new Date(),
           memo: f.memo,
           status: f.status,
+          paymentMethod: f.paymentMethod,
           storeId,
           poId: f.poId ?? null,
           createdById: actor.id,

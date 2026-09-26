@@ -32,6 +32,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (f.amountCents !== undefined) data.amountCents = f.amountCents;
     if (f.memo !== undefined) data.memo = f.memo;
     if (f.status !== undefined) data.status = f.status;
+    if (f.paymentMethod !== undefined) data.paymentMethod = f.paymentMethod;
     if (f.frequency !== undefined) data.frequency = f.frequency;
     if (f.active !== undefined) data.active = f.active;
     if (f.nextDate !== undefined && f.nextDate) data.nextDate = parseDateInput(f.nextDate);

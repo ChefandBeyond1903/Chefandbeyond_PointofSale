@@ -17,6 +17,7 @@ const expenseSelect = {
   expenseDate: true,
   memo: true,
   status: true,
+  paymentMethod: true,
   storeId: true,
   store: { select: { id: true, name: true } },
   poId: true,
@@ -47,6 +48,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (f.expenseDate !== undefined) data.expenseDate = parseDateInput(f.expenseDate);
     if (f.memo !== undefined) data.memo = f.memo;
     if (f.status !== undefined) data.status = f.status;
+    if (f.paymentMethod !== undefined) data.paymentMethod = f.paymentMethod;
     // Only an admin may move an expense between stores.
     if (f.storeId !== undefined && actor.role === "ADMIN") {
       data.storeId = f.storeId || null;

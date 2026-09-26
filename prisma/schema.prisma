@@ -706,6 +706,9 @@ model Expense {
   expenseDate DateTime @default(now())
   memo        String   @default("")
   status      String   @default("PAID") // "PAID" | "UNPAID"
+  // How this bill was paid — "CASH" | "CARD" | "CHECK", or a custom method's
+  // code from PaymentMethod (e.g. "ZELLE").
+  paymentMethod String @default("CASH")
 
   storeId String?
   store   Store?  @relation(fields: [storeId], references: [id])
@@ -723,6 +726,7 @@ model Expense {
   @@index([expenseDate])
   @@index([status])
   @@index([poId])
+  @@index([paymentMethod])
 }
 
 /// A custom expense category added by a manager. The ready-made categories live
@@ -859,6 +863,8 @@ model RecurringExpense {
   memo        String   @default("")
   // Status the generated Expense gets ("PAID" | "UNPAID").
   status      String   @default("PAID")
+  // Payment method the generated Expense gets — same codes as Expense.paymentMethod.
+  paymentMethod String @default("CASH")
   // "WEEKLY" | "MONTHLY" | "QUARTERLY" | "YEARLY".
   frequency   String   @default("MONTHLY")
   // Next calendar day an expense should be posted for.
