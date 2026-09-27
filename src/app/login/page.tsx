@@ -1,18 +1,18 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { api, ApiError } from "@/lib/client";
 import type { SessionUser } from "@/lib/types";
 
 function LoginForm() {
-  const router = useRouter();
   const params = useSearchParams();
   const nextParam = params.get("next");
   const idleReason = params.get("reason") === "idle";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -27,8 +27,9 @@ function LoginForm() {
         body: JSON.stringify({ email, password, remember }),
       });
       // An admin with no explicit destination lands on their Overview.
-      router.push(nextParam || (user.role === "ADMIN" ? "/overview" : "/"));
-      router.refresh();
+      // A full page load (not a client-side route change) lets the browser
+      // notice a successful sign-in and offer to save / update the password.
+      window.location.assign(nextParam || (user.role === "ADMIN" ? "/overview" : "/"));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong");
       setBusy(false);
@@ -54,7 +55,7 @@ function LoginForm() {
 
         {idleReason && (
           <p className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-center text-sm text-amber-800">
-            You were signed out after 5 minutes of inactivity.
+            You were signed out after 10 minutes of inactivity.
           </p>
         )}
 
@@ -65,6 +66,7 @@ function LoginForm() {
             </label>
             <input
               id="email"
+              name="email"
               type="email"
               autoComplete="username"
               className="input"
@@ -78,15 +80,27 @@ function LoginForm() {
             <label className="label" htmlFor="password">
               Password
             </label>
-            <input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              className="input"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
+            <div className="relative">
+              <input
+                id="password"
+                name="password"
+                type={showPassword ? "text" : "password"}
+                autoComplete="current-password"
+                className="input pr-16"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute inset-y-0 right-0 px-3 text-xs font-medium text-indigo-600"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                aria-pressed={showPassword}
+              >
+                {showPassword ? "Hide" : "Show"}
+              </button>
+            </div>
           </div>
 
           <label className="flex items-center gap-2 text-sm text-zinc-600">

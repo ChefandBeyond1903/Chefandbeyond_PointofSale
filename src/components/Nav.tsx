@@ -158,12 +158,12 @@ export function Nav({ user }: { user: SessionUser }) {
     };
   }, [drawerOpen]);
 
-  // Auto sign-out after 5 minutes with no mouse/keyboard/touch/scroll
+  // Auto sign-out after 10 minutes with no mouse/keyboard/touch/scroll
   // activity anywhere on the page. Reads the current URL at fire time (not
   // the pathname prop) so it always lands back on wherever the user actually
   // was, even after they've navigated around since the effect first ran.
   useEffect(() => {
-    const IDLE_MS = 5 * 60 * 1000;
+    const IDLE_MS = 10 * 60 * 1000;
     let timer: ReturnType<typeof setTimeout>;
     async function idleLogout() {
       try {
