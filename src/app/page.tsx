@@ -389,6 +389,23 @@ export default function RegisterPage() {
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [authChecked, meId]);
 
+  // Arriving from a customer's "New invoice" button (/?customer=id): select
+  // that customer once the customer list is in. An in-progress cart is kept
+  // — only the customer is switched — so no ticket is ever lost.
+  const customerParam = useRef<string | null>(null);
+  useEffect(() => {
+    if (customerParam.current === null) {
+      customerParam.current = new URLSearchParams(window.location.search).get("customer") ?? "";
+      if (customerParam.current) window.history.replaceState(null, "", "/");
+    }
+    if (!customerParam.current || !authChecked || !ticketHydrated.current) return;
+    const match = customers.find((c) => c.id === customerParam.current);
+    if (!match) return;
+    customerParam.current = "";
+    selectCustomer(match);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customers, authChecked]);
+
   // Save the ticket on every change; drop it once the cart is empty.
   useEffect(() => {
     if (!ticketHydrated.current) return;

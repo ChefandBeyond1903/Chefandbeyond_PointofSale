@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
 import { formatPhone } from "@/lib/phone";
@@ -300,6 +301,27 @@ export function CustomersView({
     ? customers.filter((c) => (c.openBalanceCents ?? 0) > 0)
     : customers;
 
+  function openEdit(c: Customer) {
+    setDraft({
+      id: c.id,
+      name: c.name,
+      email: c.email,
+      phone: formatPhone(c.phone),
+      company: c.company,
+      street: c.street ?? "",
+      city: c.city ?? "",
+      ...stateToDraft(c.state),
+      zip: c.zip ?? "",
+      notes: c.notes,
+      taxExempt: c.taxExempt,
+      taxExemptCertNumber: c.taxExemptCertNumber ?? "",
+      taxExemptState: c.taxExemptState ?? "",
+      taxExemptExpiresAt: c.taxExemptExpiresAt ? c.taxExemptExpiresAt.slice(0, 10) : "",
+      paymentTerms: c.paymentTerms ?? "",
+      taxExemptDocName: c.taxExemptDocName ?? "",
+    });
+  }
+
   async function remove(c: Customer) {
     const warn =
       c._count && c._count.sales > 0
@@ -370,7 +392,11 @@ export function CustomersView({
               </EmptyRow>
             ) : (
               shownCustomers.map((c) => (
-                <tr key={c.id}>
+                <tr
+                  key={c.id}
+                  onClick={canManage ? () => openEdit(c) : undefined}
+                  className={canManage ? "cursor-pointer hover:bg-zinc-50" : undefined}
+                >
                   <td className="px-4 py-2.5 font-medium">
                     {c.name}
                     {c.taxExempt && (
@@ -420,45 +446,20 @@ export function CustomersView({
                       <span className="text-zinc-300">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                    {canManage ? (
-                      <>
-                        <button
-                          onClick={() =>
-                            setDraft({
-                              id: c.id,
-                              name: c.name,
-                              email: c.email,
-                              phone: formatPhone(c.phone),
-                              company: c.company,
-                              street: c.street ?? "",
-                              city: c.city ?? "",
-                              ...stateToDraft(c.state),
-                              zip: c.zip ?? "",
-                              notes: c.notes,
-                              taxExempt: c.taxExempt,
-                              taxExemptCertNumber: c.taxExemptCertNumber ?? "",
-                              taxExemptState: c.taxExemptState ?? "",
-                              taxExemptExpiresAt: c.taxExemptExpiresAt
-                                ? c.taxExemptExpiresAt.slice(0, 10)
-                                : "",
-                              paymentTerms: c.paymentTerms ?? "",
-                              taxExemptDocName: c.taxExemptDocName ?? "",
-                            })
-                          }
-                          className="btn-ghost text-xs"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => remove(c)}
-                          className="btn-ghost text-xs text-red-500"
-                        >
-                          Delete
-                        </button>
-                      </>
-                    ) : (
-                      <span className="text-xs text-zinc-300">—</span>
+                  <td
+                    className="px-4 py-2.5 text-right whitespace-nowrap"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Link href={`/?customer=${c.id}`} className="btn-ghost text-xs text-indigo-600">
+                      New invoice
+                    </Link>
+                    {canManage && (
+                      <button
+                        onClick={() => remove(c)}
+                        className="btn-ghost text-xs text-red-500"
+                      >
+                        Delete
+                      </button>
                     )}
                   </td>
                 </tr>
