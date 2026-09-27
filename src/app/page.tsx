@@ -232,8 +232,6 @@ export default function RegisterPage() {
   const [pwShow, setPwShow] = useState(false);
   const [pwError, setPwError] = useState<string | null>(null);
   const [pwBusy, setPwBusy] = useState(false);
-  // Custom payment methods (Zelle, …) added in Settings.
-  const [paymentMethods, setPaymentMethods] = useState<{ code: string; label: string }[]>([]);
   // Paired Stripe Terminal card readers (empty = record card sales by hand).
   const [readers, setReaders] = useState<ReaderOption[]>([]);
   const [readerTestMode, setReaderTestMode] = useState(false);
@@ -332,9 +330,6 @@ export default function RegisterPage() {
       .catch(() => {});
     api<{ people: { id: string; name: string; role?: string }[] }>("/api/salespeople")
       .then((r) => setSalespeople(r.people))
-      .catch(() => {});
-    api<{ methods: { code: string; label: string }[] }>("/api/payment-methods")
-      .then((r) => setPaymentMethods(r.methods))
       .catch(() => {});
     api<{ readers: ReaderOption[]; testMode: boolean }>("/api/terminal/readers")
       .then((r) => {
@@ -2411,7 +2406,6 @@ export default function RegisterPage() {
           total={totals.total}
           canDeposit={!!custId || custName.trim().length > 0}
           creditCents={selectedCustomer?.storeCreditCents ?? 0}
-          customMethods={paymentMethods}
           readers={isAdmin ? readers.filter((r) => r.storeId === sellStoreId) : readers}
           readerTestMode={readerTestMode}
           chargeDescription={`Sale at ${(isAdmin ? sellStore?.name : null) ?? company?.name ?? "Chef and Beyond"}`}
@@ -2588,7 +2582,6 @@ function PaymentModal({
   total,
   canDeposit,
   creditCents,
-  customMethods = [],
   readers = [],
   readerTestMode = false,
   chargeDescription = "Chef and Beyond POS sale",
@@ -2603,7 +2596,6 @@ function PaymentModal({
   total: number;
   canDeposit: boolean;
   creditCents?: number;
-  customMethods?: { code: string; label: string }[];
   readers?: ReaderOption[];
   readerTestMode?: boolean;
   chargeDescription?: string;
@@ -2637,14 +2629,10 @@ function PaymentModal({
   error: string | null;
 }) {
   const credit = creditCents ?? 0;
-  // Built-in tabs, then any custom methods (Zelle, …), then Store credit.
-  const methods: string[] = [
-    "CASH",
-    "CARD",
-    "CHECK",
-    ...customMethods.map((m) => m.code),
-    ...(credit > 0 ? ["CREDIT"] : []),
-  ];
+  // The register takes Card (the default), Cash and Check — plus Store credit
+  // when the customer has some. Methods added for bills (Zelle, …) aren't
+  // register tenders.
+  const methods: string[] = ["CARD", "CASH", "CHECK", ...(credit > 0 ? ["CREDIT"] : [])];
   const methodLabel = (code: string) =>
     code === "CASH"
       ? "Cash"
@@ -2654,8 +2642,8 @@ function PaymentModal({
           ? "Check"
           : code === "CREDIT"
             ? "Store credit"
-            : (customMethods.find((m) => m.code === code)?.label ?? code);
-  const [tab, setTab] = useState<string>("CASH");
+            : code;
+  const [tab, setTab] = useState<string>("CARD");
   const [checkNo, setCheckNo] = useState("");
   const [mode, setMode] = useState<"FULL" | "DEPOSIT">("FULL");
   const [deposit, setDeposit] = useState(total);
