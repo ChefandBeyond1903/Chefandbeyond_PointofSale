@@ -434,6 +434,8 @@ model Sale {
   @@index([cashierId])
   @@index([salespersonId])
   @@index([storeId])
+  @@index([status, paidAt])
+  @@index([paidAt])
 }
 
 // Audit trail for a manual tax-jurisdiction override at the register — who

@@ -37,20 +37,26 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
   if (bearer) {
     const row = await prisma.user.findFirst({
       where: { sessionToken: bearer, active: true },
-      select: { id: true, email: true, name: true, role: true },
+      select: { id: true, email: true, name: true, role: true, storeId: true },
     });
-    return row ? { id: row.id, email: row.email, name: row.name, role: toRole(row.role) } : null;
+    return row
+      ? { id: row.id, email: row.email, name: row.name, role: toRole(row.role), storeId: row.storeId ?? null }
+      : null;
   }
 
   const supabase = await supabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
+  // Verified locally (signing keys are cached) — the proxy already refreshed
+  // the session, and the DB checks below still gate deactivated staff and
+  // superseded logins on every request.
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const authId = claimsData?.claims?.sub;
+  if (!authId) return null;
 
   const row = await prisma.user.findUnique({
-    where: { authId: user.id },
-    select: { id: true, email: true, name: true, role: true, active: true, sessionToken: true },
+    where: { authId },
+    select: {
+      id: true, email: true, name: true, role: true, active: true, sessionToken: true, storeId: true,
+    },
   });
   if (!row || !row.active) return null;
 
@@ -61,7 +67,7 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
     if (cookieToken !== row.sessionToken) return null;
   }
 
-  return { id: row.id, email: row.email, name: row.name, role: toRole(row.role) };
+  return { id: row.id, email: row.email, name: row.name, role: toRole(row.role), storeId: row.storeId ?? null };
 });
 
 export class HttpError extends Error {

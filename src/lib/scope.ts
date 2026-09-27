@@ -12,15 +12,10 @@ export interface ScopedUser extends SessionUser {
  * a role/store change takes effect without a re-login.
  */
 export async function requireScopedUser(): Promise<ScopedUser> {
+  // getCurrentUser already read the role, store and active flag fresh from
+  // the DB for this request (and returns null for inactive staff).
   const s = await requireUser();
-  const row = await prisma.user.findUnique({
-    where: { id: s.id },
-    select: { role: true, storeId: true, active: true },
-  });
-  if (!row || !row.active) throw new HttpError(401, "Not signed in");
-  const role: Role =
-    row.role === "ADMIN" ? "ADMIN" : row.role === "MANAGER" ? "MANAGER" : "CASHIER";
-  return { ...s, role, storeId: row.storeId ?? null };
+  return { ...s, storeId: s.storeId ?? null };
 }
 
 /** Like requireScopedUser, but 403s unless the role is one of `roles`. */

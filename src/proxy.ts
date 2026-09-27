@@ -46,9 +46,11 @@ export async function proxy(req: NextRequest) {
     },
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // getClaims verifies the session JWT locally against the project's cached
+  // signing keys (refreshing an expired session first) — no round trip to
+  // Supabase Auth on every request, unlike getUser().
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const user = claimsData?.claims ?? null;
 
   const { pathname } = req.nextUrl;
   if (isPublic(pathname)) return res;
@@ -56,7 +58,7 @@ export async function proxy(req: NextRequest) {
   if (user) {
     // pos_role is stamped into app_metadata when the account is created (and
     // on role changes), so this gate needs no database round-trip.
-    const role = user.app_metadata?.pos_role;
+    const role = (user.app_metadata as { pos_role?: string } | undefined)?.pos_role;
     if (role === "CASHIER" && matchesPrefix(pathname, MANAGER_ONLY_PREFIXES)) {
       const url = req.nextUrl.clone();
       url.pathname = "/";

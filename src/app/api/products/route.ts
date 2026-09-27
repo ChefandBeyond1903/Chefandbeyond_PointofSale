@@ -79,28 +79,31 @@ export async function GET(req: NextRequest) {
     const scopedStore = scopeStoreId(actor);
     const stockStoreId = scopedStore ?? storeIdParam ?? null;
     const byProductStore = new Map<string, Map<string, number>>();
-    if (rows.length) {
-      const grouped = await prisma.storeInventory.groupBy({
-        by: ["productId", "storeId"],
-        _sum: { quantity: true },
-        where: { productId: { in: rows.map((r) => r.id) } },
-      });
-      for (const g of grouped) {
-        const m = byProductStore.get(g.productId) ?? new Map<string, number>();
-        m.set(g.storeId, g._sum.quantity ?? 0);
-        byProductStore.set(g.productId, m);
-      }
-    }
     // Every physical store's on-hand, purely informational — shown on the
     // register alongside the item, not selectable. The Website store isn't a
-    // physical location, so it's left out of this breakdown.
-    const displayStores = rows.some((r) => r.trackStock)
-      ? await prisma.store.findMany({
-          where: { active: true, name: { not: "Chef and Beyond - Website" } },
-          orderBy: { name: "asc" },
-          select: { id: true, name: true },
-        })
-      : [];
+    // physical location, so it's left out of this breakdown. Both lookups are
+    // independent, so they run together instead of back to back.
+    const [grouped, displayStores] = await Promise.all([
+      rows.length
+        ? prisma.storeInventory.groupBy({
+            by: ["productId", "storeId"],
+            _sum: { quantity: true },
+            where: { productId: { in: rows.map((r) => r.id) } },
+          })
+        : Promise.resolve([]),
+      rows.some((r) => r.trackStock)
+        ? prisma.store.findMany({
+            where: { active: true, name: { not: "Chef and Beyond - Website" } },
+            orderBy: { name: "asc" },
+            select: { id: true, name: true },
+          })
+        : Promise.resolve([]),
+    ]);
+    for (const g of grouped) {
+      const m = byProductStore.get(g.productId) ?? new Map<string, number>();
+      m.set(g.storeId, g._sum.quantity ?? 0);
+      byProductStore.set(g.productId, m);
+    }
 
     const products = rows.map((p) => {
       const storeMap = byProductStore.get(p.id);
