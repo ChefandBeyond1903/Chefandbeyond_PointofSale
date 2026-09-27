@@ -12,7 +12,7 @@ import {
   type DateRangePresetKey,
 } from "@/lib/dateRange";
 
-type Selection = DateRangePresetKey | "custom";
+type Selection = DateRangePresetKey | "custom" | "all";
 
 /**
  * A preset date-range dropdown (Today, This week, Last quarter, …) plus a
@@ -22,9 +22,15 @@ type Selection = DateRangePresetKey | "custom";
 export function DateRangePicker({
   defaultPreset = "today",
   onChange,
+  allowAll = false,
+  onClear,
   className = "",
 }: {
-  defaultPreset?: DateRangePresetKey;
+  /** "all" (needs allowAll) starts with no date filter applied. */
+  defaultPreset?: DateRangePresetKey | "all";
+  /** Adds an "All time" option; picking it calls onClear instead of onChange. */
+  allowAll?: boolean;
+  onClear?: () => void;
   /** `label` is the chosen preset's name (or "Custom range"); `key` is the
    *  preset key (or "custom"). */
   onChange: (range: DateRange, label: string, key: DateRangePresetKey | "custom") => void;
@@ -45,6 +51,10 @@ export function DateRangePicker({
 
   function handleSelect(next: Selection) {
     setSelection(next);
+    if (next === "all") {
+      onClear?.();
+      return;
+    }
     if (next !== "custom") {
       const label = DATE_RANGE_PRESETS.find((p) => p.key === next)?.label ?? "";
       onChange(resolvePreset(next), label, next);
@@ -77,6 +87,7 @@ export function DateRangePicker({
           </option>
         ))}
         <option value="custom">Custom…</option>
+        {allowAll && <option value="all">All time</option>}
       </select>
 
       {selection === "custom" && (

@@ -13,7 +13,7 @@ import { Badge } from "@/components/Badge";
 import { ListHeader, SearchBox, FilterChips, FilterToggle } from "@/components/ListToolbar";
 import { LoadingRow, EmptyRow } from "@/components/TableState";
 import { DateRangePicker } from "@/components/DateRangePicker";
-import type { DateRange } from "@/lib/dateRange";
+import { resolvePreset, type DateRange } from "@/lib/dateRange";
 import type { Sale, Store } from "@/lib/types";
 
 type Filter = "OPEN" | "PAID" | "REFUNDED" | "ALL";
@@ -34,14 +34,15 @@ export function InvoicesView({
 }) {
   const [term, setTerm] = useState(""); // what's typed in the box
   const [query, setQuery] = useState(""); // what we've actually searched for
-  const [filter, setFilter] = useState<Filter>("OPEN");
+  const [filter, setFilter] = useState<Filter>("PAID");
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [storeId, setStoreId] = useState(""); // "" = every store (admin only)
   const [stores, setStores] = useState<Store[]>([]);
-  // null = no date filter (every invoice, the long-standing default) — set
-  // once the picker is touched.
-  const [dateRange, setDateRange] = useState<DateRange | null>(null);
-  const [dateLabel, setDateLabel] = useState("");
+  // Starts on "This month" (matching the picker); null = "All time". The
+  // picker is remounted (pickerKey) when a deep link needs it to say All time.
+  const [dateRange, setDateRange] = useState<DateRange | null>(() => resolvePreset("this_month"));
+  const [dateLabel, setDateLabel] = useState("This month");
+  const [pickerKey, setPickerKey] = useState(0);
   const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -93,6 +94,13 @@ export function InvoicesView({
     if (params.get("overdue") === "1") {
       setOverdueOnly(true);
       if (!status) setFilter("OPEN");
+    }
+    // Balance-due / overdue links are about what's owed, whenever it was
+    // invoiced — don't hide older invoices behind the This-month default.
+    if (status || params.get("overdue") === "1") {
+      setDateRange(null);
+      setDateLabel("");
+      setPickerKey((k) => k + 1);
     }
     const open = params.get("open");
     if (open) {
@@ -168,23 +176,18 @@ export function InvoicesView({
             Overdue
           </FilterToggle>
           <DateRangePicker
-            defaultPreset="this_month"
+            key={pickerKey}
+            defaultPreset={pickerKey > 0 ? "all" : "this_month"}
+            allowAll
             onChange={(r, l) => {
               setDateRange(r);
               setDateLabel(l);
             }}
+            onClear={() => {
+              setDateRange(null);
+              setDateLabel("");
+            }}
           />
-          {dateRange && (
-            <button
-              onClick={() => {
-                setDateRange(null);
-                setDateLabel("");
-              }}
-              className="btn-ghost text-xs"
-            >
-              Clear dates
-            </button>
-          )}
           {selected.size > 0 && (
             <>
               <button onClick={() => setBulkPrintOpen(true)} className="btn-primary text-xs">

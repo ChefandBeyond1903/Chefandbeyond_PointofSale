@@ -148,23 +148,17 @@ export function BillsView({
           </select>
         )}
         <DateRangePicker
-          defaultPreset="this_month"
+          defaultPreset="all"
+          allowAll
           onChange={(r, l) => {
             setDateRange(r);
             setDateLabel(l);
           }}
+          onClear={() => {
+            setDateRange(null);
+            setDateLabel("");
+          }}
         />
-        {dateRange && (
-          <button
-            onClick={() => {
-              setDateRange(null);
-              setDateLabel("");
-            }}
-            className="btn-ghost text-xs"
-          >
-            Clear dates
-          </button>
-        )}
         <span className="text-xs text-zinc-400">
           {bills.length} shown{dateRange ? ` · ${dateLabel.toLowerCase()}` : ""}
         </span>
