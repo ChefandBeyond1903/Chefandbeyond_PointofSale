@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
+import { formatDateOnly } from "@/lib/date";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { resolvePreset, type DateRange } from "@/lib/dateRange";
 import type { PurchasesByVendorReport as PurchasesByVendorReportData } from "@/lib/types";
@@ -13,6 +15,16 @@ export function PurchasesByVendorReport({ isAdmin }: { isAdmin: boolean }) {
   const [data, setData] = useState<PurchasesByVendorReportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  function toggle(vendor: string) {
+    setExpanded((cur) => {
+      const next = new Set(cur);
+      if (next.has(vendor)) next.delete(vendor);
+      else next.add(vendor);
+      return next;
+    });
+  }
 
   const load = useCallback(async (from: Date, to: Date, store: string) => {
     setLoading(true);
@@ -97,8 +109,18 @@ export function PurchasesByVendorReport({ isAdmin }: { isAdmin: boolean }) {
                   </tr>
                 ) : (
                   data.rows.map((r) => (
-                    <tr key={r.vendor}>
-                      <td className="px-4 py-2 font-medium">{r.vendor}</td>
+                    <Fragment key={r.vendor}>
+                    <tr
+                      onClick={() => toggle(r.vendor)}
+                      className="cursor-pointer hover:bg-zinc-50"
+                      aria-expanded={expanded.has(r.vendor)}
+                    >
+                      <td className="px-4 py-2 font-medium">
+                        <span className="mr-1.5 inline-block w-3 text-xs text-zinc-400">
+                          {expanded.has(r.vendor) ? "▾" : "▸"}
+                        </span>
+                        {r.vendor}
+                      </td>
                       <td className="px-4 py-2 text-right text-zinc-500">{r.billCount}</td>
                       <td className="px-4 py-2 text-right">{formatMoney(r.paidCents)}</td>
                       <td className="px-4 py-2 text-right text-zinc-500">
@@ -108,6 +130,48 @@ export function PurchasesByVendorReport({ isAdmin }: { isAdmin: boolean }) {
                         {r.rebateCents > 0 ? formatMoney(r.rebateCents) : "—"}
                       </td>
                     </tr>
+                    {expanded.has(r.vendor) && (
+                      <tr className="bg-zinc-50/60">
+                        <td colSpan={5} className="px-4 pb-3 pt-1">
+                          <table className="w-full text-xs">
+                            <thead className="text-left uppercase tracking-wide text-zinc-400">
+                              <tr>
+                                <th className="py-1 pl-5">Purchase order</th>
+                                <th className="py-1">Bill #</th>
+                                <th className="py-1">Due</th>
+                                <th className="py-1">Paid</th>
+                                <th className="py-1 text-right">Amount</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-zinc-100">
+                              {r.bills.map((b) => (
+                                <tr key={b.id}>
+                                  <td className="py-1.5 pl-5">
+                                    {b.poId ? (
+                                      <Link
+                                        href={`/purchase-orders/${b.poId}`}
+                                        className="font-mono text-indigo-600 hover:underline"
+                                      >
+                                        {b.poNumber}
+                                      </Link>
+                                    ) : (
+                                      <span className="text-zinc-400">No PO</span>
+                                    )}
+                                  </td>
+                                  <td className="py-1.5 text-zinc-500">{b.billNumber || "—"}</td>
+                                  <td className="py-1.5 text-zinc-500">{formatDateOnly(b.dueDate)}</td>
+                                  <td className="py-1.5 text-zinc-500">{b.paidAt ? new Date(b.paidAt).toLocaleDateString() : "—"}</td>
+                                  <td className="py-1.5 text-right font-medium">
+                                    {formatMoney(b.amountCents)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   ))
                 )}
               </tbody>

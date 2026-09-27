@@ -34,7 +34,15 @@ export async function GET(req: NextRequest) {
         ? Promise.resolve([])
         : prisma.bill.findMany({
             where,
-            select: { vendor: true, subtotalCents: true, dueDate: true, paidAt: true },
+            select: {
+              id: true,
+              vendor: true,
+              billNumber: true,
+              subtotalCents: true,
+              dueDate: true,
+              paidAt: true,
+              po: { select: { id: true, poNumber: true } },
+            },
           }),
       prisma.store.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
       prisma.vendor.findMany({ select: { name: true, rebateBps: true } }),
@@ -47,12 +55,36 @@ export async function GET(req: NextRequest) {
 
     const rebateByVendor = new Map(vendors.map((v) => [v.name.trim().toLowerCase(), v.rebateBps]));
 
-    const byVendor = new Map<string, { billCount: number; paidCents: number }>();
+    const byVendor = new Map<
+      string,
+      {
+        billCount: number;
+        paidCents: number;
+        bills: {
+          id: string;
+          billNumber: string;
+          poId: string | null;
+          poNumber: string | null;
+          dueDate: string | null;
+          paidAt: string | null;
+          amountCents: number;
+        }[];
+      }
+    >();
     for (const b of bills) {
       const vendor = b.vendor?.trim() || "Unassigned";
-      const row = byVendor.get(vendor) ?? { billCount: 0, paidCents: 0 };
+      const row = byVendor.get(vendor) ?? { billCount: 0, paidCents: 0, bills: [] };
       row.billCount += 1;
       row.paidCents += b.subtotalCents;
+      row.bills.push({
+        id: b.id,
+        billNumber: b.billNumber,
+        poId: b.po?.id ?? null,
+        poNumber: b.po?.poNumber ?? null,
+        dueDate: b.dueDate?.toISOString() ?? null,
+        paidAt: b.paidAt?.toISOString() ?? null,
+        amountCents: b.subtotalCents,
+      });
       byVendor.set(vendor, row);
     }
 
@@ -63,6 +95,9 @@ export async function GET(req: NextRequest) {
           vendor,
           billCount: v.billCount,
           paidCents: v.paidCents,
+          bills: v.bills.sort((a, b) =>
+            (a.dueDate ?? a.paidAt ?? "").localeCompare(b.dueDate ?? b.paidAt ?? ""),
+          ),
           rebateBps,
           rebateCents: Math.round((v.paidCents * rebateBps) / 10_000),
         };

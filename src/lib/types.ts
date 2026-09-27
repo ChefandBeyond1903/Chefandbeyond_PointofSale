@@ -803,6 +803,15 @@ export interface PurchasesByVendorReport {
     vendor: string;
     billCount: number;
     paidCents: number;
+    bills: {
+      id: string;
+      billNumber: string;
+      poId: string | null;
+      poNumber: string | null;
+      dueDate: string | null;
+      paidAt: string | null;
+      amountCents: number;
+    }[];
     rebateBps: number;
     rebateCents: number;
   }[];
