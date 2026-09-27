@@ -575,6 +575,8 @@ model PurchaseOrder {
   shippingAddress   String    @default("")
   poDate            DateTime  @default(now())
   dueDate           DateTime?
+  // "", "Net 15", "Net 30", "Net 60", "Net 90", "Custom" — drives dueDate.
+  terms             String    @default("")
   shipVia           String    @default("")
   storeName         String    @default("")
   permitNumber      String    @default("")

@@ -94,6 +94,7 @@ export function BillModal({
       // bill is naturally dated to when the order was placed / due, not to
       // whenever someone happens to get around to copying it to a bill.
       if (recordBill) {
+        if (purchaseOrder.terms) setTerms(purchaseOrder.terms);
         if (purchaseOrder.poDate) setBillDate(toISO(new Date(purchaseOrder.poDate)));
         if (purchaseOrder.dueDate) {
           setDueDate(toISO(new Date(purchaseOrder.dueDate)));

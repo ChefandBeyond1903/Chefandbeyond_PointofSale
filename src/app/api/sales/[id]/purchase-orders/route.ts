@@ -96,6 +96,8 @@ export async function POST(req: NextRequest, { params }: Params) {
         status: "OPEN",
         subtotalCents,
         note: body.note,
+        // The PO is dated to the invoice it was raised from.
+        poDate: sale.createdAt,
         saleId: sale.id,
         storeId: sale.storeId,
         createdById: user.id,

@@ -9,6 +9,9 @@ export const BILL_TERMS = [
   "Custom",
 ] as const;
 
+/** Payment terms offered on a purchase order. */
+export const PO_TERMS = ["Net 15", "Net 30", "Net 60", "Net 90", "Custom"] as const;
+
 export type BillTerm = (typeof BILL_TERMS)[number] | "";
 
 /**

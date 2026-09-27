@@ -87,6 +87,7 @@ export async function POST(req: NextRequest) {
         shippingAddress: f.shippingAddress,
         poDate: f.poDate ? parseDateInput(f.poDate) : new Date(),
         dueDate: f.dueDate ? parseDateInput(f.dueDate) : null,
+        terms: f.terms,
         shipVia: f.shipVia,
         storeName: f.storeName,
         permitNumber: f.permitNumber,

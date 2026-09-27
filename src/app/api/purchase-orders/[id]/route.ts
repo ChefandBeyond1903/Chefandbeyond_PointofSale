@@ -60,7 +60,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       "vendor", "status", "poNumber", "note", "email", "ccBcc",
       "mailingAddress", "shipTo", "shippingAddress", "shipVia", "storeName",
       "permitNumber", "messageToCustomer", "poRef", "salesRep", "mobileNumber",
-      "messageToVendor", "memo",
+      "messageToVendor", "memo", "terms",
     ] as const;
     for (const k of scalars) {
       if (f[k] !== undefined) (data as Record<string, unknown>)[k] = f[k];

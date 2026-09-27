@@ -7,6 +7,7 @@ import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
 import { MoneyInput } from "@/components/MoneyInput";
 import { Badge } from "@/components/Badge";
+import { PO_TERMS, dueDateFromTerms } from "@/lib/terms";
 import type { Customer, PurchaseOrder, PurchaseOrderStatus, Store, Vendor } from "@/lib/types";
 
 const STATUSES: PurchaseOrderStatus[] = ["OPEN", "CLOSED", "SENT", "RECEIVED", "CANCELLED"];
@@ -122,6 +123,7 @@ export function PurchaseOrderForm({
   const [shippingAddress, setShippingAddress] = useState("");
   const [poDate, setPoDate] = useState(todayISO());
   const [dueDate, setDueDate] = useState("");
+  const [terms, setTerms] = useState("");
   const [shipVia, setShipVia] = useState("");
   const [storeName, setStoreName] = useState("");
   const [permitNumber, setPermitNumber] = useState("");
@@ -154,6 +156,7 @@ export function PurchaseOrderForm({
     setShippingAddress(po.shippingAddress);
     setPoDate(toDateInput(po.poDate) || todayISO());
     setDueDate(toDateInput(po.dueDate));
+    setTerms(po.terms ?? "");
     setShipVia(po.shipVia);
     setStoreName(po.storeName);
     setPermitNumber(po.permitNumber);
@@ -270,6 +273,17 @@ export function PurchaseOrderForm({
   );
   const grandTotal = itemTotal + shippingCents + dropShipFeeCents + taxCents + loggedExpensesTotal;
 
+  // Net terms set the due date from the PO date; Custom leaves it to be typed.
+  function applyTerms(t: string, date: string) {
+    const [y, m, day] = (date || todayISO()).split("-").map(Number);
+    const d = dueDateFromTerms(new Date(y, m - 1, day), t);
+    if (d) {
+      setDueDate(
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+      );
+    }
+  }
+
   // Pick a store or customer for "Ship to"; fill in their address (still editable).
   function onShipToPick(name: string) {
     setShipTo(name);
@@ -301,6 +315,7 @@ export function PurchaseOrderForm({
       shippingAddress,
       poDate: poDate || undefined,
       dueDate: dueDate || null,
+      terms,
       shipVia,
       storeName,
       permitNumber,
@@ -652,8 +667,29 @@ export function PurchaseOrderForm({
                 type="date"
                 className="input"
                 value={poDate}
-                onChange={(e) => setPoDate(e.target.value)}
+                onChange={(e) => {
+                  setPoDate(e.target.value);
+                  applyTerms(terms, e.target.value);
+                }}
               />
+            </div>
+            <div>
+              <label className="label">Terms</label>
+              <select
+                className="input"
+                value={terms}
+                onChange={(e) => {
+                  setTerms(e.target.value);
+                  applyTerms(e.target.value, poDate);
+                }}
+              >
+                <option value="">— None —</option>
+                {PO_TERMS.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="label">Due date</label>
@@ -709,6 +745,7 @@ export function PurchaseOrderForm({
               <span className="text-zinc-500">Items</span>
               <span>{formatMoney(itemTotal)}</span>
             </div>
+            {shippingCents > 0 && (
             <div className="flex items-center justify-between gap-3">
               <span className="text-zinc-500">Shipping charge</span>
               <MoneyInput
@@ -717,6 +754,8 @@ export function PurchaseOrderForm({
                 className="input h-8 w-28 text-right"
               />
             </div>
+            )}
+            {dropShipFeeCents > 0 && (
             <div className="flex items-center justify-between gap-3">
               <span className="text-zinc-500">Drop-ship fee</span>
               <MoneyInput
@@ -725,6 +764,8 @@ export function PurchaseOrderForm({
                 className="input h-8 w-28 text-right"
               />
             </div>
+            )}
+            {taxCents > 0 && (
             <div className="flex items-center justify-between gap-3">
               <span className="text-zinc-500">Tax</span>
               <MoneyInput
@@ -733,6 +774,7 @@ export function PurchaseOrderForm({
                 className="input h-8 w-28 text-right"
               />
             </div>
+            )}
             {loggedExpensesTotal > 0 && (
               <div className="flex items-center justify-between">
                 <span className="text-zinc-500">Other cost (below)</span>
@@ -890,8 +932,8 @@ export function PurchaseOrderForm({
         <section className="no-print card mt-4 p-4">
           <h3 className="mb-1 font-semibold">Other cost on this invoice</h3>
           <p className="mb-3 text-xs text-zinc-400">
-            Anything the vendor billed beyond items, shipping, drop-ship fee, and tax — log it
-            as an operating expense. It stays on this PO, adds to its total, and comes out of
+            Anything the vendor billed beyond the items — log it as an operating expense.
+            (Shipping, minimum order and drop-ship fees are entered on the bill.) It stays on this PO, adds to its total, and comes out of
             net profit under Reports &gt; Operating expenses.
           </p>
           {!id ? (

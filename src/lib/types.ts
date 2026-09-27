@@ -361,6 +361,7 @@ export interface PurchaseOrder {
   shippingAddress: string;
   poDate: string;
   dueDate: string | null;
+  terms?: string;
   shipVia: string;
   storeName: string;
   permitNumber: string;
