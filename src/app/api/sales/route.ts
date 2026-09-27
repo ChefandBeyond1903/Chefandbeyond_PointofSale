@@ -16,6 +16,7 @@ import { formatAddress } from "@/lib/address";
 import { ok, toErrorResponse } from "@/lib/api";
 import { verifyPaidIntent } from "@/lib/terminal";
 import { parseEventDate } from "@/lib/date";
+import { verifyAdminOverrideToken } from "@/lib/adminOverride";
 
 export async function GET(req: NextRequest) {
   try {
@@ -201,7 +202,10 @@ export async function POST(req: NextRequest) {
         where: {
           id: body.salespersonId,
           active: true,
-          ...(actor?.role === "ADMIN" ? {} : { storeId: actor?.storeId ?? "__none__" }),
+          // Admins are available as a salesperson at every store.
+          ...(actor?.role === "ADMIN"
+            ? {}
+            : { OR: [{ storeId: actor?.storeId ?? "__none__" }, { role: "ADMIN" }] }),
         },
         select: { id: true },
       });
@@ -281,7 +285,12 @@ export async function POST(req: NextRequest) {
     // minimum resale price — unless an admin is knowingly overriding it (the
     // register warns them but lets them proceed; everyone else is hard-stopped).
     const umrpById = new Map(products.map((p) => [p.id, p.umrpCents]));
-    if (user.role !== "ADMIN") {
+    // An admin's password entered at the register (salesperson = that admin)
+    // grants the same override to a cashier/manager for this sale.
+    const adminOverride =
+      user.role === "ADMIN" ||
+      verifyAdminOverrideToken(body.adminOverrideToken, user.id, body.salespersonId ?? user.id);
+    if (!adminOverride) {
       for (const l of computed.lines) {
         const umrp = umrpById.get(l.productId) ?? 0;
         if (umrp <= 0) continue;

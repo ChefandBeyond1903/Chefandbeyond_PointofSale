@@ -10,7 +10,9 @@ export async function GET() {
     const actor = await requireScopedUser();
     const where: Prisma.UserWhereInput = { active: true };
     const scoped = scopeStoreId(actor);
-    if (scoped) where.storeId = scoped;
+    // Everyone in the caller's store, plus the admins — an admin can be
+    // credited (after entering their password at the register) at any store.
+    if (scoped) where.OR = [{ storeId: scoped }, { role: "ADMIN" }];
 
     const people = await prisma.user.findMany({
       where,

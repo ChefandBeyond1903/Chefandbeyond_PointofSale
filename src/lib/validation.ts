@@ -352,6 +352,9 @@ export const saleCreateSchema = z.object({
     .optional(),
   // Staff credited with the sale. Omit to credit the signed-in operator.
   salespersonId: z.string().min(1).optional(),
+  // Proof an admin's password was entered at this register (see
+  // /api/auth/admin-override) — lets a non-admin operator use admin rights.
+  adminOverrideToken: z.string().max(600).optional(),
   // ADMIN only: the store to ring the sale at (tax rate, snapshots, inventory).
   // Ignored for everyone else — they always sell from their assigned store.
   storeId: z.string().min(1).optional(),
@@ -368,6 +371,7 @@ export const saleCreateSchema = z.object({
 // A price quote — same line-item shape as a sale, minus payment. items reuse
 // saleItemSchema; serialNumber is simply ignored server-side for a quote.
 export const quoteCreateSchema = z.object({
+  adminOverrideToken: z.string().max(600).optional(),
   items: z.array(saleItemSchema).min(1),
   orderDiscountCents: z.number().int().min(0).default(0),
   shippingCents: z.number().int().min(0).default(0),

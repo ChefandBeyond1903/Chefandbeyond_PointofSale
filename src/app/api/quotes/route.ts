@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { HttpError } from "@/lib/auth";
 import { requireScopedUser, scopeStoreId } from "@/lib/scope";
 import { quoteCreateSchema } from "@/lib/validation";
+import { verifyAdminOverrideToken } from "@/lib/adminOverride";
 import { computeSale, type PricedInput } from "@/lib/sale";
 import { formatMoney } from "@/lib/money";
 import { ok, toErrorResponse } from "@/lib/api";
@@ -156,7 +157,7 @@ export async function POST(req: NextRequest) {
 
     // UMRP floor — same hard stop as a sale, except an admin may override it.
     const umrpById = new Map(products.map((p) => [p.id, p.umrpCents]));
-    if (actor.role !== "ADMIN") {
+    if (actor.role !== "ADMIN" && !verifyAdminOverrideToken(body.adminOverrideToken, actor.id)) {
       for (const l of computed.lines) {
         const umrp = umrpById.get(l.productId) ?? 0;
         if (umrp <= 0) continue;

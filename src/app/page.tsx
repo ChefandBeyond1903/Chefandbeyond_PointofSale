@@ -215,8 +215,23 @@ export default function RegisterPage() {
   const [sellStoreId, setSellStoreId] = useState<string>("");
   const sellStoreLoaded = useRef(false);
   const [company, setCompany] = useState<Company | null>(null);
-  const [salespeople, setSalespeople] = useState<{ id: string; name: string }[]>([]);
+  const [salespeople, setSalespeople] = useState<{ id: string; name: string; role?: string }[]>([]);
   const [salespersonId, setSalespersonId] = useState<string>(""); // "" = signed-in operator
+  // Override rights: a cashier/manager picks an admin or store manager as the
+  // salesperson and types that person's password. The server hands back a
+  // short-lived signed token, sent with the sale so it can bypass the
+  // minimum-price rule. Held in memory only — a reload asks again.
+  const [override, setOverride] = useState<{
+    token: string;
+    personId: string;
+    name: string;
+    expiresAt: number;
+  } | null>(null);
+  const [pwTarget, setPwTarget] = useState<{ id: string; name: string } | null>(null);
+  const [pwValue, setPwValue] = useState("");
+  const [pwShow, setPwShow] = useState(false);
+  const [pwError, setPwError] = useState<string | null>(null);
+  const [pwBusy, setPwBusy] = useState(false);
   // Custom payment methods (Zelle, …) added in Settings.
   const [paymentMethods, setPaymentMethods] = useState<{ code: string; label: string }[]>([]);
   // Paired Stripe Terminal card readers (empty = record card sales by hand).
@@ -315,7 +330,7 @@ export default function RegisterPage() {
     api<{ company: Company }>("/api/company")
       .then((r) => setCompany(r.company))
       .catch(() => {});
-    api<{ people: { id: string; name: string }[] }>("/api/salespeople")
+    api<{ people: { id: string; name: string; role?: string }[] }>("/api/salespeople")
       .then((r) => setSalespeople(r.people))
       .catch(() => {});
     api<{ methods: { code: string; label: string }[] }>("/api/payment-methods")
@@ -475,7 +490,7 @@ export default function RegisterPage() {
   // field impossible to edit), this runs only when the user commits an edit —
   // see snapLineToUmrp, wired to the price/discount inputs' onCommit.
   function snapLineToUmrp(productId: string) {
-    if (isAdmin) return;
+    if (umrpOverride) return;
     setCart((cur) =>
       cur.map((l) => {
         if (l.product.id !== productId) return l;
@@ -540,6 +555,64 @@ export default function RegisterPage() {
       setCustId(null);
     }
   }
+
+  // Picking an admin or manager asks for their password before it takes
+  // effect; anyone else is selected straight away.
+  function chooseSalesperson(v: string) {
+    const target =
+      v === "__self"
+        ? { id: meId ?? "", name: meName ?? "you" }
+        : (() => {
+            const p = salespeople.find((x) => x.id === v);
+            return p && !isAdmin && (p.role === "ADMIN" || p.role === "MANAGER") && p.id !== meId
+              ? { id: p.id, name: p.name }
+              : null;
+          })();
+    if (target && target.id) {
+      setPwTarget(target);
+      setPwValue("");
+      setPwShow(false);
+      setPwError(null);
+      return;
+    }
+    if (v !== "__self") {
+      setSalespersonId(v);
+      setOverride(null);
+    }
+  }
+
+  async function submitOverridePassword() {
+    if (!pwTarget || pwBusy) return;
+    setPwBusy(true);
+    setPwError(null);
+    try {
+      const res = await api<{ token: string; expiresAt: number; adminName: string }>(
+        "/api/auth/admin-override",
+        { method: "POST", body: JSON.stringify({ adminId: pwTarget.id, password: pwValue }) },
+      );
+      setOverride({
+        token: res.token,
+        personId: pwTarget.id,
+        name: res.adminName,
+        expiresAt: res.expiresAt,
+      });
+      setSalespersonId(pwTarget.id === meId ? "" : pwTarget.id);
+      setPwTarget(null);
+      setPwValue("");
+    } catch (err) {
+      setPwError(err instanceof ApiError ? err.message : "Could not verify the password");
+    } finally {
+      setPwBusy(false);
+    }
+  }
+
+  // The token is only good for a while — drop the override when it lapses so
+  // the register never shows "on" for a token the server would reject.
+  useEffect(() => {
+    if (!override) return;
+    const t = setTimeout(() => setOverride(null), Math.max(0, override.expiresAt - Date.now()));
+    return () => clearTimeout(t);
+  }, [override]);
 
   // Register customer search — matches any field, not just the name.
   const custMatches = useMemo(() => {
@@ -690,6 +763,10 @@ export default function RegisterPage() {
   // sells from their own store. The picked store's name and tax rate drive the
   // register.
   const isAdmin = role === "ADMIN";
+  // Admins always may; anyone else only once the password of the admin/manager
+  // credited on this sale has been entered.
+  const umrpOverride =
+    isAdmin || (!!override && override.personId === (salespersonId || meId));
   const sellStore = isAdmin ? (stores.find((s) => s.id === sellStoreId) ?? null) : null;
   const sellStoreTaxRateBps = isAdmin ? (sellStore?.taxRateBps ?? null) : storeTaxRateBps;
   // Matching the website's own order number/date is only offered when
@@ -939,6 +1016,13 @@ export default function RegisterPage() {
     setManualTaxCents(0);
     setManualWebsiteOrderNumber("");
     setManualSaleDate("");
+    // Override rights end with the sale, and so does crediting another admin/
+    // manager who needed a password to select.
+    setOverride(null);
+    const credited = salespeople.find((p) => p.id === salespersonId);
+    if (credited && (credited.role === "ADMIN" || credited.role === "MANAGER") && !isAdmin) {
+      setSalespersonId("");
+    }
   }
 
   function customerPayload() {
@@ -987,6 +1071,7 @@ export default function RegisterPage() {
           orderDiscountCents: totals.orderDiscountResolved,
           shippingCents: totals.shipping,
           ...(salespersonId && salespersonId !== meId ? { salespersonId } : {}),
+      ...(override && umrpOverride && !isAdmin ? { adminOverrideToken: override.token } : {}),
           ...customerPayload(),
         }),
       });
@@ -1624,20 +1709,33 @@ export default function RegisterPage() {
               <select
                 className="input h-8 min-w-40 flex-1"
                 value={salespersonId}
-                onChange={(e) => setSalespersonId(e.target.value)}
+                onChange={(e) => chooseSalesperson(e.target.value)}
               >
                 <option value="">
                   {meName ?? salespeople.find((p) => p.id === meId)?.name ?? "Me"}
                 </option>
+                {role === "MANAGER" && (
+                  <option value="__self">Me — unlock override (password)</option>
+                )}
                 {salespeople
                   .filter((p) => p.id !== meId)
                   .map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
+                      {!isAdmin && (p.role === "ADMIN" || p.role === "MANAGER")
+                        ? p.role === "ADMIN"
+                          ? " (Admin — password)"
+                          : " (Manager — password)"
+                        : ""}
                     </option>
                   ))}
               </select>
-              {salespersonId && salespersonId !== meId && (
+              {!isAdmin && umrpOverride && (
+                <span className="shrink-0 whitespace-nowrap font-medium text-green-700">
+                  Override on
+                </span>
+              )}
+              {!isAdmin && !umrpOverride && salespersonId && salespersonId !== meId && (
                 <span className="shrink-0 whitespace-nowrap text-amber-600">credited to another</span>
               )}
             </div>
@@ -2197,9 +2295,9 @@ export default function RegisterPage() {
             {totals.umrpViolations.length > 0 && (
               <p className="text-xs text-red-700">
                 One or more items are below their minimum price — see the flagged lines above.
-                {isAdmin
-                  ? " As an admin you can still complete this sale."
-                  : " Ask an admin to override this sale."}
+                {umrpOverride
+                  ? " Admin override is on — you can still complete this sale."
+                  : " To override, choose an admin or your store manager as Salesperson and enter their password."}
               </p>
             )}
 
@@ -2224,7 +2322,7 @@ export default function RegisterPage() {
                 disabled={
                   cart.length === 0 ||
                   savingQuote ||
-                  (!isAdmin && totals.umrpViolations.length > 0) ||
+                  (!umrpOverride && totals.umrpViolations.length > 0) ||
                   locationNeeded ||
                   (isAdmin && !sellStoreId)
                 }
@@ -2258,7 +2356,7 @@ export default function RegisterPage() {
               onClick={() => setPayOpen(true)}
               disabled={
                 cart.length === 0 ||
-                (!isAdmin && totals.umrpViolations.length > 0) ||
+                (!umrpOverride && totals.umrpViolations.length > 0) ||
                 totals.noCostItems.length > 0 ||
                 locationNeeded ||
                 customerMissing ||
@@ -2334,6 +2432,55 @@ export default function RegisterPage() {
           onClose={() => setReceipt(null)}
           closeLabel="New sale"
         />
+      )}
+
+      {pwTarget && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"
+          onClick={() => setPwTarget(null)}
+        >
+          <form
+            className="card w-full max-w-sm space-y-3 p-5"
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={(e) => {
+              e.preventDefault();
+              submitOverridePassword();
+            }}
+          >
+            <h2 className="text-lg font-semibold">Enter {pwTarget.name}&rsquo;s password</h2>
+            <p className="text-xs text-zinc-500">
+              Needed to use admin rights (like selling below a minimum price) on this sale.
+            </p>
+            <div className="relative">
+              <input
+                type={pwShow ? "text" : "password"}
+                name="override-password"
+                autoComplete="off"
+                autoFocus
+                className="input pr-16"
+                value={pwValue}
+                onChange={(e) => setPwValue(e.target.value)}
+                aria-label="Password"
+              />
+              <button
+                type="button"
+                onClick={() => setPwShow((v) => !v)}
+                className="absolute inset-y-0 right-0 px-3 text-xs font-medium text-indigo-600"
+              >
+                {pwShow ? "Hide" : "Show"}
+              </button>
+            </div>
+            {pwError && <p className="rounded bg-red-50 px-3 py-2 text-xs text-red-700">{pwError}</p>}
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setPwTarget(null)} className="btn-secondary flex-1">
+                Cancel
+              </button>
+              <button type="submit" disabled={pwBusy || !pwValue} className="btn-primary flex-1">
+                {pwBusy ? "Checking…" : "Unlock"}
+              </button>
+            </div>
+          </form>
+        </div>
       )}
 
       {scanOpen && <ScannerModal onScan={resolveScan} onClose={() => setScanOpen(false)} />}
