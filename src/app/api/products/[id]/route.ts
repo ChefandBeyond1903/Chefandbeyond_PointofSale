@@ -76,11 +76,32 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       }
     }
 
+    // A bulk invoice import often can't know a product's real cost yet, so
+    // it's saved as $0 -- every past sale of it then shows 100% profit.
+    // When the cost is corrected here, re-stamp every past sale line that
+    // still carries the stale cost so profit reports catch up too. Only
+    // lines matching the OLD cost are touched, so a line that was correctly
+    // recorded at a genuinely different historical cost is left alone.
+    let previousCostCents: number | null = null;
+    if (data.costCents !== undefined) {
+      const existingCost = await prisma.product.findUnique({ where: { id }, select: { costCents: true } });
+      if (!existingCost) throw new HttpError(404, "Product not found");
+      previousCostCents = existingCost.costCents;
+    }
+
     const product = await prisma.product.update({
       where: { id },
       data,
       include: { category: { select: { id: true, name: true } } },
     });
+
+    if (previousCostCents !== null && previousCostCents !== product.costCents) {
+      await prisma.saleItem.updateMany({
+        where: { productId: id, unitCostCents: previousCostCents },
+        data: { unitCostCents: product.costCents },
+      });
+    }
+
     if (data.vendor !== undefined) await ensureVendor(product.vendor);
     // Favoriting a product for the register also favorites its category, so
     // the category shows up as a tile there without a separate step.
