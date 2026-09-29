@@ -726,11 +726,31 @@ function RecurringExpensesSection({
     }
   }
 
+  const isDue = (r: RecurringExpense) =>
+    r.active && new Date(r.nextDate).getTime() <= Date.now();
+
+  // Reviewing the due templates before posting — not every due bill has
+  // actually been paid yet just because it's due, so each one gets its own
+  // Paid/Unpaid choice (seeded from the template's own default) instead of
+  // the old one-click "post everything as paid".
+  const [postReviewOpen, setPostReviewOpen] = useState(false);
+  const [postStatuses, setPostStatuses] = useState<Record<string, "PAID" | "UNPAID">>({});
+  const dueRows = rows.filter(isDue);
+
+  function openPostReview() {
+    setPostStatuses(Object.fromEntries(dueRows.map((r) => [r.id, r.status])));
+    setPostReviewOpen(true);
+  }
+
   async function postDue() {
     setPosting(true);
     setErr(null);
     try {
-      const r = await api<{ posted: number }>("/api/recurring-expenses/run", { method: "POST" });
+      const r = await api<{ posted: number }>("/api/recurring-expenses/run", {
+        method: "POST",
+        body: JSON.stringify({ statuses: postStatuses }),
+      });
+      setPostReviewOpen(false);
       await load();
       onPosted();
       if (r.posted === 0) setErr("Nothing was due.");
@@ -740,9 +760,6 @@ function RecurringExpensesSection({
       setPosting(false);
     }
   }
-
-  const isDue = (r: RecurringExpense) =>
-    r.active && new Date(r.nextDate).getTime() <= Date.now();
 
   // Normalizes every active template to a monthly-equivalent amount so mixed
   // frequencies (weekly, quarterly, yearly…) roll up into one comparable
@@ -775,9 +792,9 @@ function RecurringExpensesSection({
             ≈ {formatMoney(monthlyTotalCents)}/mo
           </span>
         )}
-        {dueCount > 0 && (
-          <button onClick={postDue} disabled={posting} className="btn-primary ml-auto h-8 text-xs">
-            {posting ? "Posting…" : `Post ${dueCount} due`}
+        {dueCount > 0 && !postReviewOpen && (
+          <button onClick={openPostReview} className="btn-primary ml-auto h-8 text-xs">
+            Review {dueCount} due
           </button>
         )}
         <button
@@ -789,6 +806,43 @@ function RecurringExpensesSection({
       </div>
 
       {err && <p className="mb-2 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{err}</p>}
+
+      {postReviewOpen && (
+        <div className="mb-3 rounded-md border border-zinc-200 p-3">
+          <p className="mb-2 text-xs text-zinc-500">
+            Mark which of these you&rsquo;ve actually paid — the rest still post, just as unpaid.
+          </p>
+          <ul className="mb-3 divide-y divide-zinc-100 text-sm">
+            {dueRows.map((r) => (
+              <li key={r.id} className="flex items-center justify-between gap-3 py-1.5">
+                <span>
+                  <span className="font-medium">{r.category}</span>
+                  {r.payee && <span className="text-zinc-400"> · {r.payee}</span>}
+                  <span className="ml-2 text-zinc-400">{formatMoney(r.amountCents)}</span>
+                </span>
+                <label className="flex shrink-0 items-center gap-1.5 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={postStatuses[r.id] === "PAID"}
+                    onChange={(e) =>
+                      setPostStatuses((cur) => ({ ...cur, [r.id]: e.target.checked ? "PAID" : "UNPAID" }))
+                    }
+                  />
+                  Paid
+                </label>
+              </li>
+            ))}
+          </ul>
+          <div className="flex gap-2">
+            <button onClick={() => setPostReviewOpen(false)} className="btn-secondary h-8 text-xs">
+              Cancel
+            </button>
+            <button onClick={postDue} disabled={posting} className="btn-primary h-8 text-xs">
+              {posting ? "Posting…" : `Post ${dueRows.length}`}
+            </button>
+          </div>
+        </div>
+      )}
 
       {open && (
         <form
