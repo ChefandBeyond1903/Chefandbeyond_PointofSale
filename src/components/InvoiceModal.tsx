@@ -181,7 +181,7 @@ export function InvoiceModal({
     setItemMenuIdx(null);
   }
 
-  function setItemField<K extends "quantity" | "unitPriceCents" | "serialNumber">(
+  function setItemField<K extends "quantity" | "unitPriceCents" | "discountCents" | "serialNumber">(
     idx: number,
     field: K,
     value: EditLine[K],
@@ -677,7 +677,7 @@ export function InvoiceModal({
 
                 <div className="mt-3">
                   <p className="mb-1.5 text-xs font-medium text-zinc-500">
-                    Items — replace a product or change its price/quantity
+                    Items — replace a product or change its price/quantity/discount
                   </p>
                   <div className="space-y-2">
                     {editItems.map((it, idx) => (
@@ -716,7 +716,12 @@ export function InvoiceModal({
                             </ul>
                           )}
                         </div>
-                        <div className="mt-1.5 flex items-center gap-1.5">
+                        <div className="mt-1 flex items-center gap-1.5 text-[10px] text-zinc-400">
+                          <span className="w-16 text-center">Qty</span>
+                          <span className="w-24 text-center">Price</span>
+                          <span className="w-24 text-center">Discount</span>
+                        </div>
+                        <div className="mt-0.5 flex items-center gap-1.5">
                           <input
                             type="number"
                             min={1}
@@ -729,6 +734,11 @@ export function InvoiceModal({
                           <MoneyInput
                             cents={it.unitPriceCents}
                             onCentsChange={(c) => setItemField(idx, "unitPriceCents", c)}
+                            className="input h-8 w-24 text-right"
+                          />
+                          <MoneyInput
+                            cents={it.discountCents}
+                            onCentsChange={(c) => setItemField(idx, "discountCents", Math.max(0, c))}
                             className="input h-8 w-24 text-right"
                           />
                           <input
@@ -759,7 +769,7 @@ export function InvoiceModal({
                   </button>
                   <p className="mt-1 text-[11px] text-zinc-400">
                     Same rules as ringing a sale apply — no item may go below its minimum resale
-                    price, and every item needs a cost on file.
+                    price (after its discount), and every item needs a cost on file.
                   </p>
                 </div>
 
