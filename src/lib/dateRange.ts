@@ -11,6 +11,10 @@ export type DateRangePresetKey =
   | "last_30_days"
   | "this_quarter"
   | "last_quarter"
+  | "q1"
+  | "q2"
+  | "q3"
+  | "q4"
   | "last_3_months"
   | "last_6_months"
   | "this_year"
@@ -26,6 +30,13 @@ export const DATE_RANGE_PRESETS: { key: DateRangePresetKey; label: string }[] = 
   { key: "last_30_days", label: "Last 30 days" },
   { key: "this_quarter", label: "This quarter" },
   { key: "last_quarter", label: "Last quarter" },
+  // Fixed calendar quarters of the current year (Jan–Mar, Apr–Jun, Jul–Sep,
+  // Oct–Dec) — unlike "This/Last quarter" above, these don't shift with
+  // today's date, so any quarter of this year can be picked at any time.
+  { key: "q1", label: "Q1 (Jan–Mar)" },
+  { key: "q2", label: "Q2 (Apr–Jun)" },
+  { key: "q3", label: "Q3 (Jul–Sep)" },
+  { key: "q4", label: "Q4 (Oct–Dec)" },
   { key: "last_3_months", label: "Last 3 months" },
   { key: "last_6_months", label: "Last 6 months" },
   { key: "this_year", label: "This year" },
@@ -84,6 +95,15 @@ function minusMonths(d: Date, n: number): Date {
   return x;
 }
 
+// A fixed calendar quarter (1-4) of `year` — Q1 = Jan 1–Mar 31, Q2 = Apr 1–Jun
+// 30, Q3 = Jul 1–Sep 30, Q4 = Oct 1–Dec 31 — regardless of today's date.
+function quarterRange(year: number, q: 1 | 2 | 3 | 4): DateRange {
+  const from = new Date(year, (q - 1) * 3, 1);
+  // Day 0 of the month after the quarter's last month = that last day.
+  const to = endOfDay(new Date(year, q * 3, 0));
+  return { from, to };
+}
+
 /** The concrete {from, to} for a preset, relative to `now` (local time). */
 export function resolvePreset(key: DateRangePresetKey, now: Date = new Date()): DateRange {
   switch (key) {
@@ -114,6 +134,14 @@ export function resolvePreset(key: DateRangePresetKey, now: Date = new Date()): 
       const thisQ = startOfQuarter(now);
       return { from: minusMonths(thisQ, 3), to: endOfDay(addDays(thisQ, -1)) };
     }
+    case "q1":
+      return quarterRange(now.getFullYear(), 1);
+    case "q2":
+      return quarterRange(now.getFullYear(), 2);
+    case "q3":
+      return quarterRange(now.getFullYear(), 3);
+    case "q4":
+      return quarterRange(now.getFullYear(), 4);
     case "last_3_months":
       return { from: minusMonths(startOfDay(now), 3), to: now };
     case "last_6_months":
