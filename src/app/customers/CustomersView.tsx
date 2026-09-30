@@ -214,6 +214,17 @@ export function CustomersView({
     return () => clearTimeout(t);
   }, [load]);
 
+  // Deep link from a related record (e.g. the header's global search):
+  // /customers?open=<id> opens that customer's drawer straight away.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("open");
+    if (!id) return;
+    window.history.replaceState(null, "", "/customers");
+    api<{ customer: Customer }>(`/api/customers/${id}`)
+      .then((r) => openEdit(r.customer))
+      .catch(() => setError("That customer couldn't be found."));
+  }, []);
+
   async function save() {
     if (!draft) return;
     setSaving(true);

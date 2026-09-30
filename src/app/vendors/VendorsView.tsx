@@ -71,6 +71,34 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
     load();
   }, [load]);
 
+  // Deep link from a related record (e.g. the header's global search):
+  // /vendors?open=<id> opens that vendor's edit drawer once the list is in.
+  const [pendingOpenId, setPendingOpenId] = useState<string | null>(null);
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("open");
+    if (id) {
+      setPendingOpenId(id);
+      window.history.replaceState(null, "", "/vendors");
+    }
+  }, []);
+  useEffect(() => {
+    if (!pendingOpenId) return;
+    const v = vendors.find((x) => x.id === pendingOpenId);
+    if (!v) return;
+    setDraft({
+      id: v.id,
+      name: v.name,
+      contact: v.contact,
+      email: v.email,
+      phone: v.phone,
+      address: v.address,
+      notes: v.notes,
+      freightMinimumCents: v.freightMinimumCents,
+      rebatePct: v.rebateBps ? String(v.rebateBps / 100) : "",
+    });
+    setPendingOpenId(null);
+  }, [vendors, pendingOpenId]);
+
   async function save() {
     if (!draft) return;
     setSaving(true);

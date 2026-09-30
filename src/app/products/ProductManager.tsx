@@ -158,6 +158,25 @@ export function ProductManager({
     load();
   }, [load]);
 
+  // Deep link from a related record (e.g. the header's global search):
+  // /products?open=<id> opens that product's edit drawer once the list is in.
+  const [pendingOpenId, setPendingOpenId] = useState<string | null>(null);
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("open");
+    if (id) {
+      setPendingOpenId(id);
+      window.history.replaceState(null, "", "/products");
+    }
+  }, []);
+  useEffect(() => {
+    if (!pendingOpenId) return;
+    const p = products.find((x) => x.id === pendingOpenId);
+    if (!p) return;
+    startEdit(p);
+    setPendingOpenId(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products, pendingOpenId]);
+
   const filtered = useMemo(() => {
     const s = q.trim();
     const list = s

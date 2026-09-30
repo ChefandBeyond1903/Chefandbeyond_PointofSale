@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
@@ -8,6 +8,8 @@ import { InvoiceModal } from "@/components/InvoiceModal";
 import { BillModal } from "@/components/BillModal";
 import { usePaged } from "@/lib/usePaged";
 import { Pager } from "@/components/Pager";
+import { SearchBox } from "@/components/ListToolbar";
+import { matchesSearch } from "@/lib/search";
 import type { PurchaseOrder, Sale } from "@/lib/types";
 
 const STATUSES = [
@@ -33,6 +35,7 @@ export function PurchaseOrdersView({ canManage = true }: { canManage?: boolean }
   const router = useRouter();
   const [pos, setPos] = useState<PurchaseOrder[]>([]);
   const [filter, setFilter] = useState<StatusFilter>("ALL");
+  const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,7 +65,15 @@ export function PurchaseOrdersView({ canManage = true }: { canManage?: boolean }
     load();
   }, [load]);
 
-  const pg = usePaged(pos);
+  const filtered = useMemo(() => {
+    const s = q.trim();
+    if (!s) return pos;
+    return pos.filter((po) =>
+      matchesSearch(s, [po.poNumber, po.vendor, po.sale?.number ? `#${po.sale.number}` : ""]),
+    );
+  }, [pos, q]);
+
+  const pg = usePaged(filtered);
 
   async function openInvoiceByNumber() {
     const n = parseInt(invoiceNo.trim(), 10);
@@ -92,6 +103,7 @@ export function PurchaseOrdersView({ canManage = true }: { canManage?: boolean }
     <div className="w-full flex-1 p-4">
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <h1 className="text-xl font-semibold">Purchase orders</h1>
+        <SearchBox value={q} onChange={setQ} placeholder="Search PO #, vendor, invoice #…" />
         <div className="ml-auto flex gap-1 rounded-md bg-zinc-100 p-1 text-sm">
           {STATUSES.map((s) => (
             <button
@@ -170,7 +182,9 @@ export function PurchaseOrdersView({ canManage = true }: { canManage?: boolean }
             ) : pg.total === 0 ? (
               <tr>
                 <td colSpan={9} className="px-4 py-8 text-center text-zinc-400">
-                  No purchase orders{filter === "ALL" ? " yet" : ` with status ${filter}`}.
+                  {q.trim()
+                    ? "No purchase orders match your search."
+                    : `No purchase orders${filter === "ALL" ? " yet" : ` with status ${filter}`}.`}
                 </td>
               </tr>
             ) : (

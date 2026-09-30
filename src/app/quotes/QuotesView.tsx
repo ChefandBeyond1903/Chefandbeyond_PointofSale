@@ -67,6 +67,16 @@ export function QuotesView({
       .catch(() => {});
   }, [isAdmin]);
 
+  // Deep link from a related record (e.g. the header's global search):
+  // /quotes?open=<id> opens that quote straight away.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("open");
+    if (id) {
+      setOpenQuoteId(id);
+      window.history.replaceState(null, "", "/quotes");
+    }
+  }, []);
+
   const pg = usePaged(quotes);
   const showStore = isAdmin && !storeId;
   const cols = showStore ? 6 : 5;

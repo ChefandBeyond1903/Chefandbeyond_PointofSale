@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import type { Role, SessionUser } from "@/lib/types";
 import { api } from "@/lib/client";
+import { GlobalSearch } from "@/components/GlobalSearch";
 
 const ALL: Role[] = ["CASHIER", "MANAGER", "ADMIN"];
 const STAFF_UP: Role[] = ["MANAGER", "ADMIN"];
@@ -96,6 +97,7 @@ export function Nav({ user }: { user: SessionUser }) {
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [newCounts, setNewCounts] = useState<Record<NewKey, number>>({
     vendors: 0,
     customers: 0,
@@ -257,7 +259,32 @@ export function Nav({ user }: { user: SessionUser }) {
             </span>
             POS
           </button>
+          <button
+            onClick={() => setMobileSearchOpen((v) => !v)}
+            className="ml-auto rounded-md p-2 text-zinc-500 hover:bg-zinc-50"
+            aria-label="Search everything"
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 18 18"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="8" cy="8" r="5.5" />
+              <path d="M16 16l-3.2-3.2" />
+            </svg>
+          </button>
         </div>
+        {mobileSearchOpen && (
+          <div className="border-t border-zinc-100 px-2 pb-2 pt-1.5 sm:hidden">
+            <GlobalSearch className="w-full" />
+          </div>
+        )}
 
         {/* Desktop bar: five workflow groups. */}
         <div className="mx-auto hidden w-full max-w-[1600px] flex-col px-4 sm:flex">
@@ -295,6 +322,7 @@ export function Nav({ user }: { user: SessionUser }) {
                 );
               })}
             </nav>
+            <GlobalSearch className="ml-2 hidden w-56 shrink-0 md:block lg:w-72" />
             <div className="flex shrink-0 items-center gap-3 pl-2 text-sm">
               <span className="hidden whitespace-nowrap text-zinc-500 sm:inline">
                 {user.name} · <span className="capitalize">{user.role.toLowerCase()}</span>
