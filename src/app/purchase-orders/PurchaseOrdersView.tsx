@@ -31,7 +31,13 @@ const STATUS_STYLE: Record<string, string> = {
   CANCELLED: "bg-zinc-100 text-zinc-500",
 };
 
-export function PurchaseOrdersView({ canManage = true }: { canManage?: boolean }) {
+export function PurchaseOrdersView({
+  canManage = true,
+  isAdmin = false,
+}: {
+  canManage?: boolean;
+  isAdmin?: boolean;
+}) {
   const router = useRouter();
   const [pos, setPos] = useState<PurchaseOrder[]>([]);
   const [filter, setFilter] = useState<StatusFilter>("ALL");
@@ -46,6 +52,8 @@ export function PurchaseOrdersView({ canManage = true }: { canManage?: boolean }
   const [fromInvoiceOpen, setFromInvoiceOpen] = useState(false);
   const [invoiceNo, setInvoiceNo] = useState("");
   const [resolving, setResolving] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -74,6 +82,74 @@ export function PurchaseOrdersView({ canManage = true }: { canManage?: boolean }
   }, [pos, q]);
 
   const pg = usePaged(filtered);
+  const pageIds = pg.pageItems.map((po) => po.id);
+  const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
+
+  function toggleOne(id: string) {
+    setSelected((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function togglePage() {
+    setSelected((cur) => {
+      const next = new Set(cur);
+      if (allPageSelected) pageIds.forEach((id) => next.delete(id));
+      else pageIds.forEach((id) => next.add(id));
+      return next;
+    });
+  }
+
+  async function deleteOne(po: PurchaseOrder) {
+    if (
+      !confirm(
+        `Delete purchase order ${po.poNumber}? This can't be undone. Any bills already recorded against it are kept, just unlinked from this PO.`,
+      )
+    ) {
+      return;
+    }
+    setDeleting(true);
+    setError(null);
+    try {
+      await api(`/api/purchase-orders/${po.id}`, { method: "DELETE" });
+      setSelected((cur) => {
+        const next = new Set(cur);
+        next.delete(po.id);
+        return next;
+      });
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not delete purchase order");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function deleteSelected() {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    if (
+      !confirm(
+        `Delete ${ids.length} purchase order${ids.length === 1 ? "" : "s"}? This can't be undone. Any bills already recorded against them are kept, just unlinked.`,
+      )
+    ) {
+      return;
+    }
+    setDeleting(true);
+    setError(null);
+    try {
+      await api("/api/purchase-orders", { method: "DELETE", body: JSON.stringify({ ids }) });
+      setSelected(new Set());
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not delete the selected purchase orders");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   async function openInvoiceByNumber() {
     const n = parseInt(invoiceNo.trim(), 10);
@@ -155,12 +231,38 @@ export function PurchaseOrdersView({ canManage = true }: { canManage?: boolean }
 
       {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      <Pager {...pg} className="mb-2 justify-end" />
+      <div className="mb-2 flex items-center gap-2">
+        {isAdmin && selected.size > 0 && (
+          <>
+            <button
+              onClick={deleteSelected}
+              disabled={deleting}
+              className="btn-secondary h-8 text-xs text-red-600 disabled:opacity-50"
+            >
+              {deleting ? "Deleting…" : `Delete selected (${selected.size})`}
+            </button>
+            <button onClick={() => setSelected(new Set())} className="btn-ghost h-8 text-xs">
+              Clear selection
+            </button>
+          </>
+        )}
+        <Pager {...pg} className="ml-auto" />
+      </div>
 
       <div className="card overflow-x-auto">
         <table className="w-full min-w-[720px] text-sm">
           <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
             <tr>
+              {isAdmin && (
+                <th className="w-8 px-4 py-2.5">
+                  <input
+                    type="checkbox"
+                    checked={allPageSelected}
+                    onChange={togglePage}
+                    aria-label="Select all purchase orders on this page"
+                  />
+                </th>
+              )}
               <th className="px-4 py-2.5">PO #</th>
               <th className="px-4 py-2.5">Vendor</th>
               <th className="px-4 py-2.5">Invoice</th>
@@ -175,13 +277,13 @@ export function PurchaseOrdersView({ canManage = true }: { canManage?: boolean }
           <tbody className="divide-y divide-zinc-100">
             {loading ? (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-zinc-400">
+                <td colSpan={isAdmin ? 10 : 9} className="px-4 py-8 text-center text-zinc-400">
                   Loading…
                 </td>
               </tr>
             ) : pg.total === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-zinc-400">
+                <td colSpan={isAdmin ? 10 : 9} className="px-4 py-8 text-center text-zinc-400">
                   {q.trim()
                     ? "No purchase orders match your search."
                     : `No purchase orders${filter === "ALL" ? " yet" : ` with status ${filter}`}.`}
@@ -194,6 +296,16 @@ export function PurchaseOrdersView({ canManage = true }: { canManage?: boolean }
                   onClick={() => router.push(`/purchase-orders/${po.id}`)}
                   className="cursor-pointer hover:bg-zinc-50"
                 >
+                  {isAdmin && (
+                    <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(po.id)}
+                        onChange={() => toggleOne(po.id)}
+                        aria-label={`Select PO ${po.poNumber}`}
+                      />
+                    </td>
+                  )}
                   <td className="px-4 py-2.5 font-mono font-semibold">{po.poNumber}</td>
                   <td className="px-4 py-2.5">{po.vendor}</td>
                   <td className="px-4 py-2.5 text-zinc-500">
@@ -259,6 +371,18 @@ export function PurchaseOrdersView({ canManage = true }: { canManage?: boolean }
                           </button>
                         )}
                       </>
+                    )}
+                    {isAdmin && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteOne(po);
+                        }}
+                        disabled={deleting}
+                        className="btn-ghost ml-1.5 h-7 text-xs text-red-500 disabled:opacity-50"
+                      >
+                        Delete
+                      </button>
                     )}
                   </td>
                 </tr>

@@ -1,9 +1,10 @@
 import { NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { requireRole } from "@/lib/auth";
 import { requireScopedUser, requireScopedRole, scopeStoreId } from "@/lib/scope";
 import { ok, toErrorResponse } from "@/lib/api";
-import { purchaseOrderFormSchema } from "@/lib/validation";
+import { purchaseOrderBulkDeleteSchema, purchaseOrderFormSchema } from "@/lib/validation";
 import { parseDateInput } from "@/lib/date";
 import { computeSubtotalCents, lineCreateData, uniquePoNumber } from "@/lib/purchaseOrder";
 
@@ -109,6 +110,23 @@ export async function POST(req: NextRequest) {
     });
 
     return ok({ purchaseOrder: po }, 201);
+  } catch (err) {
+    return toErrorResponse(err);
+  }
+}
+
+// Admin-only bulk delete, for the "select several rows, delete" flow on the
+// Purchase orders list. A PO's items and category lines cascade with it; any
+// bill or expense already recorded against it is just unlinked (poId set to
+// null) rather than deleted, so accounts-payable history and already-received
+// inventory stay intact — same as deleting one PO at a time via
+// /api/purchase-orders/[id].
+export async function DELETE(req: NextRequest) {
+  try {
+    await requireRole("ADMIN");
+    const { ids } = purchaseOrderBulkDeleteSchema.parse(await req.json());
+    const { count } = await prisma.purchaseOrder.deleteMany({ where: { id: { in: ids } } });
+    return ok({ count });
   } catch (err) {
     return toErrorResponse(err);
   }

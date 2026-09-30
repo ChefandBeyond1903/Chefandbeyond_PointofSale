@@ -687,3 +687,7 @@ export const purchaseOrderPatchSchema = z.object({
   categoryLines: z.array(poCategoryLineSchema).optional(),
   itemLines: z.array(poItemLineSchema).optional(),
 });
+
+export const purchaseOrderBulkDeleteSchema = z.object({
+  ids: z.array(z.string().min(1)).min(1).max(500),
+});
