@@ -7,8 +7,17 @@ import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
 import { MoneyInput } from "@/components/MoneyInput";
 import { Badge } from "@/components/Badge";
+import { QuickAddProductModal } from "@/components/QuickAddProductModal";
 import { PO_TERMS, dueDateFromTerms } from "@/lib/terms";
-import type { Customer, PurchaseOrder, PurchaseOrderStatus, Store, Vendor } from "@/lib/types";
+import type {
+  Category,
+  Customer,
+  Product,
+  PurchaseOrder,
+  PurchaseOrderStatus,
+  Store,
+  Vendor,
+} from "@/lib/types";
 
 const STATUSES: PurchaseOrderStatus[] = ["OPEN", "CLOSED", "SENT", "RECEIVED", "CANCELLED"];
 
@@ -95,6 +104,9 @@ export function PurchaseOrderForm({
   const [products, setProducts] = useState<ProductLite[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  // The item row that opened "Add new product" (null = closed).
+  const [quickAddRowKey, setQuickAddRowKey] = useState<string | null>(null);
   const [expenseCategories, setExpenseCategories] = useState<string[]>([]);
   const [loggedExpenses, setLoggedExpenses] = useState<
     { id: string; category: string; amountCents: number }[]
@@ -186,16 +198,18 @@ export function PurchaseOrderForm({
   useEffect(() => {
     (async () => {
       try {
-        const [v, p, s, c] = await Promise.all([
+        const [v, p, s, c, cat] = await Promise.all([
           api<{ vendors: Vendor[] }>("/api/vendors"),
           api<{ products: ProductLite[] }>("/api/products?take=5000"),
           api<{ stores: Store[] }>("/api/stores"),
           api<{ customers: Customer[] }>("/api/customers"),
+          api<{ categories: Category[] }>("/api/categories"),
         ]);
         setVendors(v.vendors);
         setProducts(p.products);
         setStores(s.stores);
         setCustomers(c.customers);
+        setCategories(cat.categories);
         if (canAddExpense) {
           api<{ categories: string[] }>("/api/expense-categories")
             .then((r) => setExpenseCategories(r.categories))
@@ -832,6 +846,7 @@ export function PurchaseOrderForm({
                       products={products}
                       onText={(t) => onProductPick(row.key, t)}
                       onSelect={(p) => onProductSelect(row.key, p)}
+                      onAddNew={() => setQuickAddRowKey(row.key)}
                     />
                   </td>
                   <td className="py-1 pr-2">
@@ -1094,6 +1109,32 @@ export function PurchaseOrderForm({
         </div>
       </div>
       )}
+
+      {quickAddRowKey &&
+        (() => {
+          const rowKey = quickAddRowKey;
+          return (
+            <QuickAddProductModal
+              initialName={itemLines.find((r) => r.key === rowKey)?.productService ?? ""}
+              categories={categories}
+              isAdmin={isAdmin}
+              onClose={() => setQuickAddRowKey(null)}
+              onCreated={(product: Product) => {
+                const lite: ProductLite = {
+                  id: product.id,
+                  name: product.name,
+                  sku: product.sku,
+                  costCents: product.costCents,
+                  description: product.description ?? null,
+                  vendor: product.vendor ?? "",
+                };
+                setProducts((cur) => [...cur, lite]);
+                onProductSelect(rowKey, lite);
+                setQuickAddRowKey(null);
+              }}
+            />
+          );
+        })()}
     </div>
   );
 }
@@ -1153,11 +1194,13 @@ function ProductPicker({
   products,
   onText,
   onSelect,
+  onAddNew,
 }: {
   value: string;
   products: ProductLite[];
   onText: (text: string) => void;
   onSelect: (p: ProductLite) => void;
+  onAddNew?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [rect, setRect] = useState<{ left: number; top: number; width: number } | null>(null);
@@ -1174,6 +1217,9 @@ function ProductPicker({
       })
       .slice(0, 30);
   }, [products, value]);
+
+  const exactMatch = products.some((p) => p.name.toLowerCase() === value.trim().toLowerCase());
+  const showAddNew = !!onAddNew && !!value.trim() && !exactMatch;
 
   useEffect(() => {
     if (!open) return;
@@ -1217,7 +1263,7 @@ function ProductPicker({
         }}
         onFocus={() => setOpen(true)}
       />
-      {open && rect && matches.length > 0 && (
+      {open && rect && (matches.length > 0 || showAddNew) && (
         <div
           ref={boxRef}
           className="fixed z-50 max-h-64 overflow-auto rounded-md border border-zinc-200 bg-white text-sm shadow-lg"
@@ -1237,6 +1283,20 @@ function ProductPicker({
               <span className="ml-2 text-xs text-zinc-400">{p.sku}</span>
             </button>
           ))}
+          {showAddNew && (
+            <button
+              type="button"
+              onClick={() => {
+                onAddNew?.();
+                setOpen(false);
+              }}
+              className={`block w-full px-3 py-1.5 text-left font-medium text-indigo-600 hover:bg-indigo-50 ${
+                matches.length > 0 ? "border-t border-zinc-100" : ""
+              }`}
+            >
+              {`+ Add “${value.trim()}” as a new product`}
+            </button>
+          )}
         </div>
       )}
     </>
