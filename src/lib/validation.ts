@@ -194,6 +194,10 @@ export const billUpdateSchema = z.object({
   terms: z.string().trim().max(40).optional(),
   memo: z.string().trim().max(2000).optional(),
   status: z.enum(["OPEN", "PAID"]).optional(),
+  // The day the bill was actually paid — set when marking PAID (default: now),
+  // or to correct it afterward (e.g. backdating a bill migrated from another
+  // POS well after the real payment date). Ignored while the bill stays OPEN.
+  paidAt: dateInput.optional(),
   paymentMethod: paymentMethodSchema.optional(),
   shippingCents: z.number().int().min(0).optional(),
   minOrderFeeCents: z.number().int().min(0).optional(),

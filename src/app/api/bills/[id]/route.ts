@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { HttpError } from "@/lib/auth";
 import { requireScopedUser, requireScopedRole, scopeStoreId } from "@/lib/scope";
 import { billUpdateSchema } from "@/lib/validation";
-import { parseDateInput } from "@/lib/date";
+import { parseDateInput, parseEventDate } from "@/lib/date";
 import { ensureVendor } from "@/lib/vendors";
 import { earlyPayDiscountCents, syncBillFeeExpenses } from "@/lib/billFees";
 import { ok, toErrorResponse } from "@/lib/api";
@@ -60,7 +60,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (body.dueDate !== undefined) data.dueDate = body.dueDate ? parseDateInput(body.dueDate) : null;
     if (body.status !== undefined) {
       data.status = body.status;
-      data.paidAt = body.status === "PAID" ? new Date() : null;
+      // parseEventDate never lands in the future and falls back to now when
+      // no date was given — same rule as backdating an invoice payment.
+      data.paidAt = body.status === "PAID" ? parseEventDate(body.paidAt) : null;
     }
     if (body.paymentMethod !== undefined) data.paymentMethod = body.paymentMethod;
     if (body.shippingCents !== undefined) data.shippingCents = body.shippingCents;
@@ -81,6 +83,15 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         include: { items: true },
       });
       if (!current) throw new HttpError(404, "Bill not found");
+
+      // Correct the paid date on a bill that's already PAID, without going
+      // through Reopen + Mark paid again — e.g. fixing a bill migrated from
+      // another POS where the data-entry date got stamped instead of the
+      // real payment date. A status change above already set data.paidAt;
+      // this only fires when paidAt is the only thing being touched.
+      if (body.status === undefined && body.paidAt !== undefined && current.status === "PAID") {
+        data.paidAt = parseEventDate(body.paidAt);
+      }
 
       let qtyChanged = false;
       if (body.lines && body.lines.length > 0) {

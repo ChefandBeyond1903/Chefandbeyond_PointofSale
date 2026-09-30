@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
-import { formatDateOnly } from "@/lib/date";
+import { formatDateOnly, todayInputValue } from "@/lib/date";
 import { MoneyInput } from "@/components/MoneyInput";
 import { BillAdjustments, type BillAdjustmentValues } from "@/components/BillAdjustments";
 import { earlyPayDiscountCents } from "@/lib/billFees";
@@ -297,6 +297,7 @@ function BillDetailModal({
     terms: "",
     dueDate: "",
     billDate: "",
+    paidAt: "",
     memo: "",
     paymentMethod: "CASH",
   });
@@ -323,6 +324,10 @@ function BillDetailModal({
         terms: res.bill.terms,
         dueDate: res.bill.dueDate ? res.bill.dueDate.slice(0, 10) : "",
         billDate: res.bill.billDate ? res.bill.billDate.slice(0, 10) : "",
+        // The date that will be stamped when "Mark paid" is clicked, or —
+        // once the bill is PAID — the date it was actually stamped, editable
+        // to correct a bill migrated from another POS after the fact.
+        paidAt: res.bill.paidAt ? res.bill.paidAt.slice(0, 10) : todayInputValue(),
         memo: res.bill.memo,
         paymentMethod: res.bill.paymentMethod || "CASH",
       });
@@ -490,6 +495,21 @@ function BillDetailModal({
                   className={`input ${canManage ? "" : "bg-zinc-50 text-zinc-400"}`}
                 />
               </div>
+              <div>
+                <label className="label">Paid date</label>
+                <input
+                  type="date"
+                  className="input"
+                  value={edit.paidAt}
+                  disabled={!canManage}
+                  onChange={(e) => setEdit({ ...edit, paidAt: e.target.value })}
+                />
+                <p className="mt-0.5 text-[11px] text-zinc-400">
+                  {bill.status === "PAID"
+                    ? "When this bill was actually paid — edit and Save changes to correct it."
+                    : "Used when you click Mark paid — back-date it for a bill entered after the fact."}
+                </p>
+              </div>
             </div>
 
             <div className="overflow-x-auto">
@@ -654,6 +674,9 @@ function BillDetailModal({
                       terms: edit.terms,
                       billDate: edit.billDate || undefined,
                       dueDate: edit.dueDate || null,
+                      // Only takes effect while the bill is already PAID —
+                      // it's how a wrong paid date gets corrected.
+                      ...(bill.status === "PAID" ? { paidAt: edit.paidAt || undefined } : {}),
                       memo: edit.memo.trim(),
                       paymentMethod: edit.paymentMethod,
                       ...adj,
@@ -674,7 +697,13 @@ function BillDetailModal({
                 </button>
                 {bill.status === "OPEN" ? (
                   <button
-                    onClick={() => patch({ status: "PAID", paymentMethod: edit.paymentMethod })}
+                    onClick={() =>
+                      patch({
+                        status: "PAID",
+                        paymentMethod: edit.paymentMethod,
+                        paidAt: edit.paidAt || undefined,
+                      })
+                    }
                     disabled={busy}
                     className="btn-primary"
                   >
