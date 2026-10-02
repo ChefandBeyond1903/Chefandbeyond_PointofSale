@@ -8,6 +8,7 @@ import { formatMoney } from "@/lib/money";
 import { MoneyInput } from "@/components/MoneyInput";
 import { Badge } from "@/components/Badge";
 import { QuickAddProductModal } from "@/components/QuickAddProductModal";
+import { NewVendorModal } from "@/components/NewVendorModal";
 import { PO_TERMS, dueDateFromTerms } from "@/lib/terms";
 import type {
   Category,
@@ -97,8 +98,10 @@ export function PurchaseOrderForm({
   const router = useRouter();
   const isEdit = !!id;
   const isAdmin = role === "ADMIN";
-  // Cashiers can raise a PO but don't manage operating expenses.
+  // Cashiers can raise a PO but don't manage operating expenses or the vendor
+  // directory (matches the Vendors page's own canManage rule).
   const canAddExpense = role === "ADMIN" || role === "MANAGER";
+  const canAddVendor = role === "ADMIN" || role === "MANAGER";
 
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [products, setProducts] = useState<ProductLite[]>([]);
@@ -107,6 +110,7 @@ export function PurchaseOrderForm({
   const [categories, setCategories] = useState<Category[]>([]);
   // The item row that opened "Add new product" (null = closed).
   const [quickAddRowKey, setQuickAddRowKey] = useState<string | null>(null);
+  const [newVendorOpen, setNewVendorOpen] = useState(false);
   const [expenseCategories, setExpenseCategories] = useState<string[]>([]);
   const [loggedExpenses, setLoggedExpenses] = useState<
     { id: string; category: string; amountCents: number }[]
@@ -547,7 +551,13 @@ export function PurchaseOrderForm({
                 <select
                   className="input"
                   value={vendor}
-                  onChange={(e) => onVendorChange(e.target.value)}
+                  onChange={(e) => {
+                    if (e.target.value === "__add__") {
+                      setNewVendorOpen(true);
+                      return;
+                    }
+                    onVendorChange(e.target.value);
+                  }}
                 >
                   <option value="">Choose a vendor…</option>
                   {vendor && !vendors.some((v) => v.name === vendor) && (
@@ -558,6 +568,7 @@ export function PurchaseOrderForm({
                       {v.name}
                     </option>
                   ))}
+                  {canAddVendor && <option value="__add__">＋ Add new vendor…</option>}
                 </select>
               </div>
               <div>
@@ -1135,6 +1146,22 @@ export function PurchaseOrderForm({
             />
           );
         })()}
+
+      {newVendorOpen && (
+        <NewVendorModal
+          initialName={vendor && !vendors.some((v) => v.name === vendor) ? vendor : ""}
+          onClose={() => setNewVendorOpen(false)}
+          onCreated={(created) => {
+            setVendors((cur) => [...cur, created].sort((a, b) => a.name.localeCompare(b.name)));
+            setVendor(created.name);
+            if (!email || (prevVendorRef.current && email === prevVendorRef.current.email)) {
+              setEmail(created.email);
+            }
+            prevVendorRef.current = created;
+            setNewVendorOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }
