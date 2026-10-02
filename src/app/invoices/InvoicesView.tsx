@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
@@ -143,6 +144,11 @@ export function InvoicesView({
   return (
     <div className="w-full flex-1 p-4">
       <ListHeader title="Invoices">
+        {canManage && (
+          <Link href="/invoices/new" className="btn-primary">
+            + Create invoice
+          </Link>
+        )}
         <SearchBox
           mode="submit"
           value={term}

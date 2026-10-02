@@ -106,16 +106,23 @@ export async function POST(req: NextRequest) {
     let taxRateBps = sellStore?.taxRateBps ?? 0;
     const storeId = sellStore?.id ?? null;
 
-    // Matching the website's own order number, and backdating to when that
-    // order actually happened, only makes sense for sales rung against the
-    // website store — everywhere else keeps the normal auto-numbered, "now"
-    // behavior.
+    // Matching the website's own order number only makes sense for sales
+    // rung against the website store — everywhere else keeps the normal
+    // auto-numbered behavior.
     const isWebsiteStore = sellStore?.name === "Chef and Beyond - Website";
-    if ((body.websiteOrderNumber || body.saleDate) && !isWebsiteStore) {
-      throw new HttpError(
-        400,
-        "A website order number or custom date can only be used for the Website store.",
-      );
+    if (body.websiteOrderNumber && !isWebsiteStore) {
+      throw new HttpError(400, "A website order number can only be used for the Website store.");
+    }
+    // Backdating the sale is for a website order entered after the fact
+    // (any role, Website store only — unchanged) or an admin entering a
+    // historical invoice for any store. Setting the invoice number directly
+    // is always admin-only, regardless of store — it's never offered to
+    // anyone else in the UI.
+    if (body.saleDate && !isWebsiteStore && actor?.role !== "ADMIN") {
+      throw new HttpError(400, "Only an admin can set a custom invoice date for this store.");
+    }
+    if (body.number !== undefined && actor?.role !== "ADMIN") {
+      throw new HttpError(400, "Only an admin can set a custom invoice number.");
     }
 
     // KY/TN delivery-based tax jurisdiction — only engages for a store whose
@@ -422,8 +429,15 @@ export async function POST(req: NextRequest) {
     if (body.dryRun) return ok({ ok: true, totalCents: total });
 
     const sale = await prisma.$transaction(async (tx) => {
-      const last = await tx.sale.findFirst({ orderBy: { number: "desc" }, select: { number: true } });
-      const number = (last?.number ?? 0) + 1;
+      let number: number;
+      if (body.number !== undefined) {
+        const clash = await tx.sale.findUnique({ where: { number: body.number }, select: { id: true } });
+        if (clash) throw new HttpError(409, `Invoice #${body.number} already exists.`);
+        number = body.number;
+      } else {
+        const last = await tx.sale.findFirst({ orderBy: { number: "desc" }, select: { number: true } });
+        number = (last?.number ?? 0) + 1;
+      }
       const saleDate = body.saleDate ? parseEventDate(body.saleDate) : new Date();
 
       // Resolve the customer: use the given id, else match by name/email, else

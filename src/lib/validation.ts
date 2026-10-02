@@ -326,6 +326,11 @@ export const saleCreateSchema = z.object({
   // often entered days or weeks later).
   websiteOrderNumber: z.string().trim().max(120).optional(),
   saleDate: z.string().trim().optional(),
+  // ADMIN only: set this invoice's number directly instead of auto-numbering
+  // the next one — for entering a historical invoice (e.g. migrated from
+  // another POS) under its real original number. Must not collide with an
+  // existing one.
+  number: z.number().int().positive().optional(),
   // Omitted when saving an unpaid invoice for a terms customer.
   paymentMethod: paymentMethodSchema.optional(),
   tenderedCents: z.number().int().min(0).default(0),
