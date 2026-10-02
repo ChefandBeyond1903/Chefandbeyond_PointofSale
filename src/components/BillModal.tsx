@@ -204,11 +204,8 @@ export function BillModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
-      <div
-        className="card max-h-[92vh] w-full max-w-3xl overflow-y-auto p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4">
+      <div className="card max-h-[92vh] w-full max-w-3xl overflow-y-auto p-6">
         {!po ? (
           <p className="text-sm text-zinc-500">{err ?? "Loading…"}</p>
         ) : (

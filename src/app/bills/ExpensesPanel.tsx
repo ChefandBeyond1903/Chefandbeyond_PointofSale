@@ -488,14 +488,8 @@ export function ExpensesPanel({
       />
 
       {edit && (
-        <div
-          className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"
-          onClick={() => setEdit(null)}
-        >
-          <div
-            className="card max-h-[90vh] w-full max-w-md overflow-y-auto p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4">
+          <div className="card max-h-[90vh] w-full max-w-md overflow-y-auto p-6">
             <h2 className="mb-4 text-lg font-semibold">Edit expense</h2>
             {error && (
               <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>

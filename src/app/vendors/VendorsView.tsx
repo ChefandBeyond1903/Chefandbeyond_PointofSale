@@ -253,14 +253,8 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
       )}
 
       {draft && (
-        <div
-          className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"
-          onClick={() => setDraft(null)}
-        >
-          <div
-            className="card max-h-[90vh] w-full max-w-md overflow-y-auto p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4">
+          <div className="card max-h-[90vh] w-full max-w-md overflow-y-auto p-6">
             <h2 className="mb-4 text-lg font-semibold">{draft.id ? "Edit vendor" : "New vendor"}</h2>
             <div className="space-y-3">
               <div>
