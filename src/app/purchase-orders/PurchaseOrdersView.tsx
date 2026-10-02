@@ -359,17 +359,19 @@ export function PurchaseOrdersView({
                             Receive
                           </button>
                         )}
-                        {(po._count?.bills ?? 0) === 0 && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setBillModal({ poId: po.id, mode: "bill" });
-                            }}
-                            className="btn-secondary ml-1.5 h-7 text-xs"
-                          >
-                            Copy to bill
-                          </button>
-                        )}
+                        {/* Always available, even after an earlier bill — goods
+                            and invoices often arrive in separate batches (a
+                            partial shipment, a different location, a vendor
+                            invoice that follows later), each billed on its own. */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setBillModal({ poId: po.id, mode: "bill" });
+                          }}
+                          className="btn-secondary ml-1.5 h-7 text-xs"
+                        >
+                          Copy to bill
+                        </button>
                       </>
                     )}
                     {isAdmin && (
