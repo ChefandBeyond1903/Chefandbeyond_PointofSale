@@ -16,7 +16,7 @@ type Line = {
   hasProduct: boolean;
   ordered: number;
   received: number;
-  now: string; // receive-now / bill-now qty
+  now: string; // receive-and-bill qty
   costCents: number;
 };
 
@@ -29,24 +29,22 @@ function toISO(d: Date) {
 }
 
 /**
- * Receive items against a PO, or copy it to a vendor bill — kept as two
- * separate actions (not combined) because a vendor sometimes invoices, and
- * wants paying, before the goods actually ship.
+ * Copy a purchase order to a vendor bill — receiving whatever quantity is
+ * entered and recording the bill for it in the same step. A PO is often
+ * received and billed in more than one pass (a partial shipment, goods from
+ * a different location, an invoice that follows later), so this only ever
+ * shows what's still outstanding — a line already fully received drops off
+ * the list — and can be opened again for whatever arrives next.
  */
 export function BillModal({
   poId,
-  mode,
   onClose,
   onDone,
 }: {
   poId: string;
-  mode: "receive" | "bill";
   onClose: () => void;
   onDone?: () => void;
 }) {
-  const receiveItems = mode === "receive";
-  const recordBill = mode === "bill";
-
   const [po, setPo] = useState<PurchaseOrder | null>(null);
   const [lines, setLines] = useState<Line[]>([]);
   const [err, setErr] = useState<string | null>(null);
@@ -93,25 +91,27 @@ export function BillModal({
       // Carry the PO's own date and due date over automatically — a vendor
       // bill is naturally dated to when the order was placed / due, not to
       // whenever someone happens to get around to copying it to a bill.
-      if (recordBill) {
-        if (purchaseOrder.terms) setTerms(purchaseOrder.terms);
-        if (purchaseOrder.poDate) setBillDate(toISO(new Date(purchaseOrder.poDate)));
-        if (purchaseOrder.dueDate) {
-          setDueDate(toISO(new Date(purchaseOrder.dueDate)));
-          setDueTouched(true);
-        }
+      if (purchaseOrder.terms) setTerms(purchaseOrder.terms);
+      if (purchaseOrder.poDate) setBillDate(toISO(new Date(purchaseOrder.poDate)));
+      if (purchaseOrder.dueDate) {
+        setDueDate(toISO(new Date(purchaseOrder.dueDate)));
+        setDueTouched(true);
       }
+      // Only what's still outstanding — a line already fully received has
+      // nothing left to copy to this (or any later) bill.
       setLines(
-        (purchaseOrder.items ?? []).map((it) => ({
-          id: it.id,
-          name: it.nameSnapshot || "—",
-          sku: it.skuSnapshot,
-          hasProduct: !!it.productId,
-          ordered: it.quantity,
-          received: it.receivedQuantity,
-          now: String(Math.max(0, it.quantity - it.receivedQuantity)),
-          costCents: it.unitCostCents,
-        })),
+        (purchaseOrder.items ?? [])
+          .filter((it) => it.quantity - it.receivedQuantity > 0)
+          .map((it) => ({
+            id: it.id,
+            name: it.nameSnapshot || "—",
+            sku: it.skuSnapshot,
+            hasProduct: !!it.productId,
+            ordered: it.quantity,
+            received: it.receivedQuantity,
+            now: String(Math.max(0, it.quantity - it.receivedQuantity)),
+            costCents: it.unitCostCents,
+          })),
       );
 
       if (meRes.user?.role === "ADMIN") {
@@ -152,15 +152,14 @@ export function BillModal({
   const itemsTotal = lines.reduce((s, l) => s + (parseInt(l.now || "0", 10) || 0) * l.costCents, 0);
   // Tax and any "other cost" expenses logged on the PO are one-time charges —
   // the first bill against this PO picks them up automatically; a later bill
-  // or receipt doesn't repeat them. (Shipping / drop-ship are in the fee
-  // inputs below.)
+  // doesn't repeat them. (Shipping / drop-ship are in the fee inputs below.)
   const isFirstBill = (po?.bills?.length ?? 0) === 0;
   const poExtraChargesCents =
     (po?.taxCents ?? 0) + (po?.expenses?.reduce((s, e) => s + e.amountCents, 0) ?? 0);
-  const extraChargesCents = recordBill && isFirstBill ? poExtraChargesCents : 0;
-  const feesCents = recordBill ? adj.shippingCents + adj.minOrderFeeCents + adj.dropShipFeeCents : 0;
-  const discountCents = recordBill ? earlyPayDiscountCents(itemsTotal, adj.earlyPayDiscountBps) : 0;
-  const creditCents = recordBill ? adj.vendorCreditCents : 0;
+  const extraChargesCents = isFirstBill ? poExtraChargesCents : 0;
+  const feesCents = adj.shippingCents + adj.minOrderFeeCents + adj.dropShipFeeCents;
+  const discountCents = earlyPayDiscountCents(itemsTotal, adj.earlyPayDiscountBps);
+  const creditCents = adj.vendorCreditCents;
   const total = itemsTotal + extraChargesCents + feesCents - discountCents - creditCents;
   const hasBreakdown = extraChargesCents + feesCents + discountCents + creditCents > 0;
 
@@ -173,7 +172,7 @@ export function BillModal({
       }))
       .filter((l) => l.receiveQty !== 0);
     if (payload.length === 0) {
-      setErr(`Enter a quantity to ${receiveItems ? "receive" : "bill"} on at least one line.`);
+      setErr("Enter a quantity on at least one line.");
       return;
     }
     setBusy(true);
@@ -182,14 +181,14 @@ export function BillModal({
       await api(`/api/purchase-orders/${poId}/bills`, {
         method: "POST",
         body: JSON.stringify({
-          recordBill,
-          receiveItems,
+          recordBill: true,
+          receiveItems: true,
           billNumber: billNumber.trim(),
           billDate,
           dueDate: dueDate || null,
           terms,
           memo: memo.trim(),
-          ...(recordBill ? adj : {}),
+          ...adj,
           ...(isAdmin && storeId ? { storeId } : {}),
           lines: payload,
         }),
@@ -212,31 +211,29 @@ export function BillModal({
           <>
             <div className="mb-1 flex items-center justify-between">
               <h2 className="text-lg font-semibold">
-                {recordBill ? "Copy to bill" : "Receive items"} ·{" "}
-                <span className="font-mono">{po.poNumber}</span>
+                Copy to bill · <span className="font-mono">{po.poNumber}</span>
               </h2>
               <button onClick={onClose} className="btn-ghost px-2 py-1 text-sm">
                 ✕
               </button>
             </div>
             <p className="mb-4 text-sm text-zinc-500">
-              {po.vendor} —{" "}
-              {recordBill ? (
-                <>records a vendor bill for this PO without changing received quantities.</>
-              ) : isAdmin ? (
-                <>received quantities post to the store chosen below. No bill is recorded here.</>
+              {po.vendor} — the quantity entered below is received{" "}
+              {isAdmin ? (
+                <>into the store chosen below</>
               ) : (
                 <>
-                  received quantities post to{" "}
+                  into{" "}
                   <span className="font-medium text-zinc-700">
                     {po.shipTo?.trim() ? `${po.shipTo.trim()}’s` : "the ordering store’s"}
                   </span>{" "}
-                  inventory (the &ldquo;Ship to&rdquo; store). No bill is recorded here.
+                  inventory (the &ldquo;Ship to&rdquo; store)
                 </>
-              )}
+              )}{" "}
+              and billed together.
             </p>
 
-            {recordBill && !isFirstBill && poExtraChargesCents > 0 && (
+            {!isFirstBill && poExtraChargesCents > 0 && (
               <p className="mb-4 text-xs text-zinc-400">
                 This PO&rsquo;s tax and other logged costs (
                 {formatMoney(poExtraChargesCents)}) were already added to its first bill — not
@@ -244,7 +241,7 @@ export function BillModal({
               </p>
             )}
 
-            {isAdmin && receiveItems && (
+            {isAdmin && (
               <div className="mb-4">
                 <label className="label">Receive into store</label>
                 <select
@@ -268,61 +265,63 @@ export function BillModal({
 
             {err && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{err}</p>}
 
-            {recordBill && (
-              <div className="mb-4 grid gap-3 sm:grid-cols-4">
-                <div>
-                  <label className="label">Bill no.</label>
-                  <input
-                    className="input"
-                    placeholder="Vendor invoice #"
-                    value={billNumber}
-                    onChange={(e) => setBillNumber(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="label">Bill date</label>
-                  <input
-                    type="date"
-                    className="input"
-                    value={billDate}
-                    onChange={(e) => setBillDate(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="label">Terms</label>
-                  <select
-                    className="input"
-                    value={terms}
-                    onChange={(e) => {
-                      setDueTouched(false);
-                      setTerms(e.target.value);
-                    }}
-                  >
-                    <option value="">— None —</option>
-                    {BILL_TERMS.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Due date</label>
-                  <input
-                    type="date"
-                    className="input"
-                    value={dueDate}
-                    onChange={(e) => {
-                      setDueTouched(true);
-                      setDueDate(e.target.value);
-                    }}
-                  />
-                </div>
+            <div className="mb-4 grid gap-3 sm:grid-cols-4">
+              <div>
+                <label className="label">Bill no.</label>
+                <input
+                  className="input"
+                  placeholder="Vendor invoice #"
+                  value={billNumber}
+                  onChange={(e) => setBillNumber(e.target.value)}
+                />
               </div>
-            )}
+              <div>
+                <label className="label">Bill date</label>
+                <input
+                  type="date"
+                  className="input"
+                  value={billDate}
+                  onChange={(e) => setBillDate(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="label">Terms</label>
+                <select
+                  className="input"
+                  value={terms}
+                  onChange={(e) => {
+                    setDueTouched(false);
+                    setTerms(e.target.value);
+                  }}
+                >
+                  <option value="">— None —</option>
+                  {BILL_TERMS.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label">Due date</label>
+                <input
+                  type="date"
+                  className="input"
+                  value={dueDate}
+                  onChange={(e) => {
+                    setDueTouched(true);
+                    setDueDate(e.target.value);
+                  }}
+                />
+              </div>
+            </div>
 
             {lines.length === 0 ? (
-              <p className="text-sm text-zinc-400">This purchase order has no item lines.</p>
+              <p className="text-sm text-zinc-400">
+                {(po.items ?? []).length === 0
+                  ? "This purchase order has no item lines."
+                  : "Everything on this purchase order has already been received and billed."}
+              </p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[620px] text-sm">
@@ -330,8 +329,8 @@ export function BillModal({
                     <tr>
                       <th className="py-1.5">Item</th>
                       <th className="py-1.5 text-right">Ordered</th>
-                      <th className="py-1.5 text-right">In</th>
-                      <th className="py-1.5 text-right">{receiveItems ? "Receive" : "Bill qty"}</th>
+                      <th className="py-1.5 text-right">Already in</th>
+                      <th className="py-1.5 text-right">Bill qty</th>
                       <th className="py-1.5 text-right">Unit cost</th>
                       <th className="py-1.5 text-right">Amount</th>
                     </tr>
@@ -429,7 +428,7 @@ export function BillModal({
                     )}
                     <tr>
                       <td colSpan={5} className="py-2 text-right font-medium">
-                        {recordBill ? "Bill total" : "Total"}
+                        Bill total
                       </td>
                       <td className="py-2 text-right text-base font-bold">{formatMoney(total)}</td>
                     </tr>
@@ -441,23 +440,19 @@ export function BillModal({
               </div>
             )}
 
-            {recordBill && (
-              <BillAdjustments values={adj} onChange={setAdj} itemsCents={itemsTotal} />
-            )}
+            <BillAdjustments values={adj} onChange={setAdj} itemsCents={itemsTotal} />
 
-            {recordBill && (
-              <div className="mt-4">
-                <label className="label">Memo</label>
-                <textarea
-                  className="input"
-                  rows={2}
-                  value={memo}
-                  onChange={(e) => setMemo(e.target.value)}
-                />
-              </div>
-            )}
+            <div className="mt-4">
+              <label className="label">Memo</label>
+              <textarea
+                className="input"
+                rows={2}
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+              />
+            </div>
 
-            {isAdmin && receiveItems && !storeId && (
+            {isAdmin && !storeId && (
               <p className="mt-4 text-xs text-amber-600">Choose a store to receive into.</p>
             )}
             <div className="mt-5 flex gap-2">
@@ -466,10 +461,10 @@ export function BillModal({
               </button>
               <button
                 onClick={submit}
-                disabled={busy || lines.length === 0 || (isAdmin && receiveItems && !storeId)}
+                disabled={busy || lines.length === 0 || (isAdmin && !storeId)}
                 className="btn-primary flex-1"
               >
-                {busy ? "Saving…" : recordBill ? "Save bill" : "Receive items"}
+                {busy ? "Saving…" : "Receive & bill"}
               </button>
             </div>
           </>

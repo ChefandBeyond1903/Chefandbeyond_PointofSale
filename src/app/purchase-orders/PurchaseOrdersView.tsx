@@ -46,9 +46,7 @@ export function PurchaseOrdersView({
   const [error, setError] = useState<string | null>(null);
 
   const [openSaleId, setOpenSaleId] = useState<string | null>(null);
-  const [billModal, setBillModal] = useState<{ poId: string; mode: "receive" | "bill" } | null>(
-    null,
-  );
+  const [billModalPoId, setBillModalPoId] = useState<string | null>(null);
   const [fromInvoiceOpen, setFromInvoiceOpen] = useState(false);
   const [invoiceNo, setInvoiceNo] = useState("");
   const [resolving, setResolving] = useState(false);
@@ -346,34 +344,25 @@ export function PurchaseOrdersView({
                     {po.createdBy ? ` · ${po.createdBy.name}` : ""}
                   </td>
                   <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                    {canManage && (po.items ?? []).length > 0 && po.status !== "CANCELLED" && (
-                      <>
-                        {po.status !== "RECEIVED" && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setBillModal({ poId: po.id, mode: "receive" });
-                            }}
-                            className="btn-secondary h-7 text-xs"
-                          >
-                            Receive
-                          </button>
-                        )}
-                        {/* Always available, even after an earlier bill — goods
-                            and invoices often arrive in separate batches (a
-                            partial shipment, a different location, a vendor
-                            invoice that follows later), each billed on its own. */}
+                    {canManage &&
+                      (po.items ?? []).length > 0 &&
+                      po.status !== "CANCELLED" &&
+                      po.status !== "RECEIVED" && (
+                        // Receiving and billing happen together here — a PO
+                        // often takes more than one pass (a partial shipment,
+                        // goods from a different location, an invoice that
+                        // follows later), so this stays up until everything on
+                        // the PO has been received.
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            setBillModal({ poId: po.id, mode: "bill" });
+                            setBillModalPoId(po.id);
                           }}
-                          className="btn-secondary ml-1.5 h-7 text-xs"
+                          className="btn-secondary h-7 text-xs"
                         >
                           Copy to bill
                         </button>
-                      </>
-                    )}
+                      )}
                     {isAdmin && (
                       <button
                         onClick={(e) => {
@@ -403,11 +392,10 @@ export function PurchaseOrdersView({
         />
       )}
 
-      {billModal && (
+      {billModalPoId && (
         <BillModal
-          poId={billModal.poId}
-          mode={billModal.mode}
-          onClose={() => setBillModal(null)}
+          poId={billModalPoId}
+          onClose={() => setBillModalPoId(null)}
           onDone={load}
         />
       )}
