@@ -4,10 +4,14 @@ import { prisma } from "@/lib/prisma";
 import { requireScopedRole, scopeStoreId } from "@/lib/scope";
 import { ok, toErrorResponse } from "@/lib/api";
 
-// Sold quantity and cost, grouped by the vendor snapshotted on each sale line
-// at the time of sale — independent of whether that vendor is still in the
-// Product record or the Vendor directory today. Money-sensitive: manager/
-// admin only, same as the rest of Reports' dollar figures.
+// Sold quantity and cost, grouped by vendor. Normally the vendor snapshotted
+// on the sale line at the time of sale (so correcting a product's vendor
+// later doesn't rewrite an already-reported period) — except a line rung
+// before its product had a vendor set at all carries an empty snapshot
+// forever, so that one case falls back to the product's current vendor (same
+// rule used when raising a PO from an invoice — see sales/[id]/purchase-
+// orders/route.ts). Money-sensitive: manager/admin only, same as the rest of
+// Reports' dollar figures.
 export async function GET(req: NextRequest) {
   try {
     const user = await requireScopedRole("MANAGER", "ADMIN");
@@ -35,11 +39,15 @@ export async function GET(req: NextRequest) {
             select: {
               items: {
                 select: {
+                  productId: true,
+                  nameSnapshot: true,
+                  skuSnapshot: true,
                   vendorSnapshot: true,
                   quantity: true,
                   unitCostCents: true,
                   unitPriceCents: true,
                   discountCents: true,
+                  product: { select: { vendor: true } },
                 },
               },
             },
@@ -50,14 +58,37 @@ export async function GET(req: NextRequest) {
 
     const rebateByVendor = new Map(vendors.map((v) => [v.name.trim().toLowerCase(), v.rebateBps]));
 
-    const byVendor = new Map<string, { quantity: number; costCents: number; revenueCents: number }>();
+    const byVendor = new Map<
+      string,
+      {
+        quantity: number;
+        costCents: number;
+        revenueCents: number;
+        items: Map<string, { name: string; sku: string; quantity: number; revenueCents: number }>;
+      }
+    >();
     for (const s of sales) {
       for (const it of s.items) {
-        const vendor = it.vendorSnapshot?.trim() || "Unassigned";
-        const row = byVendor.get(vendor) ?? { quantity: 0, costCents: 0, revenueCents: 0 };
+        const vendor = it.vendorSnapshot?.trim() || it.product.vendor?.trim() || "Unassigned";
+        const row = byVendor.get(vendor) ?? {
+          quantity: 0,
+          costCents: 0,
+          revenueCents: 0,
+          items: new Map<string, { name: string; sku: string; quantity: number; revenueCents: number }>(),
+        };
+        const lineRevenue = it.unitPriceCents * it.quantity - it.discountCents;
         row.quantity += it.quantity;
         row.costCents += it.quantity * it.unitCostCents;
-        row.revenueCents += it.unitPriceCents * it.quantity - it.discountCents;
+        row.revenueCents += lineRevenue;
+        const itemRow = row.items.get(it.productId) ?? {
+          name: it.nameSnapshot,
+          sku: it.skuSnapshot,
+          quantity: 0,
+          revenueCents: 0,
+        };
+        itemRow.quantity += it.quantity;
+        itemRow.revenueCents += lineRevenue;
+        row.items.set(it.productId, itemRow);
         byVendor.set(vendor, row);
       }
     }
@@ -73,6 +104,9 @@ export async function GET(req: NextRequest) {
           costCents: v.costCents,
           rebateBps,
           rebateCents: Math.round((v.costCents * rebateBps) / 10_000),
+          items: [...v.items.entries()]
+            .map(([productId, i]) => ({ productId, ...i }))
+            .sort((a, b) => b.revenueCents - a.revenueCents),
         };
       })
       .sort((a, b) => b.revenueCents - a.revenueCents);

@@ -782,6 +782,7 @@ export interface SalesByVendorReport {
     costCents: number;
     rebateBps: number;
     rebateCents: number;
+    items: { productId: string; name: string; sku: string; quantity: number; revenueCents: number }[];
   }[];
   totals: {
     quantity: number;
