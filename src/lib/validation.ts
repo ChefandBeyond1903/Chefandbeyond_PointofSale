@@ -18,7 +18,9 @@ export const loginSchema = z.object({
 });
 
 export const productCreateSchema = z.object({
-  name: z.string().trim().min(1).max(200),
+  // 500, not 200: vendor-imported catalog names run long (full spec text
+  // crammed into the name field) — real rows up to ~250 chars exist today.
+  name: z.string().trim().min(1).max(500),
   sku: z.string().trim().min(1).max(64),
   barcode: z.string().trim().max(64).optional().or(z.literal("")).transform((v) => (v ? v : undefined)),
   description: z.string().trim().max(1000).optional().or(z.literal("")).transform((v) => (v ? v : undefined)),
@@ -36,7 +38,7 @@ export const productCreateSchema = z.object({
 // only touches the keys actually sent. (productCreateSchema.partial() would
 // still apply .default() to omitted fields and silently reset them.)
 export const productUpdateSchema = z.object({
-  name: z.string().trim().min(1).max(200).optional(),
+  name: z.string().trim().min(1).max(500).optional(),
   sku: z.string().trim().min(1).max(64).optional(),
   barcode: z.string().trim().max(64).optional(),
   description: z.string().trim().max(1000).optional(),
