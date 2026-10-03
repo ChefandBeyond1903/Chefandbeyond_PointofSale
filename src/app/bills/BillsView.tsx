@@ -370,8 +370,8 @@ function BillDetailModal({
     setErr(null);
     try {
       await api(`/api/bills/${billId}`, { method: "PATCH", body: JSON.stringify(body) });
-      await load();
       onChanged();
+      onClose();
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "Update failed");
     } finally {
