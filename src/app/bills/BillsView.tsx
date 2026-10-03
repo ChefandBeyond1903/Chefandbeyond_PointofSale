@@ -8,7 +8,7 @@ import { MoneyInput } from "@/components/MoneyInput";
 import { BillAdjustments, type BillAdjustmentValues } from "@/components/BillAdjustments";
 import { earlyPayDiscountCents } from "@/lib/billFees";
 import { VendorPicker } from "@/components/VendorPicker";
-import { BILL_TERMS } from "@/lib/terms";
+import { BILL_TERMS, dueDateFromTerms } from "@/lib/terms";
 import { usePaged } from "@/lib/usePaged";
 import { Pager } from "@/components/Pager";
 import { DateRangePicker } from "@/components/DateRangePicker";
@@ -26,6 +26,16 @@ function fmtDate(s: string | null) {
 function daysFromNow(s: string | null) {
   if (!s) return null;
   return Math.round((new Date(s).getTime() - Date.now()) / 86_400_000);
+}
+
+// Net terms set the due date from the bill date; "— None —"/Custom leave it
+// to be typed. Returns "" (don't touch dueDate) when terms don't imply one.
+function dueDateForBillTerms(terms: string, billDate: string): string {
+  if (!billDate) return "";
+  const [y, m, day] = billDate.split("-").map(Number);
+  const d = dueDateFromTerms(new Date(y, (m || 1) - 1, day || 1), terms);
+  if (!d) return "";
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 export function BillsView({
@@ -452,7 +462,11 @@ function BillDetailModal({
                   className="input"
                   value={edit.billDate}
                   disabled={!canManage}
-                  onChange={(e) => setEdit({ ...edit, billDate: e.target.value })}
+                  onChange={(e) => {
+                    const billDate = e.target.value;
+                    const due = dueDateForBillTerms(edit.terms, billDate);
+                    setEdit((s) => ({ ...s, billDate, ...(due ? { dueDate: due } : {}) }));
+                  }}
                 />
               </div>
               <div>
@@ -461,7 +475,11 @@ function BillDetailModal({
                   className="input"
                   value={edit.terms}
                   disabled={!canManage}
-                  onChange={(e) => setEdit({ ...edit, terms: e.target.value })}
+                  onChange={(e) => {
+                    const terms = e.target.value;
+                    const due = dueDateForBillTerms(terms, edit.billDate);
+                    setEdit((s) => ({ ...s, terms, ...(due ? { dueDate: due } : {}) }));
+                  }}
                 >
                   <option value="">— None —</option>
                   {BILL_TERMS.map((t) => (
