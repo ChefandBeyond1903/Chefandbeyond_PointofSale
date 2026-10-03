@@ -309,7 +309,7 @@ function BillDetailModal({
     billDate: "",
     paidAt: "",
     memo: "",
-    paymentMethod: "CASH",
+    paymentMethod: "USBANK_6118",
   });
   const [adj, setAdj] = useState<BillAdjustmentValues>({
     shippingCents: 0,
@@ -339,7 +339,7 @@ function BillDetailModal({
         // to correct a bill migrated from another POS after the fact.
         paidAt: res.bill.paidAt ? res.bill.paidAt.slice(0, 10) : todayInputValue(),
         memo: res.bill.memo,
-        paymentMethod: res.bill.paymentMethod || "CASH",
+        paymentMethod: res.bill.paymentMethod || "USBANK_6118",
       });
       setAdj({
         shippingCents: res.bill.shippingCents ?? 0,

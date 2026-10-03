@@ -655,7 +655,7 @@ model Bill {
   paidAt        DateTime?
   // How this bill was paid — "CASH" | "CARD" | "CHECK", or a custom method's
   // code from PaymentMethod (e.g. "ZELLE"). Set when marked paid.
-  paymentMethod String    @default("CASH")
+  paymentMethod String    @default("USBANK_6118")
   // Amount payable: items + fees (+ any legacy PO tax/other costs) - discount - vendor credit.
   subtotalCents Int       @default(0)
   // Fees billed on top of the items. Each is mirrored as an operating Expense
