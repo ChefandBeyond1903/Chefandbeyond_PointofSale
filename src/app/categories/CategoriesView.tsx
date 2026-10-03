@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/client";
 import { matchesSearch } from "@/lib/search";
 import { usePaged } from "@/lib/usePaged";
+import { useSort } from "@/lib/useSort";
+import { SortTh } from "@/components/SortTh";
 import { Pager } from "@/components/Pager";
 import { ListHeader, SearchBox } from "@/components/ListToolbar";
 import { LoadingRow, EmptyRow } from "@/components/TableState";
@@ -27,7 +29,12 @@ export function CategoriesView({ canManage = true }: { canManage?: boolean }) {
     return categories.filter((c) => matchesSearch(s, [c.name]));
   }, [categories, q]);
 
-  const pg = usePaged(filtered);
+  type CategorySortKey = "name" | "products";
+  const { sorted, sortKey, sortDir, sortBy } = useSort<Category, CategorySortKey>(
+    filtered,
+    (c, key) => (key === "name" ? c.name : (c._count?.products ?? 0)),
+  );
+  const pg = usePaged(sorted);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -128,8 +135,19 @@ export function CategoriesView({ canManage = true }: { canManage?: boolean }) {
           <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
             <tr>
               <th className="px-4 py-2.5"></th>
-              <th className="px-4 py-2.5">Name</th>
-              <th className="px-4 py-2.5 text-right">Products</th>
+              <SortTh sortKey="name" activeKey={sortKey} dir={sortDir} onSort={sortBy} className="px-4 py-2.5">
+                Name
+              </SortTh>
+              <SortTh
+                sortKey="products"
+                activeKey={sortKey}
+                dir={sortDir}
+                onSort={sortBy}
+                align="right"
+                className="px-4 py-2.5 text-right"
+              >
+                Products
+              </SortTh>
               <th className="px-4 py-2.5"></th>
             </tr>
           </thead>

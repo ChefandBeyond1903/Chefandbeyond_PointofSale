@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/client";
 import { usePaged } from "@/lib/usePaged";
+import { useSort } from "@/lib/useSort";
+import { SortTh } from "@/components/SortTh";
 import { Pager } from "@/components/Pager";
-import type { InventorySnapshot } from "@/lib/types";
+import type { InventoryRow, InventorySnapshot } from "@/lib/types";
 
 export function InventoryView() {
   const [data, setData] = useState<InventorySnapshot | null>(null);
@@ -70,7 +72,16 @@ export function InventoryView() {
     );
   }, [data]);
 
-  const pg = usePaged(rows);
+  // "store:<id>" sorts that store's on-hand; everything else is a plain column.
+  const { sorted, sortKey, sortDir, sortBy } = useSort<InventoryRow, string>(rows, (r, key) => {
+    if (key === "name") return r.name;
+    if (key === "sku") return r.sku;
+    if (key === "vendor") return r.vendor;
+    if (key === "total") return r.total;
+    if (key.startsWith("store:")) return r.byStore[key.slice(6)] ?? 0;
+    return "";
+  });
+  const pg = usePaged(sorted);
 
   return (
     <div className="w-full flex-1 p-4">
@@ -165,16 +176,39 @@ export function InventoryView() {
         <table className="w-full min-w-[640px] text-sm">
           <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
             <tr>
-              <th className="px-4 py-2.5">Product</th>
-              <th className="px-4 py-2.5">SKU</th>
-              <th className="px-4 py-2.5">Vendor</th>
+              <SortTh sortKey="name" activeKey={sortKey} dir={sortDir} onSort={sortBy} className="px-4 py-2.5">
+                Product
+              </SortTh>
+              <SortTh sortKey="sku" activeKey={sortKey} dir={sortDir} onSort={sortBy} className="px-4 py-2.5">
+                SKU
+              </SortTh>
+              <SortTh sortKey="vendor" activeKey={sortKey} dir={sortDir} onSort={sortBy} className="px-4 py-2.5">
+                Vendor
+              </SortTh>
               {stores.map((s) => (
-                <th key={s.id} className="px-4 py-2.5 text-right">
+                <SortTh
+                  key={s.id}
+                  sortKey={`store:${s.id}`}
+                  activeKey={sortKey}
+                  dir={sortDir}
+                  onSort={sortBy}
+                  align="right"
+                  className="px-4 py-2.5 text-right"
+                >
                   {s.name.replace(/^Chef and Beyond - /, "")}
                   {!s.active ? " (inactive)" : ""}
-                </th>
+                </SortTh>
               ))}
-              <th className="px-4 py-2.5 text-right">Total</th>
+              <SortTh
+                sortKey="total"
+                activeKey={sortKey}
+                dir={sortDir}
+                onSort={sortBy}
+                align="right"
+                className="px-4 py-2.5 text-right"
+              >
+                Total
+              </SortTh>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-100">

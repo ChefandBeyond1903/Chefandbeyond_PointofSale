@@ -12,6 +12,8 @@ import { InvoiceModal } from "@/components/InvoiceModal";
 import { SaleStatusPill } from "@/components/SaleStatusPill";
 import { ListHeader, SearchBox, FilterToggle } from "@/components/ListToolbar";
 import { LoadingRow, EmptyRow } from "@/components/TableState";
+import { useSort } from "@/lib/useSort";
+import { SortTh } from "@/components/SortTh";
 import { AddressFields, stateToDraft, resolveState } from "@/components/AddressFields";
 import type { Customer, CustomerLocation, StoreCreditEntry } from "@/lib/types";
 
@@ -312,6 +314,29 @@ export function CustomersView({
     ? customers.filter((c) => (c.openBalanceCents ?? 0) > 0)
     : customers;
 
+  type CustomerSortKey = "name" | "company" | "email" | "phone" | "invoices" | "balance";
+  const {
+    sorted: sortedCustomers,
+    sortKey: custSortKey,
+    sortDir: custSortDir,
+    sortBy: custSortBy,
+  } = useSort<Customer, CustomerSortKey>(shownCustomers, (c, key) => {
+    switch (key) {
+      case "name":
+        return c.name;
+      case "company":
+        return c.company;
+      case "email":
+        return c.email;
+      case "phone":
+        return c.phone;
+      case "invoices":
+        return c._count?.sales ?? 0;
+      case "balance":
+        return c.openBalanceCents ?? 0;
+    }
+  });
+
   function openEdit(c: Customer) {
     setDraft({
       id: c.id,
@@ -383,12 +408,38 @@ export function CustomersView({
         <table className="w-full min-w-[640px] text-sm">
           <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
             <tr>
-              <th className="px-4 py-2.5">Name</th>
-              <th className="px-4 py-2.5">Company</th>
-              <th className="px-4 py-2.5">Email</th>
-              <th className="px-4 py-2.5">Phone</th>
-              <th className="px-4 py-2.5 text-right">Invoices</th>
-              <th className="px-4 py-2.5 text-right">Balance due</th>
+              <SortTh sortKey="name" activeKey={custSortKey} dir={custSortDir} onSort={custSortBy} className="px-4 py-2.5">
+                Name
+              </SortTh>
+              <SortTh sortKey="company" activeKey={custSortKey} dir={custSortDir} onSort={custSortBy} className="px-4 py-2.5">
+                Company
+              </SortTh>
+              <SortTh sortKey="email" activeKey={custSortKey} dir={custSortDir} onSort={custSortBy} className="px-4 py-2.5">
+                Email
+              </SortTh>
+              <SortTh sortKey="phone" activeKey={custSortKey} dir={custSortDir} onSort={custSortBy} className="px-4 py-2.5">
+                Phone
+              </SortTh>
+              <SortTh
+                sortKey="invoices"
+                activeKey={custSortKey}
+                dir={custSortDir}
+                onSort={custSortBy}
+                align="right"
+                className="px-4 py-2.5 text-right"
+              >
+                Invoices
+              </SortTh>
+              <SortTh
+                sortKey="balance"
+                activeKey={custSortKey}
+                dir={custSortDir}
+                onSort={custSortBy}
+                align="right"
+                className="px-4 py-2.5 text-right"
+              >
+                Balance due
+              </SortTh>
               <th className="px-4 py-2.5"></th>
             </tr>
           </thead>
@@ -402,7 +453,7 @@ export function CustomersView({
                   : `No customers${q.trim() ? " match your search" : " yet"}.`}
               </EmptyRow>
             ) : (
-              shownCustomers.map((c) => (
+              sortedCustomers.map((c) => (
                 <tr
                   key={c.id}
                   onClick={canManage ? () => openEdit(c) : undefined}

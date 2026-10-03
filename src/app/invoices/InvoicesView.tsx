@@ -6,6 +6,8 @@ import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
 import { formatDateOnly } from "@/lib/date";
 import { usePaged } from "@/lib/usePaged";
+import { useSort } from "@/lib/useSort";
+import { SortTh } from "@/components/SortTh";
 import { Pager } from "@/components/Pager";
 import { InvoiceModal } from "@/components/InvoiceModal";
 import { BulkReceiptModal } from "@/components/BulkReceiptModal";
@@ -116,8 +118,32 @@ export function InvoicesView({
   const isOverdue = (s: Sale) =>
     s.status === "INVOICED" && !!s.dueDate && new Date(s.dueDate) < new Date();
   const rows = overdueOnly ? sales.filter(isOverdue) : sales;
-  const pg = usePaged(rows);
   const showStore = isAdmin && !storeId; // redundant once a store is chosen
+  type InvoiceSortKey = "number" | "date" | "customer" | "store" | "status" | "due" | "total";
+  const { sorted, sortKey, sortDir, sortBy } = useSort<Sale, InvoiceSortKey>(rows, (s, key) => {
+    switch (key) {
+      case "number":
+        return s.websiteOrderNumber || s.number;
+      case "date":
+        return new Date(s.createdAt).getTime();
+      case "customer":
+        return (
+          s.customerCompanySnapshot ||
+          s.customerNameSnapshot ||
+          (s.customer && "name" in s.customer ? s.customer.name : "") ||
+          ""
+        );
+      case "store":
+        return s.storeNameSnapshot || "";
+      case "status":
+        return s.status;
+      case "due":
+        return s.dueDate ? new Date(s.dueDate).getTime() : null;
+      case "total":
+        return s.totalCents;
+    }
+  });
+  const pg = usePaged(sorted);
   const cols = showStore ? 8 : 7;
   const selectedSales = sales.filter((s) => selected.has(s.id));
   const pageIds = pg.pageItems.map((s) => s.id);
@@ -233,13 +259,36 @@ export function InvoicesView({
                   aria-label="Select all invoices on this page"
                 />
               </th>
-              <th className="px-4 py-2.5">#</th>
-              <th className="px-4 py-2.5">Date</th>
-              <th className="px-4 py-2.5">Customer</th>
-              {showStore && <th className="px-4 py-2.5">Store</th>}
-              <th className="px-4 py-2.5">Status</th>
-              <th className="px-4 py-2.5">Due</th>
-              <th className="px-4 py-2.5 text-right">Total</th>
+              <SortTh sortKey="number" activeKey={sortKey} dir={sortDir} onSort={sortBy} className="px-4 py-2.5">
+                #
+              </SortTh>
+              <SortTh sortKey="date" activeKey={sortKey} dir={sortDir} onSort={sortBy} className="px-4 py-2.5">
+                Date
+              </SortTh>
+              <SortTh sortKey="customer" activeKey={sortKey} dir={sortDir} onSort={sortBy} className="px-4 py-2.5">
+                Customer
+              </SortTh>
+              {showStore && (
+                <SortTh sortKey="store" activeKey={sortKey} dir={sortDir} onSort={sortBy} className="px-4 py-2.5">
+                  Store
+                </SortTh>
+              )}
+              <SortTh sortKey="status" activeKey={sortKey} dir={sortDir} onSort={sortBy} className="px-4 py-2.5">
+                Status
+              </SortTh>
+              <SortTh sortKey="due" activeKey={sortKey} dir={sortDir} onSort={sortBy} className="px-4 py-2.5">
+                Due
+              </SortTh>
+              <SortTh
+                sortKey="total"
+                activeKey={sortKey}
+                dir={sortDir}
+                onSort={sortBy}
+                align="right"
+                className="px-4 py-2.5 text-right"
+              >
+                Total
+              </SortTh>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-100">

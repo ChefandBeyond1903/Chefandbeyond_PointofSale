@@ -7,6 +7,8 @@ import { MoneyInput } from "@/components/MoneyInput";
 import type { Category, Product } from "@/lib/types";
 import { matchesSearch } from "@/lib/search";
 import { usePaged } from "@/lib/usePaged";
+import { useSort } from "@/lib/useSort";
+import { SortTh } from "@/components/SortTh";
 import { Pager } from "@/components/Pager";
 import { LabelSheetModal } from "@/components/LabelSheetModal";
 
@@ -189,7 +191,29 @@ export function ProductManager({
     return [...list].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
   }, [products, q]);
 
-  const pg = usePaged(filtered);
+  type ProductSortKey = "name" | "sku" | "vendor" | "category" | "price" | "minPrice" | "stock";
+  const { sorted, sortKey, sortDir, sortBy } = useSort<Product, ProductSortKey>(
+    filtered,
+    (p, key) => {
+      switch (key) {
+        case "name":
+          return p.name;
+        case "sku":
+          return p.sku;
+        case "vendor":
+          return p.vendor;
+        case "category":
+          return p.category?.name ?? "";
+        case "price":
+          return p.priceCents;
+        case "minPrice":
+          return p.umrpCents;
+        case "stock":
+          return p.stock;
+      }
+    },
+  );
+  const pg = usePaged(sorted);
   const filteredIds = useMemo(() => filtered.map((p) => p.id), [filtered]);
   const allFilteredSelected =
     filteredIds.length > 0 && filteredIds.every((id) => selected.has(id));
@@ -679,15 +703,50 @@ export function ProductManager({
                 </th>
               )}
               <th className="w-10 px-3 py-2.5" title="Show on register">★</th>
-              <th className="px-4 py-2.5">Name</th>
-              <th className="px-4 py-2.5">SKU</th>
-              <th className="px-4 py-2.5">Vendor</th>
-              <th className="px-4 py-2.5">Category</th>
-              <th className="px-4 py-2.5 text-right">Price</th>
-              <th className="px-4 py-2.5 text-right" title="Minimum resale price">Min price</th>
-              <th className="px-4 py-2.5 text-right" title="On-hand at your store (total for admins)">
+              <SortTh sortKey="name" activeKey={sortKey} dir={sortDir} onSort={sortBy} className="px-4 py-2.5">
+                Name
+              </SortTh>
+              <SortTh sortKey="sku" activeKey={sortKey} dir={sortDir} onSort={sortBy} className="px-4 py-2.5">
+                SKU
+              </SortTh>
+              <SortTh sortKey="vendor" activeKey={sortKey} dir={sortDir} onSort={sortBy} className="px-4 py-2.5">
+                Vendor
+              </SortTh>
+              <SortTh sortKey="category" activeKey={sortKey} dir={sortDir} onSort={sortBy} className="px-4 py-2.5">
+                Category
+              </SortTh>
+              <SortTh
+                sortKey="price"
+                activeKey={sortKey}
+                dir={sortDir}
+                onSort={sortBy}
+                align="right"
+                className="px-4 py-2.5 text-right"
+              >
+                Price
+              </SortTh>
+              <SortTh
+                sortKey="minPrice"
+                activeKey={sortKey}
+                dir={sortDir}
+                onSort={sortBy}
+                align="right"
+                className="px-4 py-2.5 text-right"
+                title="Minimum resale price"
+              >
+                Min price
+              </SortTh>
+              <SortTh
+                sortKey="stock"
+                activeKey={sortKey}
+                dir={sortDir}
+                onSort={sortBy}
+                align="right"
+                className="px-4 py-2.5 text-right"
+                title="On-hand at your store (total for admins)"
+              >
                 In stock
-              </th>
+              </SortTh>
               <th className="px-4 py-2.5"></th>
             </tr>
           </thead>

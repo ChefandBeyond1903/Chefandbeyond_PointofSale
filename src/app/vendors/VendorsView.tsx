@@ -7,6 +7,8 @@ import { MoneyInput } from "@/components/MoneyInput";
 import { matchesSearch } from "@/lib/search";
 import { VendorHistoryModal } from "@/components/VendorHistoryModal";
 import { usePaged } from "@/lib/usePaged";
+import { useSort } from "@/lib/useSort";
+import { SortTh } from "@/components/SortTh";
 import { Pager } from "@/components/Pager";
 import { ListHeader, SearchBox } from "@/components/ListToolbar";
 import { LoadingRow, EmptyRow } from "@/components/TableState";
@@ -52,7 +54,28 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
     );
   }, [vendors, q]);
 
-  const pg = usePaged(filtered);
+  type VendorSortKey = "name" | "contact" | "email" | "phone" | "freight" | "rebate" | "inStock" | "products";
+  const { sorted, sortKey, sortDir, sortBy } = useSort<Vendor, VendorSortKey>(filtered, (v, key) => {
+    switch (key) {
+      case "name":
+        return v.name;
+      case "contact":
+        return v.contact;
+      case "email":
+        return v.email;
+      case "phone":
+        return v.phone;
+      case "freight":
+        return v.freightMinimumCents;
+      case "rebate":
+        return v.rebateBps;
+      case "inStock":
+        return v.inStockProductCount ?? 0;
+      case "products":
+        return v.productCount ?? 0;
+    }
+  });
+  const pg = usePaged(sorted);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -165,14 +188,58 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
         <table className="w-full min-w-[640px] text-sm">
           <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
             <tr>
-              <th className="px-4 py-2.5">Name</th>
-              <th className="px-4 py-2.5">Contact</th>
-              <th className="px-4 py-2.5">Email</th>
-              <th className="px-4 py-2.5">Phone</th>
-              <th className="px-4 py-2.5 text-right">Free-freight min.</th>
-              <th className="px-4 py-2.5 text-right">Rebate</th>
-              <th className="px-4 py-2.5 text-right">In stock</th>
-              <th className="px-4 py-2.5 text-right">Products</th>
+              <SortTh sortKey="name" activeKey={sortKey} dir={sortDir} onSort={sortBy} className="px-4 py-2.5">
+                Name
+              </SortTh>
+              <SortTh sortKey="contact" activeKey={sortKey} dir={sortDir} onSort={sortBy} className="px-4 py-2.5">
+                Contact
+              </SortTh>
+              <SortTh sortKey="email" activeKey={sortKey} dir={sortDir} onSort={sortBy} className="px-4 py-2.5">
+                Email
+              </SortTh>
+              <SortTh sortKey="phone" activeKey={sortKey} dir={sortDir} onSort={sortBy} className="px-4 py-2.5">
+                Phone
+              </SortTh>
+              <SortTh
+                sortKey="freight"
+                activeKey={sortKey}
+                dir={sortDir}
+                onSort={sortBy}
+                align="right"
+                className="px-4 py-2.5 text-right"
+              >
+                Free-freight min.
+              </SortTh>
+              <SortTh
+                sortKey="rebate"
+                activeKey={sortKey}
+                dir={sortDir}
+                onSort={sortBy}
+                align="right"
+                className="px-4 py-2.5 text-right"
+              >
+                Rebate
+              </SortTh>
+              <SortTh
+                sortKey="inStock"
+                activeKey={sortKey}
+                dir={sortDir}
+                onSort={sortBy}
+                align="right"
+                className="px-4 py-2.5 text-right"
+              >
+                In stock
+              </SortTh>
+              <SortTh
+                sortKey="products"
+                activeKey={sortKey}
+                dir={sortDir}
+                onSort={sortBy}
+                align="right"
+                className="px-4 py-2.5 text-right"
+              >
+                Products
+              </SortTh>
               <th className="px-4 py-2.5"></th>
             </tr>
           </thead>
