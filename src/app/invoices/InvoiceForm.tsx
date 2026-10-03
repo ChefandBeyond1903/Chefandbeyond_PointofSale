@@ -315,7 +315,12 @@ export function InvoiceForm({ role }: { role: "CASHIER" | "MANAGER" | "ADMIN" })
         ...(paymentMethod === "CHECK" ? { checkNumber: checkNumber.trim() } : {}),
       };
     }
-    return { depositCents: amt, depositMethod: paymentMethod };
+    return {
+      depositCents: amt,
+      depositMethod: paymentMethod,
+      ...(paymentMethod === "CASH" ? { tenderedCents: Math.max(tenderedCents, amt) } : {}),
+      ...(paymentMethod === "CHECK" ? { checkNumber: checkNumber.trim() } : {}),
+    };
   }
 
   // Live total/tax preview — recalculated server-side (so tax-exempt
