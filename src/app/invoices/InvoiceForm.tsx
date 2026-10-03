@@ -92,6 +92,17 @@ export function InvoiceForm({ role }: { role: "CASHIER" | "MANAGER" | "ADMIN" })
   const [amountReceived, setAmountReceived] = useState<number | null>(null);
   const [tenderedCents, setTenderedCents] = useState(0);
   const [checkNumber, setCheckNumber] = useState("");
+  // No card reader on this back-office form — a Card payment here is always
+  // just a record of a charge taken elsewhere (the website's own checkout,
+  // a standalone terminal, …), never a live Stripe charge. This is where
+  // that reference/confirmation # goes.
+  const [paymentNote, setPaymentNote] = useState("");
+
+  // Non-admin: the operator's own store (name + tax rate), shown for parity
+  // with the register. An admin instead picks one below — required, since
+  // it's what sets the tax rate (same rule as the register).
+  const [myStoreName, setMyStoreName] = useState<string | null>(null);
+  const [myStoreTaxRateBps, setMyStoreTaxRateBps] = useState<number | null>(null);
 
   const [previewTotalCents, setPreviewTotalCents] = useState<number | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -114,6 +125,12 @@ export function InvoiceForm({ role }: { role: "CASHIER" | "MANAGER" | "ADMIN" })
         if (isAdmin) {
           const s = await api<{ stores: Store[] }>("/api/stores");
           setStores(s.stores);
+        } else {
+          const me = await api<{
+            user: { storeName?: string | null; storeTaxRateBps?: number | null } | null;
+          }>("/api/auth/me");
+          setMyStoreName(me.user?.storeName ?? null);
+          setMyStoreTaxRateBps(me.user?.storeTaxRateBps ?? null);
         }
       } catch (err) {
         setError(err instanceof ApiError ? err.message : "Failed to load");
@@ -187,6 +204,11 @@ export function InvoiceForm({ role }: { role: "CASHIER" | "MANAGER" | "ADMIN" })
   );
   const validLines = lines.filter((l) => l.productId && l.quantity > 0);
   const hasCustomer = !!custId || custName.trim().length > 0;
+  // An admin has no store of their own — same as the register, they must
+  // pick one here, since it's what the tax rate (and inventory) comes from.
+  const storeMissing = isAdmin && stores.length > 0 && !storeId;
+  const selectedStore = stores.find((s) => s.id === storeId) ?? null;
+  const taxRateBps = isAdmin ? (selectedStore?.taxRateBps ?? null) : myStoreTaxRateBps;
   const estTaxCents = previewTotalCents !== null ? previewTotalCents - netBeforeTaxCents : null;
   const displayTotalCents = previewTotalCents ?? netBeforeTaxCents;
   const dueNowCents = leaveUnpaid ? 0 : Math.max(0, Math.min(amountReceived ?? displayTotalCents, displayTotalCents));
@@ -221,6 +243,7 @@ export function InvoiceForm({ role }: { role: "CASHIER" | "MANAGER" | "ADMIN" })
       ...(isAdmin && storeId ? { storeId } : {}),
       ...(isAdmin && manualNumber.trim() ? { number: parseInt(manualNumber.trim(), 10) } : {}),
       ...(isAdmin && manualDate ? { saleDate: manualDate } : {}),
+      ...(paymentNote.trim() ? { note: paymentNote.trim() } : {}),
       ...customerPayload(),
     };
   }
@@ -245,6 +268,11 @@ export function InvoiceForm({ role }: { role: "CASHIER" | "MANAGER" | "ADMIN" })
     if (validLines.length === 0 || !hasCustomer) {
       setPreviewTotalCents(null);
       setPreviewError(null);
+      return;
+    }
+    if (storeMissing) {
+      setPreviewTotalCents(null);
+      setPreviewError("Choose a store above — tax is charged at that store's rate.");
       return;
     }
     const t = setTimeout(async () => {
@@ -275,6 +303,10 @@ export function InvoiceForm({ role }: { role: "CASHIER" | "MANAGER" | "ADMIN" })
 
   async function doSave(): Promise<{ id: string; number: number } | null> {
     setError(null);
+    if (storeMissing) {
+      setError("Choose a store before saving — it sets the tax rate (same as the register).");
+      return null;
+    }
     if (!hasCustomer) {
       setError("Add a customer before saving.");
       return null;
@@ -331,6 +363,7 @@ export function InvoiceForm({ role }: { role: "CASHIER" | "MANAGER" | "ADMIN" })
     setCheckNumber("");
     setManualNumber("");
     setManualDate("");
+    setPaymentNote("");
     setPreviewTotalCents(null);
     setPreviewError(null);
     setSavedSale(null);
@@ -412,12 +445,18 @@ export function InvoiceForm({ role }: { role: "CASHIER" | "MANAGER" | "ADMIN" })
               </div>
               {stores.length > 0 && (
                 <div>
-                  <label className="label">Store</label>
-                  <select className="input" value={storeId} onChange={(e) => setStoreId(e.target.value)}>
-                    <option value="">— This invoice&rsquo;s store —</option>
+                  <label className="label">
+                    Store <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    className={`input ${storeMissing ? "border-amber-400" : ""}`}
+                    value={storeId}
+                    onChange={(e) => setStoreId(e.target.value)}
+                  >
+                    <option value="">Choose a store…</option>
                     {stores.map((s) => (
                       <option key={s.id} value={s.id}>
-                        {s.name}
+                        {s.name} — tax {(s.taxRateBps / 100).toFixed(2)}%
                       </option>
                     ))}
                   </select>
@@ -428,6 +467,12 @@ export function InvoiceForm({ role }: { role: "CASHIER" | "MANAGER" | "ADMIN" })
               Leave invoice # / date blank to auto-number it and date it today. Set both when
               entering a historical invoice under its real number.
             </p>
+            {storeMissing && (
+              <p className="mt-1.5 text-xs font-medium text-amber-700">
+                Choose a store above — same as the register, that&rsquo;s what sets the tax rate
+                (and which inventory this invoice draws from).
+              </p>
+            )}
           </section>
         )}
 
@@ -607,10 +652,20 @@ export function InvoiceForm({ role }: { role: "CASHIER" | "MANAGER" | "ADMIN" })
             )}
             {shippingCents > 0 && <Row label="Shipping" value={formatMoney(shippingCents)} />}
             <Row
-              label="Tax"
+              label={`Tax${taxRateBps != null ? ` (${(taxRateBps / 100).toFixed(2)}%)` : ""}`}
               value={estTaxCents !== null ? formatMoney(Math.max(0, estTaxCents)) : "—"}
             />
-            {previewError && <p className="text-xs text-red-600">{previewError}</p>}
+            {!isAdmin && myStoreName && (
+              <p className="text-[11px] text-zinc-400">
+                Selling from {myStoreName}
+                {myStoreTaxRateBps != null ? ` (tax ${(myStoreTaxRateBps / 100).toFixed(2)}%)` : ""}.
+              </p>
+            )}
+            {previewError && (
+              <p className={`text-xs ${storeMissing ? "font-medium text-amber-700" : "text-red-600"}`}>
+                {previewError}
+              </p>
+            )}
             <Row
               label="Total"
               value={formatMoney(displayTotalCents)}
@@ -666,6 +721,22 @@ export function InvoiceForm({ role }: { role: "CASHIER" | "MANAGER" | "ADMIN" })
                   />
                 </div>
               )}
+              {paymentMethod === "CARD" && (
+                <div className="sm:col-span-3">
+                  <label className="label">Reference / confirmation # (optional)</label>
+                  <input
+                    className="input"
+                    placeholder="e.g. charged on the website, order #12345"
+                    value={paymentNote}
+                    onChange={(e) => setPaymentNote(e.target.value)}
+                  />
+                  <p className="mt-0.5 text-[11px] text-zinc-400">
+                    This form doesn&rsquo;t run a card itself — choosing Card just records that the
+                    customer paid by card (e.g. already charged on the website or a standalone
+                    terminal). Note what it refers to here.
+                  </p>
+                </div>
+              )}
             </div>
           )}
           {!leaveUnpaid && (
@@ -680,19 +751,31 @@ export function InvoiceForm({ role }: { role: "CASHIER" | "MANAGER" | "ADMIN" })
         <div className="mx-auto flex max-w-4xl flex-wrap items-center gap-2">
           {!savedSale ? (
             <>
-              <button onClick={doSave} disabled={saving} className="btn-secondary">
+              <button onClick={doSave} disabled={saving || storeMissing} className="btn-secondary">
                 {saving ? "Saving…" : "Save"}
               </button>
-              <button onClick={handleSaveAndClose} disabled={saving} className="btn-secondary">
+              <button
+                onClick={handleSaveAndClose}
+                disabled={saving || storeMissing}
+                className="btn-secondary"
+              >
                 Save and close
               </button>
-              <button onClick={handleSaveAndNew} disabled={saving} className="btn-secondary">
+              <button
+                onClick={handleSaveAndNew}
+                disabled={saving || storeMissing}
+                className="btn-secondary"
+              >
                 Save and new
               </button>
-              <button onClick={handlePrint} disabled={saving} className="btn-secondary">
+              <button onClick={handlePrint} disabled={saving || storeMissing} className="btn-secondary">
                 Print or download
               </button>
-              <button onClick={handleSaveAndSend} disabled={saving} className="btn-primary ml-auto">
+              <button
+                onClick={handleSaveAndSend}
+                disabled={saving || storeMissing}
+                className="btn-primary ml-auto"
+              >
                 Save and send
               </button>
             </>
