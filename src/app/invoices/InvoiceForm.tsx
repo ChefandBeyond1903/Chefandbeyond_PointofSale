@@ -62,6 +62,34 @@ function resolveLineDiscount(l: Line): number {
   return Math.max(0, Math.min(base, raw));
 }
 
+// Keeps an in-progress invoice across an accidental sign-out (the idle
+// timer, a dropped session) — nothing typed in is lost when logging back in.
+// One slot per browser; keyed to the signed-in user so a different person
+// logging in on the same device doesn't inherit it.
+const DRAFT_KEY = "cbpos.invoiceDraft";
+
+type InvoiceDraft = {
+  userId: string;
+  storeId: string;
+  manualNumber: string;
+  manualDate: string;
+  custId: string | null;
+  custName: string;
+  custEmail: string;
+  custPhone: string;
+  custCompany: string;
+  custAddress: string;
+  lines: Line[];
+  orderDiscountCents: number;
+  shippingCents: number;
+  leaveUnpaid: boolean;
+  paymentMethod: string;
+  amountReceived: number | null;
+  tenderedCents: number;
+  checkNumber: string;
+  paymentNote: string;
+};
+
 /**
  * A full-page invoice entry form — for the back office, not the register:
  * pick/add a customer, pick/add products (with cost/vendor via the usual
@@ -69,7 +97,13 @@ function resolveLineDiscount(l: Line): number {
  * unpaid). Admins can also set the real invoice # and backdate it, for
  * entering an invoice that's being migrated from another system.
  */
-export function InvoiceForm({ role }: { role: "CASHIER" | "MANAGER" | "ADMIN" }) {
+export function InvoiceForm({
+  role,
+  userId,
+}: {
+  role: "CASHIER" | "MANAGER" | "ADMIN";
+  userId: string;
+}) {
   const router = useRouter();
   const isAdmin = role === "ADMIN";
 
@@ -158,6 +192,44 @@ export function InvoiceForm({ role }: { role: "CASHIER" | "MANAGER" | "ADMIN" })
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Restore an in-progress draft left from before a sign-out/reload — once,
+  // on mount, before the save effect below starts overwriting it.
+  const draftHydrated = useRef(false);
+  useEffect(() => {
+    if (draftHydrated.current) return;
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (raw) {
+        const d = JSON.parse(raw) as Partial<InvoiceDraft>;
+        if (d.userId !== userId) {
+          localStorage.removeItem(DRAFT_KEY);
+        } else {
+          if (d.storeId !== undefined) setStoreId(d.storeId);
+          if (d.manualNumber !== undefined) setManualNumber(d.manualNumber);
+          if (d.manualDate !== undefined) setManualDate(d.manualDate);
+          if (d.custId !== undefined) setCustId(d.custId);
+          if (d.custName !== undefined) setCustName(d.custName);
+          if (d.custEmail !== undefined) setCustEmail(d.custEmail);
+          if (d.custPhone !== undefined) setCustPhone(d.custPhone);
+          if (d.custCompany !== undefined) setCustCompany(d.custCompany);
+          if (d.custAddress !== undefined) setCustAddress(d.custAddress);
+          if (Array.isArray(d.lines) && d.lines.length > 0) setLines(d.lines);
+          if (d.orderDiscountCents !== undefined) setOrderDiscountCents(d.orderDiscountCents);
+          if (d.shippingCents !== undefined) setShippingCents(d.shippingCents);
+          if (d.leaveUnpaid !== undefined) setLeaveUnpaid(d.leaveUnpaid);
+          if (d.paymentMethod !== undefined) setPaymentMethod(d.paymentMethod);
+          if (d.amountReceived !== undefined) setAmountReceived(d.amountReceived);
+          if (d.tenderedCents !== undefined) setTenderedCents(d.tenderedCents);
+          if (d.checkNumber !== undefined) setCheckNumber(d.checkNumber);
+          if (d.paymentNote !== undefined) setPaymentNote(d.paymentNote);
+        }
+      }
+    } catch {
+      /* ignore malformed/unavailable storage */
+    }
+    draftHydrated.current = true;
+  }, [userId]);
 
   function pickCustomer(c: Customer) {
     setCustId(c.id);
@@ -261,6 +333,64 @@ export function InvoiceForm({ role }: { role: "CASHIER" | "MANAGER" | "ADMIN" })
   const estTaxCents = previewTotalCents !== null ? previewTotalCents - netBeforeTaxCents : null;
   const displayTotalCents = previewTotalCents ?? netBeforeTaxCents;
   const dueNowCents = leaveUnpaid ? 0 : Math.max(0, Math.min(amountReceived ?? displayTotalCents, displayTotalCents));
+
+  // Save the draft on every change; drop it once there's nothing worth
+  // keeping (a fresh/empty form).
+  useEffect(() => {
+    if (!draftHydrated.current) return;
+    try {
+      const hasContent = hasCustomer || lines.some((l) => l.productId);
+      if (!hasContent) {
+        localStorage.removeItem(DRAFT_KEY);
+        return;
+      }
+      const draft: InvoiceDraft = {
+        userId,
+        storeId,
+        manualNumber,
+        manualDate,
+        custId,
+        custName,
+        custEmail,
+        custPhone,
+        custCompany,
+        custAddress,
+        lines,
+        orderDiscountCents,
+        shippingCents,
+        leaveUnpaid,
+        paymentMethod,
+        amountReceived,
+        tenderedCents,
+        checkNumber,
+        paymentNote,
+      };
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    } catch {
+      /* storage full or unavailable — non-fatal */
+    }
+  }, [
+    userId,
+    storeId,
+    manualNumber,
+    manualDate,
+    custId,
+    custName,
+    custEmail,
+    custPhone,
+    custCompany,
+    custAddress,
+    lines,
+    orderDiscountCents,
+    shippingCents,
+    leaveUnpaid,
+    paymentMethod,
+    amountReceived,
+    tenderedCents,
+    checkNumber,
+    paymentNote,
+    hasCustomer,
+  ]);
 
   function customerPayload() {
     if (custId) return { customerId: custId };
@@ -407,6 +537,11 @@ export function InvoiceForm({ role }: { role: "CASHIER" | "MANAGER" | "ADMIN" })
       });
       const saved = { id: res.sale.id, number: res.sale.number };
       setSavedSale(saved);
+      try {
+        localStorage.removeItem(DRAFT_KEY);
+      } catch {
+        /* ignore */
+      }
       return saved;
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not save the invoice");
