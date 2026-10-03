@@ -296,10 +296,12 @@ export function InvoiceForm({ role }: { role: "CASHIER" | "MANAGER" | "ADMIN" })
       ...(paymentNote.trim() ? { note: paymentNote.trim() } : {}),
       // The server requires a payment method up front for any customer who
       // isn't on terms (same rule as the register) — even to just total up a
-      // dry run. Send whatever's currently picked so totaling/previewing
-      // doesn't itself get rejected for "no payment method" before the real
-      // save (with the real amount/tender) replaces this.
+      // dry run — and, for Check, a check number too (it validates that
+      // before ever looking at dryRun). Send whatever's currently picked so
+      // totaling/previewing doesn't itself get rejected before the real save
+      // (with the real amount/tender) replaces this.
       ...(!leaveUnpaid ? { paymentMethod } : {}),
+      ...(!leaveUnpaid && paymentMethod === "CHECK" ? { checkNumber: checkNumber.trim() } : {}),
       ...customerPayload(),
     };
   }
@@ -361,6 +363,8 @@ export function InvoiceForm({ role }: { role: "CASHIER" | "MANAGER" | "ADMIN" })
     manualDate,
     manualNumber,
     leaveUnpaid,
+    paymentMethod,
+    checkNumber,
   ]);
 
   async function doSave(): Promise<{ id: string; number: number } | null> {
