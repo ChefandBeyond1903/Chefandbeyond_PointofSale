@@ -166,6 +166,14 @@ export function SalesByVendorReport({ isAdmin }: { isAdmin: boolean }) {
                                       >
                                         {i.name}
                                       </Link>
+                                      {i.excludedFromRebate && (
+                                        <span
+                                          className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700"
+                                          title="This item's cost isn't counted in the vendor's rebate"
+                                        >
+                                          no rebate
+                                        </span>
+                                      )}
                                     </td>
                                     <td className="py-1.5 font-mono text-zinc-500">{i.sku}</td>
                                     <td className="py-1.5 text-right tabular-nums">

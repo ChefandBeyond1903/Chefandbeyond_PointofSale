@@ -277,6 +277,10 @@ model Product {
   active      Boolean @default(true)
   favorite    Boolean @default(false)
   vendor      String  @default("")
+  // This item doesn't count toward its vendor's rebate (Sales by vendor), even
+  // though the vendor otherwise pays one — some SKUs are carved out by the
+  // vendor's own program terms.
+  excludeFromRebate Boolean @default(false)
 
   categoryId String?
   category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)

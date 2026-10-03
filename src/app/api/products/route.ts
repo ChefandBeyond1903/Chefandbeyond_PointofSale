@@ -64,6 +64,7 @@ export async function GET(req: NextRequest) {
         active: true,
         favorite: true,
         vendor: true,
+        excludeFromRebate: true,
         categoryId: true,
         category: { select: { id: true, name: true } },
         description: withDetail,
@@ -152,6 +153,7 @@ export async function POST(req: NextRequest) {
         favorite: data.favorite,
         vendor: data.vendor,
         categoryId: data.categoryId,
+        excludeFromRebate: data.excludeFromRebate,
       },
       include: { category: { select: { id: true, name: true } } },
     });

@@ -32,6 +32,7 @@ export const productCreateSchema = z.object({
   active: z.boolean().default(true),
   favorite: z.boolean().default(false),
   vendor: z.string().trim().max(120).default(""),
+  excludeFromRebate: z.boolean().default(false),
 });
 
 // Every field optional and — crucially — NO defaults, so a partial update
@@ -50,6 +51,7 @@ export const productUpdateSchema = z.object({
   active: z.boolean().optional(),
   favorite: z.boolean().optional(),
   vendor: z.string().trim().max(120).optional(),
+  excludeFromRebate: z.boolean().optional(),
 });
 
 // Bulk operations on the Products page: act on a set of product ids at once.

@@ -149,6 +149,8 @@ export interface Product {
   active: boolean;
   favorite: boolean;
   vendor: string;
+  /** Doesn't count toward its vendor's rebate, even though the vendor otherwise pays one. */
+  excludeFromRebate: boolean;
   categoryId: string | null;
   category: { id: string; name: string } | null;
   createdAt?: string;
@@ -782,7 +784,14 @@ export interface SalesByVendorReport {
     costCents: number;
     rebateBps: number;
     rebateCents: number;
-    items: { productId: string; name: string; sku: string; quantity: number; revenueCents: number }[];
+    items: {
+      productId: string;
+      name: string;
+      sku: string;
+      quantity: number;
+      revenueCents: number;
+      excludedFromRebate: boolean;
+    }[];
   }[];
   totals: {
     quantity: number;

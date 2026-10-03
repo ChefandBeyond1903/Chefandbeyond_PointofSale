@@ -26,6 +26,7 @@ type Draft = {
   active: boolean;
   favorite: boolean;
   vendor: string;
+  excludeFromRebate: boolean;
 };
 
 const emptyDraft: Draft = {
@@ -41,6 +42,7 @@ const emptyDraft: Draft = {
   active: true,
   favorite: false,
   vendor: "",
+  excludeFromRebate: false,
 };
 
 export function ProductManager({
@@ -362,6 +364,7 @@ export function ProductManager({
       active: p.active,
       favorite: p.favorite,
       vendor: p.vendor ?? "",
+      excludeFromRebate: p.excludeFromRebate ?? false,
     });
     // Pull the per-store on-hand for this product in the background.
     setEditStock(null);
@@ -408,6 +411,7 @@ export function ProductManager({
       active: p.active,
       favorite: p.favorite,
       vendor: p.vendor ?? "",
+      excludeFromRebate: p.excludeFromRebate ?? false,
     });
     // The list omits description to stay small — fetch the full one.
     api<{ product: { description: string | null } }>(`/api/products/${p.id}`)
@@ -475,6 +479,7 @@ export function ProductManager({
       active: draft.active,
       favorite: draft.favorite,
       vendor: draft.vendor.trim(),
+      excludeFromRebate: draft.excludeFromRebate,
     };
     try {
       if (draft.id) {
@@ -822,7 +827,17 @@ export function ProductManager({
                       p.sku
                     )}
                   </td>
-                  <td className="px-4 py-2.5 text-zinc-500">{p.vendor || "—"}</td>
+                  <td className="px-4 py-2.5 text-zinc-500">
+                    {p.vendor || "—"}
+                    {p.vendor && p.excludeFromRebate && (
+                      <span
+                        className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700"
+                        title="Excluded from this vendor's rebate program"
+                      >
+                        no rebate
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-2.5 text-zinc-500">{p.category?.name ?? "—"}</td>
                   <td className="px-4 py-2.5 text-right">{formatMoney(p.priceCents)}</td>
                   <td className="px-4 py-2.5 text-right text-zinc-500">
@@ -1098,6 +1113,22 @@ export function ProductManager({
                 />
                 Show on register home <span className="text-zinc-400">(favorite)</span>
               </label>
+              {draft.vendor && (
+                <div className="col-span-2">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={draft.excludeFromRebate}
+                      onChange={(e) => setDraft({ ...draft, excludeFromRebate: e.target.checked })}
+                    />
+                    Exclude from {draft.vendor}&rsquo;s rebate program
+                  </label>
+                  <p className="mt-0.5 pl-6 text-[11px] text-zinc-400">
+                    This item won&rsquo;t count toward the vendor&rsquo;s rebate on Reports → Sales
+                    by vendor, even though the vendor otherwise pays one.
+                  </p>
+                </div>
+              )}
               <div className="col-span-2">
                 <label className="label">Description</label>
                 <textarea

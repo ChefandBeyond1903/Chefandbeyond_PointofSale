@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
                   unitCostCents: true,
                   unitPriceCents: true,
                   discountCents: true,
-                  product: { select: { vendor: true } },
+                  product: { select: { vendor: true, excludeFromRebate: true } },
                 },
               },
             },
@@ -63,8 +63,20 @@ export async function GET(req: NextRequest) {
       {
         quantity: number;
         costCents: number;
+        // Cost of lines that actually count toward the rebate — excludes any
+        // product marked "exclude from rebate", even when its vendor pays one.
+        rebateCostCents: number;
         revenueCents: number;
-        items: Map<string, { name: string; sku: string; quantity: number; revenueCents: number }>;
+        items: Map<
+          string,
+          {
+            name: string;
+            sku: string;
+            quantity: number;
+            revenueCents: number;
+            excludedFromRebate: boolean;
+          }
+        >;
       }
     >();
     for (const s of sales) {
@@ -73,18 +85,31 @@ export async function GET(req: NextRequest) {
         const row = byVendor.get(vendor) ?? {
           quantity: 0,
           costCents: 0,
+          rebateCostCents: 0,
           revenueCents: 0,
-          items: new Map<string, { name: string; sku: string; quantity: number; revenueCents: number }>(),
+          items: new Map<
+            string,
+            {
+              name: string;
+              sku: string;
+              quantity: number;
+              revenueCents: number;
+              excludedFromRebate: boolean;
+            }
+          >(),
         };
         const lineRevenue = it.unitPriceCents * it.quantity - it.discountCents;
+        const lineCost = it.quantity * it.unitCostCents;
         row.quantity += it.quantity;
-        row.costCents += it.quantity * it.unitCostCents;
+        row.costCents += lineCost;
         row.revenueCents += lineRevenue;
+        if (!it.product.excludeFromRebate) row.rebateCostCents += lineCost;
         const itemRow = row.items.get(it.productId) ?? {
           name: it.nameSnapshot,
           sku: it.skuSnapshot,
           quantity: 0,
           revenueCents: 0,
+          excludedFromRebate: it.product.excludeFromRebate,
         };
         itemRow.quantity += it.quantity;
         itemRow.revenueCents += lineRevenue;
@@ -93,7 +118,8 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Rebate is a percentage of what we paid the vendor, not what we sold for.
+    // Rebate is a percentage of what we paid the vendor for rebate-eligible
+    // items, not the full cost of everything sold.
     const rows = [...byVendor.entries()]
       .map(([vendor, v]) => {
         const rebateBps = rebateByVendor.get(vendor.trim().toLowerCase()) ?? 0;
@@ -103,7 +129,7 @@ export async function GET(req: NextRequest) {
           revenueCents: v.revenueCents,
           costCents: v.costCents,
           rebateBps,
-          rebateCents: Math.round((v.costCents * rebateBps) / 10_000),
+          rebateCents: Math.round((v.rebateCostCents * rebateBps) / 10_000),
           items: [...v.items.entries()]
             .map(([productId, i]) => ({ productId, ...i }))
             .sort((a, b) => b.revenueCents - a.revenueCents),
