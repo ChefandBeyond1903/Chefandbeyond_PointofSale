@@ -156,6 +156,11 @@ model Vendor {
   // Rebate this vendor pays back, in basis points (250 = 2.50%) of sales.
   // Shown on the Sales by Vendor report.
   rebateBps           Int      @default(0)
+  // Member of the Strata buying group — splits out as its own section on the
+  // Purchases by Vendor report.
+  strataBuyingGroup   Boolean  @default(false)
+  // We currently have an active open (net-terms) account with this vendor.
+  hasOpenAccount      Boolean  @default(false)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 }

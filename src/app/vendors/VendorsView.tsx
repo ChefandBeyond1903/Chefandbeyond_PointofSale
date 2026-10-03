@@ -24,6 +24,8 @@ type Draft = {
   notes: string;
   freightMinimumCents: number;
   rebatePct: string;
+  strataBuyingGroup: boolean;
+  hasOpenAccount: boolean;
 };
 
 const emptyDraft: Draft = {
@@ -35,6 +37,8 @@ const emptyDraft: Draft = {
   notes: "",
   freightMinimumCents: 0,
   rebatePct: "",
+  strataBuyingGroup: false,
+  hasOpenAccount: false,
 };
 
 export function VendorsView({ canManage = true }: { canManage?: boolean }) {
@@ -118,6 +122,8 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
       notes: v.notes,
       freightMinimumCents: v.freightMinimumCents,
       rebatePct: v.rebateBps ? String(v.rebateBps / 100) : "",
+      strataBuyingGroup: v.strataBuyingGroup,
+      hasOpenAccount: v.hasOpenAccount,
     });
     setPendingOpenId(null);
   }, [vendors, pendingOpenId]);
@@ -135,6 +141,8 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
       notes: draft.notes,
       freightMinimumCents: draft.freightMinimumCents,
       rebateBps: Math.round((parseFloat(draft.rebatePct) || 0) * 100),
+      strataBuyingGroup: draft.strataBuyingGroup,
+      hasOpenAccount: draft.hasOpenAccount,
     };
     try {
       if (draft.id) {
@@ -255,7 +263,25 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
             ) : (
               pg.pageItems.map((v) => (
                 <tr key={v.id}>
-                  <td className="px-4 py-2.5 font-medium">{v.name}</td>
+                  <td className="px-4 py-2.5 font-medium">
+                    {v.name}
+                    {v.strataBuyingGroup && (
+                      <span
+                        className="ml-1.5 rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700"
+                        title="Member of the Strata buying group"
+                      >
+                        Strata
+                      </span>
+                    )}
+                    {v.hasOpenAccount && (
+                      <span
+                        className="ml-1.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700"
+                        title="We have an active open account with this vendor"
+                      >
+                        Open account
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-2.5 text-zinc-500">{v.contact || "—"}</td>
                   <td className="px-4 py-2.5 text-zinc-500">{v.email || "—"}</td>
                   <td className="px-4 py-2.5 text-zinc-500">{v.phone || "—"}</td>
@@ -290,6 +316,8 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
                               notes: v.notes,
                               freightMinimumCents: v.freightMinimumCents,
                               rebatePct: v.rebateBps ? String(v.rebateBps / 100) : "",
+                              strataBuyingGroup: v.strataBuyingGroup,
+                              hasOpenAccount: v.hasOpenAccount,
                             })
                           }
                           className="btn-ghost text-xs"
@@ -397,6 +425,24 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
                     by vendor.
                   </p>
                 </div>
+              </div>
+              <div className="flex flex-wrap gap-4">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={draft.strataBuyingGroup}
+                    onChange={(e) => setDraft({ ...draft, strataBuyingGroup: e.target.checked })}
+                  />
+                  Member of the Strata buying group
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={draft.hasOpenAccount}
+                    onChange={(e) => setDraft({ ...draft, hasOpenAccount: e.target.checked })}
+                  />
+                  We have an active open account with this vendor
+                </label>
               </div>
               <div>
                 <label className="label">Notes</label>

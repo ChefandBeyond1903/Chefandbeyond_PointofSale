@@ -14,6 +14,8 @@ type Draft = {
   notes: string;
   freightMinimumCents: number;
   rebatePct: string;
+  strataBuyingGroup: boolean;
+  hasOpenAccount: boolean;
 };
 
 const emptyDraft: Draft = {
@@ -25,6 +27,8 @@ const emptyDraft: Draft = {
   notes: "",
   freightMinimumCents: 0,
   rebatePct: "",
+  strataBuyingGroup: false,
+  hasOpenAccount: false,
 };
 
 /**
@@ -61,6 +65,8 @@ export function NewVendorModal({
           notes: draft.notes.trim(),
           freightMinimumCents: draft.freightMinimumCents,
           rebateBps: Math.round((parseFloat(draft.rebatePct) || 0) * 100),
+          strataBuyingGroup: draft.strataBuyingGroup,
+          hasOpenAccount: draft.hasOpenAccount,
         }),
       });
       onCreated(vendor);
@@ -150,6 +156,24 @@ export function NewVendorModal({
                 vendor.
               </p>
             </div>
+          </div>
+          <div className="flex flex-wrap gap-4">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={draft.strataBuyingGroup}
+                onChange={(e) => setDraft({ ...draft, strataBuyingGroup: e.target.checked })}
+              />
+              Strata buying group
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={draft.hasOpenAccount}
+                onChange={(e) => setDraft({ ...draft, hasOpenAccount: e.target.checked })}
+              />
+              Active open account
+            </label>
           </div>
           <div>
             <label className="label">Notes</label>

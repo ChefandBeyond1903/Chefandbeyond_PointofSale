@@ -55,6 +55,10 @@ export interface Vendor {
   notes: string;
   freightMinimumCents: number;
   rebateBps: number;
+  /** Member of the Strata buying group. */
+  strataBuyingGroup: boolean;
+  /** We currently have an active open (net-terms) account with this vendor. */
+  hasOpenAccount: boolean;
   createdAt?: string;
   productCount?: number;
   /** Distinct products from this vendor with on-hand stock > 0 (caller's store scope). */
@@ -809,27 +813,35 @@ export interface PurchasesByVendorReport {
     noStoreAssigned: boolean;
   };
   stores: { id: string; name: string }[];
-  rows: {
-    vendor: string;
-    billCount: number;
-    paidCents: number;
-    bills: {
-      id: string;
-      billNumber: string;
-      poId: string | null;
-      poNumber: string | null;
-      dueDate: string | null;
-      paidAt: string | null;
-      amountCents: number;
-    }[];
-    rebateBps: number;
-    rebateCents: number;
+  rows: PurchasesByVendorRow[];
+  totals: PurchasesByVendorTotals;
+  strata: { rows: PurchasesByVendorRow[]; totals: PurchasesByVendorTotals };
+  other: { rows: PurchasesByVendorRow[]; totals: PurchasesByVendorTotals };
+}
+
+export interface PurchasesByVendorRow {
+  vendor: string;
+  billCount: number;
+  paidCents: number;
+  bills: {
+    id: string;
+    billNumber: string;
+    poId: string | null;
+    poNumber: string | null;
+    dueDate: string | null;
+    paidAt: string | null;
+    amountCents: number;
   }[];
-  totals: {
-    billCount: number;
-    paidCents: number;
-    rebateCents: number;
-  };
+  rebateBps: number;
+  rebateCents: number;
+  strataBuyingGroup: boolean;
+  hasOpenAccount: boolean;
+}
+
+export interface PurchasesByVendorTotals {
+  billCount: number;
+  paidCents: number;
+  rebateCents: number;
 }
 
 export interface InventoryValuationItem {

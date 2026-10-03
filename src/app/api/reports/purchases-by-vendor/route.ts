@@ -45,7 +45,9 @@ export async function GET(req: NextRequest) {
             },
           }),
       prisma.store.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
-      prisma.vendor.findMany({ select: { name: true, rebateBps: true } }),
+      prisma.vendor.findMany({
+        select: { name: true, rebateBps: true, strataBuyingGroup: true, hasOpenAccount: true },
+      }),
     ]);
 
     const bills = allPaidBills.filter((b) => {
@@ -54,6 +56,7 @@ export async function GET(req: NextRequest) {
     });
 
     const rebateByVendor = new Map(vendors.map((v) => [v.name.trim().toLowerCase(), v.rebateBps]));
+    const vendorByName = new Map(vendors.map((v) => [v.name.trim().toLowerCase(), v]));
 
     const byVendor = new Map<
       string,
@@ -91,6 +94,7 @@ export async function GET(req: NextRequest) {
     const rows = [...byVendor.entries()]
       .map(([vendor, v]) => {
         const rebateBps = rebateByVendor.get(vendor.trim().toLowerCase()) ?? 0;
+        const vendorRow = vendorByName.get(vendor.trim().toLowerCase());
         return {
           vendor,
           billCount: v.billCount,
@@ -100,18 +104,28 @@ export async function GET(req: NextRequest) {
           ),
           rebateBps,
           rebateCents: Math.round((v.paidCents * rebateBps) / 10_000),
+          strataBuyingGroup: vendorRow?.strataBuyingGroup ?? false,
+          hasOpenAccount: vendorRow?.hasOpenAccount ?? false,
         };
       })
       .sort((a, b) => b.paidCents - a.paidCents);
 
-    const totals = rows.reduce(
-      (t, r) => ({
-        billCount: t.billCount + r.billCount,
-        paidCents: t.paidCents + r.paidCents,
-        rebateCents: t.rebateCents + r.rebateCents,
-      }),
-      { billCount: 0, paidCents: 0, rebateCents: 0 },
-    );
+    function sumRows(list: typeof rows) {
+      return list.reduce(
+        (t, r) => ({
+          billCount: t.billCount + r.billCount,
+          paidCents: t.paidCents + r.paidCents,
+          rebateCents: t.rebateCents + r.rebateCents,
+        }),
+        { billCount: 0, paidCents: 0, rebateCents: 0 },
+      );
+    }
+
+    const totals = sumRows(rows);
+    // Split out the Strata buying-group vendors from everyone else, so the
+    // two can be compared at a glance instead of hunting through one list.
+    const strataRows = rows.filter((r) => r.strataBuyingGroup);
+    const otherRows = rows.filter((r) => !r.strataBuyingGroup);
 
     const storeName = storeId ? (stores.find((s) => s.id === storeId)?.name ?? "") : "";
 
@@ -125,6 +139,8 @@ export async function GET(req: NextRequest) {
       stores,
       rows,
       totals,
+      strata: { rows: strataRows, totals: sumRows(strataRows) },
+      other: { rows: otherRows, totals: sumRows(otherRows) },
     });
   } catch (err) {
     return toErrorResponse(err);
