@@ -5,9 +5,10 @@ import { api } from "@/lib/client";
 import { formatBps, formatMoney } from "@/lib/money";
 import { formatDateOnly } from "@/lib/date";
 import { PrintPaperToggle, usePrintPaper } from "@/components/PrintPaperToggle";
+import { EmailInvoiceButton } from "@/components/EmailInvoiceButton";
 import type { Company, Sale } from "@/lib/types";
 
-// Printed on every invoice/receipt.
+// Printed on every invoice/receipt. Keep in sync with lib/invoicePdf.ts.
 export const INVOICE_FINE_PRINT =
   "ALL SALES ARE FINAL. Changes after 48 hours may incur a fee (refund subject to a " +
   "restocking fee of 30% of the total purchase price or more depends on the vendor). " +
@@ -93,6 +94,14 @@ export function ReceiptModal({
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <PrintPaperToggle value={paper} onChange={setPaper} />
             <div className="ml-auto flex flex-1 gap-2">
+              {sale ? (
+                <EmailInvoiceButton
+                  saleId={sale.id}
+                  defaultEmail={sale.customerEmailSnapshot ?? ""}
+                  label="Email"
+                  className="btn-secondary flex-1"
+                />
+              ) : null}
               <button
                 onClick={() => window.print()}
                 disabled={!sale}
