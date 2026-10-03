@@ -55,6 +55,12 @@ export function VendorsView({
   const [saving, setSaving] = useState(false);
   const [q, setQ] = useState("");
   const [historyVendor, setHistoryVendor] = useState<Vendor | null>(null);
+  // Merge mergeFrom's products/bills/POs/history into another vendor, then
+  // delete mergeFrom from the directory.
+  const [mergeFrom, setMergeFrom] = useState<Vendor | null>(null);
+  const [mergeTargetId, setMergeTargetId] = useState("");
+  const [merging, setMerging] = useState(false);
+  const [mergeError, setMergeError] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     const s = q.trim();
@@ -176,6 +182,58 @@ export function VendorsView({
       load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not delete vendor");
+    }
+  }
+
+  async function doMerge() {
+    if (!mergeFrom || !mergeTargetId) return;
+    const target = vendors.find((v) => v.id === mergeTargetId);
+    if (!target) return;
+    if (
+      !confirm(
+        `Merge "${mergeFrom.name}" into "${target.name}"?\n\nEvery product, purchase order, ` +
+          `bill, and past sale line recorded under "${mergeFrom.name}" will be renamed to ` +
+          `"${target.name}". "${mergeFrom.name}" will then be removed from the vendor ` +
+          `directory. This can't be undone.`,
+      )
+    ) {
+      return;
+    }
+    setMerging(true);
+    setMergeError(null);
+    try {
+      const res = await api<{
+        counts: {
+          products: number;
+          purchaseOrders: number;
+          bills: number;
+          saleItems: number;
+          expenses: number;
+        };
+      }>("/api/vendors/merge", {
+        method: "POST",
+        body: JSON.stringify({ sourceId: mergeFrom.id, targetId: mergeTargetId }),
+      });
+      const { counts } = res;
+      const parts = [
+        counts.products > 0 ? `${counts.products} product(s)` : "",
+        counts.purchaseOrders > 0 ? `${counts.purchaseOrders} purchase order(s)` : "",
+        counts.bills > 0 ? `${counts.bills} bill(s)` : "",
+        counts.saleItems > 0 ? `${counts.saleItems} past sale line(s)` : "",
+        counts.expenses > 0 ? `${counts.expenses} expense(s)` : "",
+      ].filter(Boolean);
+      alert(
+        parts.length > 0
+          ? `Merged. Moved to "${target.name}": ${parts.join(", ")}.`
+          : `Merged "${mergeFrom.name}" into "${target.name}" (no records needed renaming).`,
+      );
+      setMergeFrom(null);
+      setMergeTargetId("");
+      load();
+    } catch (err) {
+      setMergeError(err instanceof ApiError ? err.message : "Could not merge vendors");
+    } finally {
+      setMerging(false);
     }
   }
 
@@ -335,6 +393,16 @@ export function VendorsView({
                           Edit
                         </button>
                         <button
+                          onClick={() => {
+                            setMergeFrom(v);
+                            setMergeTargetId("");
+                            setMergeError(null);
+                          }}
+                          className="btn-ghost text-xs"
+                        >
+                          Merge
+                        </button>
+                        <button
                           onClick={() => remove(v)}
                           className="btn-ghost text-xs text-red-500"
                         >
@@ -355,6 +423,59 @@ export function VendorsView({
           vendorName={historyVendor.name}
           onClose={() => setHistoryVendor(null)}
         />
+      )}
+
+      {mergeFrom && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"
+          onClick={() => !merging && setMergeFrom(null)}
+        >
+          <div className="card w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+            <h2 className="mb-1 text-lg font-semibold">Merge vendor</h2>
+            <p className="mb-4 text-sm text-zinc-500">
+              Merge <span className="font-medium text-zinc-700">{mergeFrom.name}</span> into
+              another vendor. Every product, purchase order, bill, and past sale line under{" "}
+              {mergeFrom.name} moves to the vendor you pick; {mergeFrom.name} is then removed
+              from the directory.
+            </p>
+            <label className="label">Merge into</label>
+            <select
+              className="input"
+              value={mergeTargetId}
+              onChange={(e) => setMergeTargetId(e.target.value)}
+              autoFocus
+            >
+              <option value="">Choose a vendor…</option>
+              {vendors
+                .filter((v) => v.id !== mergeFrom.id)
+                .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
+                .map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name}
+                  </option>
+                ))}
+            </select>
+            {mergeError && (
+              <p className="mt-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{mergeError}</p>
+            )}
+            <div className="mt-5 flex gap-2">
+              <button
+                onClick={() => setMergeFrom(null)}
+                disabled={merging}
+                className="btn-secondary flex-1"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={doMerge}
+                disabled={merging || !mergeTargetId}
+                className="btn-primary flex-1"
+              >
+                {merging ? "Merging…" : "Merge"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {draft && (
