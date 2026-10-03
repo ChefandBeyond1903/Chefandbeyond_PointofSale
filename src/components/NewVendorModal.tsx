@@ -38,10 +38,12 @@ const emptyDraft: Draft = {
  */
 export function NewVendorModal({
   initialName = "",
+  isAdmin = false,
   onClose,
   onCreated,
 }: {
   initialName?: string;
+  isAdmin?: boolean;
   onClose: () => void;
   onCreated: (vendor: Vendor) => void;
 }) {
@@ -128,7 +130,7 @@ export function NewVendorModal({
               onChange={(e) => setDraft({ ...draft, address: e.target.value })}
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className={`grid gap-3 ${isAdmin ? "grid-cols-2" : "grid-cols-1"}`}>
             <div>
               <label className="label">Free-freight minimum</label>
               <MoneyInput
@@ -140,22 +142,24 @@ export function NewVendorModal({
                 warns, it never blocks the PO.
               </p>
             </div>
-            <div>
-              <label className="label">Rebate %</label>
-              <input
-                className="input"
-                inputMode="decimal"
-                placeholder="0"
-                value={draft.rebatePct}
-                onChange={(e) =>
-                  setDraft({ ...draft, rebatePct: e.target.value.replace(/[^0-9.]/g, "") })
-                }
-              />
-              <p className="mt-0.5 text-[11px] text-zinc-400">
-                Rebate this vendor pays back, e.g. 2.5 for 2.5%. Shown on Reports &gt; Sales by
-                vendor.
-              </p>
-            </div>
+            {isAdmin && (
+              <div>
+                <label className="label">Rebate %</label>
+                <input
+                  className="input"
+                  inputMode="decimal"
+                  placeholder="0"
+                  value={draft.rebatePct}
+                  onChange={(e) =>
+                    setDraft({ ...draft, rebatePct: e.target.value.replace(/[^0-9.]/g, "") })
+                  }
+                />
+                <p className="mt-0.5 text-[11px] text-zinc-400">
+                  Rebate this vendor pays back, e.g. 2.5 for 2.5%. Shown on Reports &gt; Sales by
+                  vendor.
+                </p>
+              </div>
+            )}
           </div>
           <div className="flex flex-wrap gap-4">
             <label className="flex items-center gap-2 text-sm">

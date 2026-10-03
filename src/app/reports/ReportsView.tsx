@@ -135,22 +135,26 @@ export function ReportsView({
             >
               Overview
             </button>
-            <button
-              onClick={() => setTab("vendor")}
-              className={`rounded px-2.5 py-1 font-medium ${
-                tab === "vendor" ? "bg-white shadow-sm" : "text-zinc-500"
-              }`}
-            >
-              Sales by vendor
-            </button>
-            <button
-              onClick={() => setTab("purchases")}
-              className={`rounded px-2.5 py-1 font-medium ${
-                tab === "purchases" ? "bg-white shadow-sm" : "text-zinc-500"
-              }`}
-            >
-              Purchases by vendor
-            </button>
+            {isAdmin && (
+              <>
+                <button
+                  onClick={() => setTab("vendor")}
+                  className={`rounded px-2.5 py-1 font-medium ${
+                    tab === "vendor" ? "bg-white shadow-sm" : "text-zinc-500"
+                  }`}
+                >
+                  Sales by vendor
+                </button>
+                <button
+                  onClick={() => setTab("purchases")}
+                  className={`rounded px-2.5 py-1 font-medium ${
+                    tab === "purchases" ? "bg-white shadow-sm" : "text-zinc-500"
+                  }`}
+                >
+                  Purchases by vendor
+                </button>
+              </>
+            )}
             <button
               onClick={() => setTab("tax")}
               className={`rounded px-2.5 py-1 font-medium ${
@@ -202,9 +206,9 @@ export function ReportsView({
         )}
       </div>
 
-      {tab === "vendor" ? (
+      {isAdmin && tab === "vendor" ? (
         <SalesByVendorReport isAdmin={isAdmin} />
-      ) : tab === "purchases" ? (
+      ) : isAdmin && tab === "purchases" ? (
         <PurchasesByVendorReport isAdmin={isAdmin} />
       ) : tab === "tax" ? (
         <TaxByStateReport isAdmin={isAdmin} />

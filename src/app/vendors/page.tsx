@@ -5,5 +5,5 @@ import { VendorsView } from "./VendorsView";
 export default async function VendorsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/vendors");
-  return <VendorsView canManage={user.role !== "CASHIER"} />;
+  return <VendorsView canManage={user.role !== "CASHIER"} isAdmin={user.role === "ADMIN"} />;
 }

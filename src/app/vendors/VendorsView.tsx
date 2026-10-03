@@ -41,7 +41,13 @@ const emptyDraft: Draft = {
   hasOpenAccount: false,
 };
 
-export function VendorsView({ canManage = true }: { canManage?: boolean }) {
+export function VendorsView({
+  canManage = true,
+  isAdmin = false,
+}: {
+  canManage?: boolean;
+  isAdmin?: boolean;
+}) {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -218,16 +224,18 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
               >
                 Free-freight min.
               </SortTh>
-              <SortTh
-                sortKey="rebate"
-                activeKey={sortKey}
-                dir={sortDir}
-                onSort={sortBy}
-                align="right"
-                className="px-4 py-2.5 text-right"
-              >
-                Rebate
-              </SortTh>
+              {isAdmin && (
+                <SortTh
+                  sortKey="rebate"
+                  activeKey={sortKey}
+                  dir={sortDir}
+                  onSort={sortBy}
+                  align="right"
+                  className="px-4 py-2.5 text-right"
+                >
+                  Rebate
+                </SortTh>
+              )}
               <SortTh
                 sortKey="inStock"
                 activeKey={sortKey}
@@ -253,9 +261,9 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
           </thead>
           <tbody className="divide-y divide-zinc-100">
             {loading ? (
-              <LoadingRow colSpan={9} />
+              <LoadingRow colSpan={isAdmin ? 9 : 8} />
             ) : pg.total === 0 ? (
-              <EmptyRow colSpan={9}>
+              <EmptyRow colSpan={isAdmin ? 9 : 8}>
                 {vendors.length === 0
                   ? "No vendors yet. Add one to start."
                   : "No vendors match your search."}
@@ -288,9 +296,11 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
                   <td className="px-4 py-2.5 text-right text-zinc-500">
                     {v.freightMinimumCents > 0 ? formatMoney(v.freightMinimumCents) : "—"}
                   </td>
-                  <td className="px-4 py-2.5 text-right text-zinc-500">
-                    {v.rebateBps > 0 ? `${(v.rebateBps / 100).toString()}%` : "—"}
-                  </td>
+                  {isAdmin && (
+                    <td className="px-4 py-2.5 text-right text-zinc-500">
+                      {v.rebateBps > 0 ? `${(v.rebateBps / 100).toString()}%` : "—"}
+                    </td>
+                  )}
                   <td className="px-4 py-2.5 text-right font-medium">
                     {v.inStockProductCount ?? 0}
                   </td>
@@ -397,7 +407,7 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
                   onChange={(e) => setDraft({ ...draft, address: e.target.value })}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className={`grid gap-3 ${isAdmin ? "grid-cols-2" : "grid-cols-1"}`}>
                 <div>
                   <label className="label">Free-freight minimum</label>
                   <MoneyInput
@@ -409,22 +419,24 @@ export function VendorsView({ canManage = true }: { canManage?: boolean }) {
                     warns, it never blocks the PO.
                   </p>
                 </div>
-                <div>
-                  <label className="label">Rebate %</label>
-                  <input
-                    className="input"
-                    inputMode="decimal"
-                    placeholder="0"
-                    value={draft.rebatePct}
-                    onChange={(e) =>
-                      setDraft({ ...draft, rebatePct: e.target.value.replace(/[^0-9.]/g, "") })
-                    }
-                  />
-                  <p className="mt-0.5 text-[11px] text-zinc-400">
-                    Rebate this vendor pays back, e.g. 2.5 for 2.5%. Shown on Reports &gt; Sales
-                    by vendor.
-                  </p>
-                </div>
+                {isAdmin && (
+                  <div>
+                    <label className="label">Rebate %</label>
+                    <input
+                      className="input"
+                      inputMode="decimal"
+                      placeholder="0"
+                      value={draft.rebatePct}
+                      onChange={(e) =>
+                        setDraft({ ...draft, rebatePct: e.target.value.replace(/[^0-9.]/g, "") })
+                      }
+                    />
+                    <p className="mt-0.5 text-[11px] text-zinc-400">
+                      Rebate this vendor pays back, e.g. 2.5 for 2.5%. Shown on Reports &gt; Sales
+                      by vendor.
+                    </p>
+                  </div>
+                )}
               </div>
               <div className="flex flex-wrap gap-4">
                 <label className="flex items-center gap-2 text-sm">

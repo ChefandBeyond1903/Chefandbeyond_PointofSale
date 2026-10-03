@@ -1150,6 +1150,7 @@ export function PurchaseOrderForm({
       {newVendorOpen && (
         <NewVendorModal
           initialName={vendor && !vendors.some((v) => v.name === vendor) ? vendor : ""}
+          isAdmin={isAdmin}
           onClose={() => setNewVendorOpen(false)}
           onCreated={(created) => {
             setVendors((cur) => [...cur, created].sort((a, b) => a.name.localeCompare(b.name)));
