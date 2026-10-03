@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, ApiError } from "@/lib/client";
+import { api, ApiError, describeApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
 import { MoneyInput } from "@/components/MoneyInput";
 import type { Category, Product } from "@/lib/types";
@@ -423,6 +423,14 @@ export function ProductManager({
 
   async function save() {
     if (!draft) return;
+    if (!draft.name.trim()) {
+      setError("Enter a product name.");
+      return;
+    }
+    if (!draft.sku.trim()) {
+      setError("Enter a SKU.");
+      return;
+    }
     if (isAdmin && draft.umrpCents > 0 && draft.priceCents < draft.umrpCents) {
       setError("Price can't be below the minimum resale price (UMRP).");
       return;
@@ -453,7 +461,7 @@ export function ProductManager({
       closeDraft();
       load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not save");
+      setError(describeApiError(err, "Could not save"));
     } finally {
       setSaving(false);
     }
