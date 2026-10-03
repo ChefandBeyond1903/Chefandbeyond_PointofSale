@@ -149,6 +149,9 @@ export function InvoiceForm({ role }: { role: "CASHIER" | "MANAGER" | "ADMIN" })
     setCustCompany(c.company);
     setCustAddress(c.address);
     setCustOpen(false);
+    // Switching to a customer with no payment terms — "leave unpaid" no
+    // longer applies to this invoice.
+    if (!c.paymentTerms) setLeaveUnpaid(false);
   }
 
   const custMatches = useMemo(() => {
@@ -204,6 +207,10 @@ export function InvoiceForm({ role }: { role: "CASHIER" | "MANAGER" | "ADMIN" })
   );
   const validLines = lines.filter((l) => l.productId && l.quantity > 0);
   const hasCustomer = !!custId || custName.trim().length > 0;
+  // Same rule as the register: only a customer set up with payment terms can
+  // be left unpaid (billed later). Anyone else must have a payment recorded.
+  const selectedCustomerTerms = custId ? (customers.find((c) => c.id === custId)?.paymentTerms ?? "") : "";
+  const canLeaveUnpaid = !!selectedCustomerTerms;
   // An admin has no store of their own — same as the register, they must
   // pick one here, since it's what the tax rate (and inventory) comes from.
   const storeMissing = isAdmin && stores.length > 0 && !storeId;
@@ -244,6 +251,12 @@ export function InvoiceForm({ role }: { role: "CASHIER" | "MANAGER" | "ADMIN" })
       ...(isAdmin && manualNumber.trim() ? { number: parseInt(manualNumber.trim(), 10) } : {}),
       ...(isAdmin && manualDate ? { saleDate: manualDate } : {}),
       ...(paymentNote.trim() ? { note: paymentNote.trim() } : {}),
+      // The server requires a payment method up front for any customer who
+      // isn't on terms (same rule as the register) — even to just total up a
+      // dry run. Send whatever's currently picked so totaling/previewing
+      // doesn't itself get rejected for "no payment method" before the real
+      // save (with the real amount/tender) replaces this.
+      ...(!leaveUnpaid ? { paymentMethod } : {}),
       ...customerPayload(),
     };
   }
@@ -299,6 +312,7 @@ export function InvoiceForm({ role }: { role: "CASHIER" | "MANAGER" | "ADMIN" })
     storeId,
     manualDate,
     manualNumber,
+    leaveUnpaid,
   ]);
 
   async function doSave(): Promise<{ id: string; number: number } | null> {
@@ -309,6 +323,10 @@ export function InvoiceForm({ role }: { role: "CASHIER" | "MANAGER" | "ADMIN" })
     }
     if (!hasCustomer) {
       setError("Add a customer before saving.");
+      return null;
+    }
+    if (leaveUnpaid && !canLeaveUnpaid) {
+      setError("This customer isn't set up with payment terms — record a payment instead.");
       return null;
     }
     if (validLines.length === 0) {
@@ -488,6 +506,7 @@ export function InvoiceForm({ role }: { role: "CASHIER" | "MANAGER" | "ADMIN" })
                 onChange={(e) => {
                   setCustName(e.target.value);
                   setCustId(null);
+                  setLeaveUnpaid(false);
                   setCustOpen(true);
                 }}
                 onFocus={() => setCustOpen(true)}
@@ -676,14 +695,23 @@ export function InvoiceForm({ role }: { role: "CASHIER" | "MANAGER" | "ADMIN" })
 
         <section className="card mb-4 p-4">
           <h2 className="mb-3 text-sm font-semibold text-zinc-700">Payment</h2>
-          <label className="mb-3 flex items-center gap-2 text-sm">
+          <label
+            className={`mb-1 flex items-center gap-2 text-sm ${canLeaveUnpaid ? "" : "text-zinc-400"}`}
+          >
             <input
               type="checkbox"
               checked={leaveUnpaid}
+              disabled={!canLeaveUnpaid}
               onChange={(e) => setLeaveUnpaid(e.target.checked)}
             />
             Leave unpaid (invoice the customer — they owe the balance)
           </label>
+          {!canLeaveUnpaid && (
+            <p className="mb-3 text-[11px] text-zinc-400">
+              Only available for a customer set up with payment terms (set that on the Customers
+              page) — everyone else needs a payment recorded now.
+            </p>
+          )}
           {!leaveUnpaid && (
             <div className="grid gap-3 sm:grid-cols-3">
               <div>
