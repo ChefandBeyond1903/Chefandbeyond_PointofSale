@@ -7,6 +7,7 @@ import { formatMoney } from "@/lib/money";
 import { todayInputValue } from "@/lib/date";
 import { matchesSearch } from "@/lib/search";
 import { MoneyInput } from "@/components/MoneyInput";
+import { PercentInput } from "@/components/PercentInput";
 import { QuickAddProductModal } from "@/components/QuickAddProductModal";
 import { ReceiptModal } from "@/components/ReceiptModal";
 import { PaymentMethodSelect, usePaymentMethods } from "@/components/PaymentMethodPicker";
@@ -21,6 +22,8 @@ type ProductLite = {
   vendor: string;
 };
 
+type DiscMode = "AMOUNT" | "PERCENT";
+
 type Line = {
   key: string;
   productId: string | null;
@@ -28,7 +31,12 @@ type Line = {
   sku: string;
   quantity: number;
   unitPriceCents: number;
+  // Resolved $ discount when discMode is AMOUNT; derived from discPercent
+  // (via resolveLineDiscount) when PERCENT — same split as the register.
   discountCents: number;
+  discPercent: number;
+  discMode: DiscMode;
+  serialNumber: string;
 };
 
 const uid = () =>
@@ -42,7 +50,17 @@ const blankLine = (): Line => ({
   quantity: 1,
   unitPriceCents: 0,
   discountCents: 0,
+  discPercent: 0,
+  discMode: "AMOUNT",
+  serialNumber: "",
 });
+
+/** The line's $ discount, resolved from whichever of $/% is active. */
+function resolveLineDiscount(l: Line): number {
+  const base = l.quantity * l.unitPriceCents;
+  const raw = l.discMode === "PERCENT" ? Math.round((base * l.discPercent) / 100) : l.discountCents;
+  return Math.max(0, Math.min(base, raw));
+}
 
 /**
  * A full-page invoice entry form — for the back office, not the register:
@@ -199,8 +217,32 @@ export function InvoiceForm({ role }: { role: "CASHIER" | "MANAGER" | "ADMIN" })
     setLines((rows) => (rows.length > 1 ? rows.filter((r) => r.key !== key) : rows));
   }
 
+  // Switch a line between $ and % without losing the value — same as the
+  // register: carry the current resolved discount across into the other unit.
+  function setLineDiscMode(key: string, mode: DiscMode) {
+    setLines((rows) =>
+      rows.map((r) => {
+        if (r.key !== key || r.discMode === mode) return r;
+        const base = r.quantity * r.unitPriceCents;
+        const cents = resolveLineDiscount(r);
+        return mode === "PERCENT"
+          ? { ...r, discMode: mode, discPercent: base > 0 ? (cents / base) * 100 : 0 }
+          : { ...r, discMode: mode, discountCents: cents };
+      }),
+    );
+  }
+  function setLineDiscAmount(key: string, cents: number) {
+    updateLine(key, { discMode: "AMOUNT", discountCents: Math.max(0, cents) });
+  }
+  function setLineDiscPercent(key: string, pct: number) {
+    updateLine(key, { discMode: "PERCENT", discPercent: Math.max(0, Math.min(100, pct)) });
+  }
+  function setLineSerial(key: string, serialNumber: string) {
+    updateLine(key, { serialNumber });
+  }
+
   const itemsSubtotalCents = lines.reduce((s, l) => s + l.quantity * l.unitPriceCents, 0);
-  const lineDiscountsCents = lines.reduce((s, l) => s + l.discountCents, 0);
+  const lineDiscountsCents = lines.reduce((s, l) => s + resolveLineDiscount(l), 0);
   const netBeforeTaxCents = Math.max(
     0,
     itemsSubtotalCents - lineDiscountsCents - orderDiscountCents + shippingCents,
@@ -242,8 +284,9 @@ export function InvoiceForm({ role }: { role: "CASHIER" | "MANAGER" | "ADMIN" })
       items: validLines.map((l) => ({
         productId: l.productId!,
         quantity: l.quantity,
-        discountCents: l.discountCents,
+        discountCents: resolveLineDiscount(l),
         unitPriceCents: l.unitPriceCents,
+        ...(l.serialNumber.trim() ? { serialNumber: l.serialNumber.trim() } : {}),
       })),
       orderDiscountCents,
       shippingCents,
@@ -575,16 +618,17 @@ export function InvoiceForm({ role }: { role: "CASHIER" | "MANAGER" | "ADMIN" })
                   <th className="w-24 py-1.5">SKU</th>
                   <th className="w-20 py-1.5 text-right">Qty</th>
                   <th className="w-28 py-1.5 text-right">Price</th>
-                  <th className="w-28 py-1.5 text-right">Discount</th>
+                  <th className="w-40 py-1.5 text-right">Discount</th>
                   <th className="w-28 py-1.5 text-right">Amount</th>
                   <th className="w-8 py-1.5"></th>
                 </tr>
               </thead>
               <tbody>
                 {lines.map((row) => {
-                  const amount = Math.max(0, row.quantity * row.unitPriceCents - row.discountCents);
+                  const lineDisc = resolveLineDiscount(row);
+                  const amount = Math.max(0, row.quantity * row.unitPriceCents - lineDisc);
                   return (
-                    <tr key={row.key} className="border-t border-zinc-100">
+                    <tr key={row.key} className="border-t border-zinc-100 align-top">
                       <td className="py-1 pr-2">
                         <ProductPicker
                           value={row.productName}
@@ -592,6 +636,12 @@ export function InvoiceForm({ role }: { role: "CASHIER" | "MANAGER" | "ADMIN" })
                           onText={(t) => onProductPick(row.key, t)}
                           onSelect={(p) => onProductSelect(row.key, p)}
                           onAddNew={() => setQuickAddRowKey(row.key)}
+                        />
+                        <input
+                          className="input mt-1 h-7 w-full text-xs"
+                          placeholder="Serial # (optional)"
+                          value={row.serialNumber}
+                          onChange={(e) => setLineSerial(row.key, e.target.value)}
                         />
                       </td>
                       <td className="py-1 pr-2 text-zinc-500">{row.sku}</td>
@@ -615,11 +665,38 @@ export function InvoiceForm({ role }: { role: "CASHIER" | "MANAGER" | "ADMIN" })
                         />
                       </td>
                       <td className="py-1 pr-2">
-                        <MoneyInput
-                          cents={row.discountCents}
-                          onCentsChange={(c) => updateLine(row.key, { discountCents: Math.max(0, c) })}
-                          className="input h-8 text-right"
-                        />
+                        <div className="flex items-center justify-end gap-1">
+                          <div className="flex shrink-0 overflow-hidden rounded-md border border-zinc-300 text-xs">
+                            <button
+                              type="button"
+                              onClick={() => setLineDiscMode(row.key, "AMOUNT")}
+                              className={`px-1.5 py-1 ${row.discMode === "AMOUNT" ? "bg-indigo-600 text-white" : "text-zinc-500"}`}
+                            >
+                              $
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setLineDiscMode(row.key, "PERCENT")}
+                              className={`px-1.5 py-1 ${row.discMode === "PERCENT" ? "bg-indigo-600 text-white" : "text-zinc-500"}`}
+                            >
+                              %
+                            </button>
+                          </div>
+                          {row.discMode === "PERCENT" ? (
+                            <PercentInput
+                              value={row.discPercent}
+                              onValueChange={(n) => setLineDiscPercent(row.key, n)}
+                              className="input h-8 w-16 text-right"
+                              aria-label="Discount percent"
+                            />
+                          ) : (
+                            <MoneyInput
+                              cents={lineDisc}
+                              onCentsChange={(c) => setLineDiscAmount(row.key, c)}
+                              className="input h-8 w-20 text-right"
+                            />
+                          )}
+                        </div>
                       </td>
                       <td className="py-1 pr-2 text-right font-medium tabular-nums">
                         {formatMoney(amount)}
