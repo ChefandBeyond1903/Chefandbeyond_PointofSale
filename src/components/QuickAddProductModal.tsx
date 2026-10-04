@@ -47,6 +47,7 @@ export function QuickAddProductModal({
   const [trackStock, setTrackStock] = useState(true);
   const [active, setActive] = useState(true);
   const [favorite, setFavorite] = useState(false);
+  const [excludeFromRebate, setExcludeFromRebate] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -130,6 +131,7 @@ export function QuickAddProductModal({
           vendor: vendor.trim(),
           active,
           favorite,
+          excludeFromRebate,
         }),
       });
       // The create endpoint doesn't return per-store stock; a fresh product has none.
@@ -326,6 +328,22 @@ export function QuickAddProductModal({
             )}
           </div>
 
+          {vendor && (
+            <div className="col-span-2">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={excludeFromRebate}
+                  onChange={(e) => setExcludeFromRebate(e.target.checked)}
+                />
+                Exclude from {vendor}&rsquo;s rebate program
+              </label>
+              <p className="mt-0.5 pl-6 text-[11px] text-zinc-400">
+                This item won&rsquo;t count toward the vendor&rsquo;s rebate on Reports → Sales by
+                vendor / Purchases by vendor, even though the vendor otherwise pays one.
+              </p>
+            </div>
+          )}
           <div className="col-span-2 flex items-center gap-4">
             <label className="flex items-center gap-2 text-sm">
               <input
