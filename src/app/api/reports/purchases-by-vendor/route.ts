@@ -39,6 +39,7 @@ export async function GET(req: NextRequest) {
               vendor: true,
               billNumber: true,
               subtotalCents: true,
+              shippingCents: true,
               dueDate: true,
               paidAt: true,
               po: { select: { id: true, poNumber: true } },
@@ -75,7 +76,7 @@ export async function GET(req: NextRequest) {
           dueDate: string | null;
           paidAt: string | null;
           amountCents: number;
-          hasExcludedItems: boolean;
+          hasRebateAdjustment: boolean;
         }[];
       }
     >();
@@ -87,14 +88,14 @@ export async function GET(req: NextRequest) {
         rebateEligibleCents: 0,
         bills: [],
       };
-      // Items flagged "exclude from rebate" (Products) come straight out of
-      // this bill's rebate basis; everything else — including shipping/fees,
-      // which aren't tied to one item — still counts, same as before.
-      const excludedCents = b.items.reduce(
+      // Items flagged "exclude from rebate" (Products), and shipping cost,
+      // come straight out of this bill's rebate basis — other fees (minimum
+      // order, drop-ship) still count, same as before.
+      const excludedItemCents = b.items.reduce(
         (s, it) => s + (it.product?.excludeFromRebate ? it.lineCostCents : 0),
         0,
       );
-      const rebateEligibleCents = b.subtotalCents - excludedCents;
+      const rebateEligibleCents = Math.max(0, b.subtotalCents - excludedItemCents - b.shippingCents);
       row.billCount += 1;
       row.paidCents += b.subtotalCents;
       row.rebateEligibleCents += rebateEligibleCents;
@@ -106,7 +107,7 @@ export async function GET(req: NextRequest) {
         dueDate: b.dueDate?.toISOString() ?? null,
         paidAt: b.paidAt?.toISOString() ?? null,
         amountCents: b.subtotalCents,
-        hasExcludedItems: excludedCents > 0,
+        hasRebateAdjustment: excludedItemCents > 0 || b.shippingCents > 0,
       });
       byVendor.set(vendor, row);
     }

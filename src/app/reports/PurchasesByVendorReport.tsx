@@ -81,9 +81,9 @@ export function PurchasesByVendorReport({ isAdmin }: { isAdmin: boolean }) {
           <p className="px-1 text-xs text-zinc-400">
             Paid vendor bills only — an open (unpaid) bill isn&apos;t counted, and operating
             expenses aren&apos;t included. Rebate is a percentage of amount paid, set per vendor
-            under Vendors, minus the cost of any item marked &ldquo;exclude from rebate&rdquo; on
-            the product (bills with one are flagged &ldquo;partial rebate&rdquo; below). Split
-            below by whether the vendor is in the Strata buying group.
+            under Vendors, minus shipping cost and the cost of any item marked &ldquo;exclude
+            from rebate&rdquo; on the product (bills with either are flagged &ldquo;partial
+            rebate&rdquo; below). Split below by whether the vendor is in the Strata buying group.
           </p>
           <VendorSection
             title="Strata buying group"
@@ -212,10 +212,10 @@ function VendorSection({
                                 </td>
                                 <td className="py-1.5 text-zinc-500">
                                   {b.billNumber || "—"}
-                                  {b.hasExcludedItems && (
+                                  {b.hasRebateAdjustment && (
                                     <span
                                       className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700"
-                                      title="Includes an item excluded from this vendor's rebate — that item's cost isn't counted toward the rebate above"
+                                      title="Shipping cost and/or an item excluded from this vendor's rebate aren't counted toward the rebate above"
                                     >
                                       partial rebate
                                     </span>

@@ -831,8 +831,8 @@ export interface PurchasesByVendorRow {
     dueDate: string | null;
     paidAt: string | null;
     amountCents: number;
-    /** This bill has at least one line whose product is excluded from rebate. */
-    hasExcludedItems: boolean;
+    /** This bill's rebate basis is less than its total — an excluded item, shipping cost, or both. */
+    hasRebateAdjustment: boolean;
   }[];
   rebateBps: number;
   rebateCents: number;
