@@ -8,7 +8,9 @@ import type { SessionUser } from "@/lib/types";
 function LoginForm() {
   const params = useSearchParams();
   const nextParam = params.get("next");
-  const idleReason = params.get("reason") === "idle";
+  const reason = params.get("reason");
+  const idleReason = reason === "idle";
+  const sessionReason = reason === "session";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -56,6 +58,13 @@ function LoginForm() {
         {idleReason && (
           <p className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-center text-sm text-amber-800">
             You were signed out after 10 minutes of inactivity.
+          </p>
+        )}
+        {sessionReason && (
+          <p className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-center text-sm text-amber-800">
+            You were signed out. This happens if this login was used to sign in somewhere
+            else (only one device can be signed in at a time), or if an admin changed your
+            account. Sign in again below.
           </p>
         )}
 

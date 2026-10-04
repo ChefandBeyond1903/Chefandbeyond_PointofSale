@@ -44,7 +44,7 @@ export async function api<T = unknown>(path: string, init?: RequestInit): Promis
       !path.startsWith("/api/auth/login")
     ) {
       const next = encodeURIComponent(window.location.pathname + window.location.search);
-      window.location.replace(`/login?next=${next}`);
+      window.location.replace(`/login?reason=session&next=${next}`);
     }
     throw new ApiError(res.status, msg, body);
   }

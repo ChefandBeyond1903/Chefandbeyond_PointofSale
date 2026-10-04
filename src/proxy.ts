@@ -73,6 +73,7 @@ export async function proxy(req: NextRequest) {
   }
   const url = req.nextUrl.clone();
   url.pathname = "/login";
+  url.searchParams.set("reason", "session");
   url.searchParams.set("next", pathname);
   return NextResponse.redirect(url);
 }
