@@ -42,6 +42,9 @@ export async function GET(req: NextRequest) {
               dueDate: true,
               paidAt: true,
               po: { select: { id: true, poNumber: true } },
+              items: {
+                select: { lineCostCents: true, product: { select: { excludeFromRebate: true } } },
+              },
             },
           }),
       prisma.store.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
@@ -63,6 +66,7 @@ export async function GET(req: NextRequest) {
       {
         billCount: number;
         paidCents: number;
+        rebateEligibleCents: number;
         bills: {
           id: string;
           billNumber: string;
@@ -71,14 +75,29 @@ export async function GET(req: NextRequest) {
           dueDate: string | null;
           paidAt: string | null;
           amountCents: number;
+          hasExcludedItems: boolean;
         }[];
       }
     >();
     for (const b of bills) {
       const vendor = b.vendor?.trim() || "Unassigned";
-      const row = byVendor.get(vendor) ?? { billCount: 0, paidCents: 0, bills: [] };
+      const row = byVendor.get(vendor) ?? {
+        billCount: 0,
+        paidCents: 0,
+        rebateEligibleCents: 0,
+        bills: [],
+      };
+      // Items flagged "exclude from rebate" (Products) come straight out of
+      // this bill's rebate basis; everything else — including shipping/fees,
+      // which aren't tied to one item — still counts, same as before.
+      const excludedCents = b.items.reduce(
+        (s, it) => s + (it.product?.excludeFromRebate ? it.lineCostCents : 0),
+        0,
+      );
+      const rebateEligibleCents = b.subtotalCents - excludedCents;
       row.billCount += 1;
       row.paidCents += b.subtotalCents;
+      row.rebateEligibleCents += rebateEligibleCents;
       row.bills.push({
         id: b.id,
         billNumber: b.billNumber,
@@ -87,6 +106,7 @@ export async function GET(req: NextRequest) {
         dueDate: b.dueDate?.toISOString() ?? null,
         paidAt: b.paidAt?.toISOString() ?? null,
         amountCents: b.subtotalCents,
+        hasExcludedItems: excludedCents > 0,
       });
       byVendor.set(vendor, row);
     }
@@ -103,7 +123,7 @@ export async function GET(req: NextRequest) {
             (a.dueDate ?? a.paidAt ?? "").localeCompare(b.dueDate ?? b.paidAt ?? ""),
           ),
           rebateBps,
-          rebateCents: Math.round((v.paidCents * rebateBps) / 10_000),
+          rebateCents: Math.round((v.rebateEligibleCents * rebateBps) / 10_000),
           strataBuyingGroup: vendorRow?.strataBuyingGroup ?? false,
           hasOpenAccount: vendorRow?.hasOpenAccount ?? false,
         };
