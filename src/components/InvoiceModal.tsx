@@ -10,7 +10,6 @@ import { CardReaderPanel, type ReaderOption, type CardPaid } from "@/components/
 import { ManualCardPanel, manualCardAvailable } from "@/components/ManualCardPanel";
 import { ReceiptModal } from "@/components/ReceiptModal";
 import { RefundReceiptModal } from "@/components/RefundReceiptModal";
-import { EmailInvoiceButton } from "@/components/EmailInvoiceButton";
 import type { InvoiceDetail, PurchaseOrder, Sale, Vendor } from "@/lib/types";
 
 type Person = { id: string; name: string };
@@ -576,14 +575,6 @@ export function InvoiceModal({
                 >
                   Print receipt
                 </button>
-                <EmailInvoiceButton
-                  saleId={saleId}
-                  defaultEmail={
-                    sale.customerEmailSnapshot ||
-                    (sale.customer && "email" in sale.customer ? sale.customer.email : "") ||
-                    ""
-                  }
-                />
                 {isAdmin && (
                   <button
                     onClick={async () => {
