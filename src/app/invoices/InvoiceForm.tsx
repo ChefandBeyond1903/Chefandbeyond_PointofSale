@@ -124,6 +124,9 @@ export function InvoiceForm({
   const [storeId, setStoreId] = useState("");
   const [manualNumber, setManualNumber] = useState("");
   const [manualDate, setManualDate] = useState("");
+  const [manualNumberConflict, setManualNumberConflict] = useState<{ number: number; name: string } | null>(
+    null,
+  );
 
   // Bill-to customer — pick an existing one, or type a new name/details and
   // it's created automatically (same as the register).
@@ -197,6 +200,26 @@ export function InvoiceForm({
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Warn as soon as a manually-typed invoice # collides with an existing
+  // one, instead of only finding out after Save — debounced, admin only
+  // (manual numbering is admin-only to begin with).
+  useEffect(() => {
+    if (!isAdmin) return;
+    const trimmed = manualNumber.trim();
+    const t = setTimeout(() => {
+      if (!trimmed) {
+        setManualNumberConflict(null);
+        return;
+      }
+      api<{ conflict: { id: string; number: number; name: string } | null }>(
+        `/api/sales/check-number?number=${encodeURIComponent(trimmed)}`,
+      )
+        .then((r) => setManualNumberConflict(r.conflict))
+        .catch(() => {});
+    }, 400);
+    return () => clearTimeout(t);
+  }, [isAdmin, manualNumber]);
 
   // Restore an in-progress draft left from before a sign-out/reload — once,
   // on mount, before the save effect below starts overwriting it.
@@ -559,6 +582,10 @@ export function InvoiceForm({
       setError("This customer isn't set up with payment terms — record a payment instead.");
       return null;
     }
+    if (manualNumberConflict) {
+      setError(`Invoice #${manualNumberConflict.number} is already in use — pick a different number.`);
+      return null;
+    }
     if (validLines.length === 0) {
       setError("Add at least one product.");
       return null;
@@ -686,12 +713,18 @@ export function InvoiceForm({
               <div>
                 <label className="label">Invoice #</label>
                 <input
-                  className="input"
+                  className={`input ${manualNumberConflict ? "border-red-400" : ""}`}
                   inputMode="numeric"
                   placeholder="auto"
                   value={manualNumber}
                   onChange={(e) => setManualNumber(e.target.value.replace(/[^0-9]/g, ""))}
                 />
+                {manualNumberConflict && (
+                  <p className="mt-0.5 text-[11px] text-red-600">
+                    Already used{manualNumberConflict.name ? ` by ${manualNumberConflict.name}` : ""} —
+                    pick a different number.
+                  </p>
+                )}
               </div>
               <div>
                 <label className="label">Invoice date</label>
