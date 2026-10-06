@@ -16,20 +16,39 @@ export function defaultPoNumber(d = new Date()): string {
   return `CB-${mm}${dd}${yy}`;
 }
 
+/** Case- and punctuation-insensitive form of a PO number for duplicate checks
+ * — "CB-28785", "cb28785" and "Cb 28785" all collide. */
+export function normalizePoNumber(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * Finds an existing PO whose number normalizes to the same thing as
+ * `poNumber`, if any (excluding `excludeId`, for editing a PO in place).
+ * The PO table is small (low hundreds), so comparing in JS against every
+ * row is simpler and safer than replicating the normalization in SQL.
+ */
+export async function findPoNumberConflict(
+  poNumber: string,
+  excludeId?: string,
+): Promise<{ id: string; poNumber: string; vendor: string } | null> {
+  const target = normalizePoNumber(poNumber);
+  if (!target) return null;
+  const all = await prisma.purchaseOrder.findMany({ select: { id: true, poNumber: true, vendor: true } });
+  return all.find((p) => p.id !== excludeId && normalizePoNumber(p.poNumber) === target) ?? null;
+}
+
 /**
  * Rejects a PO number already used by another purchase order, instead of
  * silently renaming it — the user typed (or kept) that number on purpose,
  * so a collision should stop them and say why, not quietly become "-2".
  */
 export async function assertPoNumberAvailable(poNumber: string, excludeId?: string): Promise<void> {
-  const conflict = await prisma.purchaseOrder.findUnique({
-    where: { poNumber },
-    select: { id: true, vendor: true },
-  });
-  if (conflict && conflict.id !== excludeId) {
+  const conflict = await findPoNumberConflict(poNumber, excludeId);
+  if (conflict) {
     throw new HttpError(
       409,
-      `PO number "${poNumber}" is already used by a purchase order for ${conflict.vendor || "another vendor"} — pick a different number.`,
+      `PO number "${poNumber}" is already used by a purchase order for ${conflict.vendor || "another vendor"} (${conflict.poNumber}) — pick a different number.`,
     );
   }
 }
