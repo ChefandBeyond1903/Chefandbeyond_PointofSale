@@ -54,7 +54,11 @@ export async function GET(req: NextRequest) {
         },
       ];
       const money = Number.parseFloat(q.replace(/[$,\s]/g, ""));
-      if (Number.isFinite(money)) {
+      // Bounded well under Postgres's 32-bit int column (and any real bill
+      // amount) — a search term that happens to parse as a huge number
+      // (a phone number, a long PO reference, a UPC) must not overflow it
+      // and 500 the whole search.
+      if (Number.isFinite(money) && Math.abs(money) < 20_000_000) {
         const cents = Math.round(money * 100);
         or.push({ subtotalCents: cents });
         or.push({ subtotalCents: { gte: cents, lt: cents + 100 } }); // whole-dollar match
