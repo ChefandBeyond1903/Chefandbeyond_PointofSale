@@ -12,6 +12,7 @@ import { NewVendorModal } from "@/components/NewVendorModal";
 import { PaidStamp } from "@/components/PaidStamp";
 import { usePaymentMethods } from "@/components/PaymentMethodPicker";
 import { methodLabel } from "@/lib/payments";
+import { formatPhone } from "@/lib/phone";
 import { PO_TERMS, dueDateFromTerms } from "@/lib/terms";
 import type {
   Category,
@@ -142,6 +143,7 @@ export function PurchaseOrderForm({
   const [showCcBcc, setShowCcBcc] = useState(false);
   const [mailingAddress, setMailingAddress] = useState(COMPANY_MAILING_ADDRESS);
   const [shipTo, setShipTo] = useState("");
+  const [shipToLocationId, setShipToLocationId] = useState("");
   const [shippingAddress, setShippingAddress] = useState("");
   const [poDate, setPoDate] = useState(todayISO());
   const [dueDate, setDueDate] = useState("");
@@ -341,14 +343,74 @@ export function PurchaseOrderForm({
     }
   }
 
-  // Pick a store or customer for "Ship to"; fill in their address (still editable).
+  // Business name, contact, phone, then address — one per line — so the PO
+  // tells the vendor/carrier exactly who to ask for, not just a bare address.
+  function buildShipToBlock(opts: {
+    business?: string;
+    contact?: string;
+    phone?: string;
+    address?: string;
+  }): string {
+    const business = opts.business?.trim() ?? "";
+    const contact = opts.contact?.trim() ?? "";
+    const lines: string[] = [];
+    if (business) lines.push(business);
+    // Skip a redundant second line when there's no separate business name.
+    if (contact && contact !== business) lines.push(contact);
+    if (opts.phone?.trim()) lines.push(formatPhone(opts.phone));
+    if (opts.address?.trim()) lines.push(opts.address.trim());
+    return lines.join("\n");
+  }
+
+  // Pick a store or customer for "Ship to". A store just fills its address; a
+  // customer fills the full business/contact/phone/address block (still
+  // editable) — and if they have specific ship-to locations on file, the
+  // location picker below lets you narrow to one of those instead.
   function onShipToPick(name: string) {
     setShipTo(name);
-    const addr =
-      stores.find((s) => s.name === name)?.address ||
-      customers.find((c) => c.name === name)?.address ||
-      "";
-    if (addr) setShippingAddress(addr);
+    setShipToLocationId("");
+    const store = stores.find((s) => s.name === name);
+    if (store) {
+      if (store.address) setShippingAddress(store.address);
+      return;
+    }
+    const customer = customers.find((c) => c.name === name);
+    if (customer) {
+      setShippingAddress(
+        buildShipToBlock({
+          business: customer.company || customer.name,
+          contact: customer.name,
+          phone: customer.phone,
+          address: customer.address,
+        }),
+      );
+    }
+  }
+
+  function onShipToLocationPick(locId: string) {
+    setShipToLocationId(locId);
+    const customer = customers.find((c) => c.name === shipTo);
+    if (!customer) return;
+    const loc = customer.locations?.find((l) => l.id === locId);
+    if (!loc) {
+      setShippingAddress(
+        buildShipToBlock({
+          business: customer.company || customer.name,
+          contact: customer.name,
+          phone: customer.phone,
+          address: customer.address,
+        }),
+      );
+      return;
+    }
+    setShippingAddress(
+      buildShipToBlock({
+        business: loc.label || customer.company || customer.name,
+        contact: loc.contact || customer.name,
+        phone: loc.phone || customer.phone,
+        address: loc.address || customer.address,
+      }),
+    );
   }
 
   // Free-freight minimum for the chosen vendor. Ordering below it warns only.
@@ -721,10 +783,27 @@ export function PurchaseOrderForm({
                 </optgroup>
               )}
             </select>
+            {!!customers.find((c) => c.name === shipTo)?.locations?.length && (
+              <select
+                className="input mb-2"
+                value={shipToLocationId}
+                onChange={(e) => onShipToLocationPick(e.target.value)}
+                aria-label="Ship-to location"
+              >
+                <option value="">Use {shipTo}&apos;s main address…</option>
+                {customers
+                  .find((c) => c.name === shipTo)
+                  ?.locations?.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.label}
+                    </option>
+                  ))}
+              </select>
+            )}
             <textarea
               className="input"
-              rows={3}
-              placeholder="Shipping address"
+              rows={4}
+              placeholder="Business name, contact, phone, address"
               value={shippingAddress}
               onChange={(e) => setShippingAddress(e.target.value)}
             />
