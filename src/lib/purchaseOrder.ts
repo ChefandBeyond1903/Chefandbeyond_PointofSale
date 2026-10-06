@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { HttpError } from "@/lib/auth";
 import { purchaseOrderFormSchema } from "@/lib/validation";
 
 type Form = z.infer<typeof purchaseOrderFormSchema>;
@@ -15,16 +16,22 @@ export function defaultPoNumber(d = new Date()): string {
   return `CB-${mm}${dd}${yy}`;
 }
 
-/** Find a free PO number, adding -2, -3… on collision. */
-export async function uniquePoNumber(preferred?: string): Promise<string> {
-  const base = preferred?.trim() || defaultPoNumber();
-  let candidate = base;
-  let n = 2;
-  // eslint-disable-next-line no-await-in-loop
-  while (await prisma.purchaseOrder.findUnique({ where: { poNumber: candidate }, select: { id: true } })) {
-    candidate = `${base}-${n++}`;
+/**
+ * Rejects a PO number already used by another purchase order, instead of
+ * silently renaming it — the user typed (or kept) that number on purpose,
+ * so a collision should stop them and say why, not quietly become "-2".
+ */
+export async function assertPoNumberAvailable(poNumber: string, excludeId?: string): Promise<void> {
+  const conflict = await prisma.purchaseOrder.findUnique({
+    where: { poNumber },
+    select: { id: true, vendor: true },
+  });
+  if (conflict && conflict.id !== excludeId) {
+    throw new HttpError(
+      409,
+      `PO number "${poNumber}" is already used by a purchase order for ${conflict.vendor || "another vendor"} — pick a different number.`,
+    );
   }
-  return candidate;
 }
 
 export function itemAmountCents(l: Pick<ItemLine, "quantity" | "rateCents">): number {

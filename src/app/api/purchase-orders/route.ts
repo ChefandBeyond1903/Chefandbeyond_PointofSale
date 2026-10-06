@@ -6,7 +6,7 @@ import { requireScopedUser, requireScopedRole, scopeStoreId } from "@/lib/scope"
 import { ok, toErrorResponse } from "@/lib/api";
 import { purchaseOrderBulkDeleteSchema, purchaseOrderFormSchema } from "@/lib/validation";
 import { parseDateInput } from "@/lib/date";
-import { computeSubtotalCents, lineCreateData, uniquePoNumber } from "@/lib/purchaseOrder";
+import { computeSubtotalCents, lineCreateData, defaultPoNumber, assertPoNumberAvailable } from "@/lib/purchaseOrder";
 
 export async function GET(req: NextRequest) {
   try {
@@ -62,7 +62,8 @@ export async function POST(req: NextRequest) {
     const user = await requireScopedRole("CASHIER", "MANAGER", "ADMIN");
     const f = purchaseOrderFormSchema.parse(await req.json());
 
-    const poNumber = await uniquePoNumber(f.poNumber);
+    const poNumber = f.poNumber?.trim() || defaultPoNumber();
+    await assertPoNumberAvailable(poNumber);
     const subtotalCents = computeSubtotalCents(
       f.categoryLines,
       f.itemLines,

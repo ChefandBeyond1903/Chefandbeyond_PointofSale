@@ -5,7 +5,7 @@ import { HttpError } from "@/lib/auth";
 import { requireScopedUser, requireScopedRole, scopeStoreId } from "@/lib/scope";
 import { purchaseOrderPatchSchema } from "@/lib/validation";
 import { parseDateInput } from "@/lib/date";
-import { computeSubtotalCents, itemAmountCents } from "@/lib/purchaseOrder";
+import { computeSubtotalCents, itemAmountCents, assertPoNumberAvailable } from "@/lib/purchaseOrder";
 import { ok, toErrorResponse } from "@/lib/api";
 
 type Params = { params: Promise<{ id: string }> };
@@ -61,6 +61,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const { id } = await params;
     await loadScoped(id, actor);
     const f = purchaseOrderPatchSchema.parse(await req.json());
+    if (f.poNumber !== undefined && f.poNumber.trim()) {
+      await assertPoNumberAvailable(f.poNumber.trim(), id);
+    }
 
     const data: Prisma.PurchaseOrderUpdateInput = {};
     const scalars = [

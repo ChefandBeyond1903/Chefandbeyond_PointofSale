@@ -134,6 +134,9 @@ export function PurchaseOrderForm({
   const [vendor, setVendor] = useState("");
   const [status, setStatus] = useState<PurchaseOrderStatus>("OPEN");
   const [poNumber, setPoNumber] = useState(defaultPoNumber());
+  const [poNumberConflict, setPoNumberConflict] = useState<{ poNumber: string; vendor: string } | null>(
+    null,
+  );
   const [email, setEmail] = useState("");
   const [ccBcc, setCcBcc] = useState("");
   const [showCcBcc, setShowCcBcc] = useState(false);
@@ -245,6 +248,27 @@ export function PurchaseOrderForm({
       }
     })();
   }, [id, isEdit, applyPo, canAddExpense]);
+
+  // Warn as soon as a typed PO number collides with an existing one, instead
+  // of only finding out after Save — debounced so it doesn't fire on every
+  // keystroke.
+  useEffect(() => {
+    const trimmed = poNumber.trim();
+    const t = setTimeout(() => {
+      if (!trimmed) {
+        setPoNumberConflict(null);
+        return;
+      }
+      const qs = new URLSearchParams({ number: trimmed });
+      if (id) qs.set("excludeId", id);
+      api<{ conflict: { poNumber: string; vendor: string } | null }>(
+        `/api/purchase-orders/check-number?${qs.toString()}`,
+      )
+        .then((r) => setPoNumberConflict(r.conflict))
+        .catch(() => {});
+    }, 400);
+    return () => clearTimeout(t);
+  }, [poNumber, id]);
 
   // Vendor selection auto-fills the email. The mailing address is always
   // Chef and Beyond's, so it is left untouched here.
@@ -383,6 +407,10 @@ export function PurchaseOrderForm({
   async function save(send: boolean) {
     if (!vendor.trim()) {
       setError("Choose a vendor.");
+      return;
+    }
+    if (poNumberConflict) {
+      setError(`PO number "${poNumber.trim()}" is already in use — pick a different number.`);
       return;
     }
     if (
@@ -748,10 +776,16 @@ export function PurchaseOrderForm({
             <div>
               <label className="label">PO no.</label>
               <input
-                className="input"
+                className={`input ${poNumberConflict ? "border-red-400" : ""}`}
                 value={poNumber}
                 onChange={(e) => setPoNumber(e.target.value)}
               />
+              {poNumberConflict && (
+                <p className="mt-0.5 text-[11px] text-red-600">
+                  Already used by a PO for {poNumberConflict.vendor || "another vendor"} — pick a
+                  different number.
+                </p>
+              )}
             </div>
             <div>
               <label className="label">Store</label>
