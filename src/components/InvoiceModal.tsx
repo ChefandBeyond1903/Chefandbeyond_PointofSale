@@ -106,6 +106,7 @@ export function InvoiceModal({
     customerAddressSnapshot: "",
     note: "",
     salespersonId: "",
+    shippingCents: 0,
   });
   // Line-item editing: replace a product, change qty/price/serial. Only sent
   // back to the server if actually touched, so a plain note edit doesn't
@@ -126,6 +127,7 @@ export function InvoiceModal({
       customerAddressSnapshot: s.customerAddressSnapshot ?? "",
       note: s.note ?? "",
       salespersonId: s.salesperson?.id ?? s.salespersonId ?? "",
+      shippingCents: s.shippingCents ?? 0,
     });
     setEditItems(
       s.items.map((it) => ({
@@ -665,6 +667,14 @@ export function InvoiceModal({
                         </option>
                       ))}
                     </select>
+                  </label>
+                  <label>
+                    <span className="mb-1 block text-xs text-zinc-500">Shipping</span>
+                    <MoneyInput
+                      className="input h-8"
+                      cents={edit.shippingCents}
+                      onCentsChange={(c) => setEdit({ ...edit, shippingCents: Math.max(0, c) })}
+                    />
                   </label>
                   <textarea
                     className="input sm:col-span-2"
@@ -1268,6 +1278,14 @@ export function InvoiceModal({
                   </td>
                   <td className="py-1 text-right">{formatMoney(sale.taxCents)}</td>
                 </tr>
+                {sale.shippingCents > 0 && (
+                  <tr>
+                    <td colSpan={4} className="py-1 text-right text-zinc-500">
+                      Shipping
+                    </td>
+                    <td className="py-1 text-right">{formatMoney(sale.shippingCents)}</td>
+                  </tr>
+                )}
                 <tr className="font-bold">
                   <td colSpan={4} className="py-1 text-right">
                     Total

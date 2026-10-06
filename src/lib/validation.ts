@@ -467,6 +467,8 @@ export const saleEditSchema = z.object({
   // Replace the line items — swap a product, change quantity/price. Omit to
   // leave items untouched. Same shape as a sale's items (serialNumber is kept).
   items: z.array(saleItemSchema).min(1).optional(),
+  // Flat shipping/delivery charge — not taxed, added straight to the total.
+  shippingCents: z.number().int().min(0).optional(),
 });
 
 // Manager grants / adjusts a customer's store credit. amountCents is signed

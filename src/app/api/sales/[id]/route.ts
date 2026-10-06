@@ -123,13 +123,16 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         if (fields[k] !== undefined) data[k] = fields[k];
       }
 
+      if (
+        (fields.items || fields.shippingCents !== undefined) &&
+        (cur.status === "REFUNDED" || cur.status === "VOIDED")
+      ) {
+        throw new HttpError(400, `Can't edit items or shipping on a ${cur.status.toLowerCase()} invoice.`);
+      }
+
       let itemsCreate: Record<string, unknown>[] | null = null;
       let oldItems: { productId: string; quantity: number }[] = [];
       if (fields.items) {
-        if (cur.status === "REFUNDED" || cur.status === "VOIDED") {
-          throw new HttpError(400, `Can't edit items on a ${cur.status.toLowerCase()} invoice.`);
-        }
-
         // Merge duplicate product lines defensively (same as creating a sale).
         const merged = new Map<
           string,
@@ -187,7 +190,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         }
 
         const taxRateBps = cur.customerTaxExemptSnapshot ? 0 : cur.taxRateBps;
-        const computed = computeSale(priced, 0, taxRateBps, cur.shippingCents);
+        const shippingCents = fields.shippingCents ?? cur.shippingCents;
+        const computed = computeSale(priced, 0, taxRateBps, shippingCents);
 
         const umrpById = new Map(products.map((p) => [p.id, p.umrpCents]));
         if (editor.role !== "ADMIN") {
@@ -256,6 +260,25 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           lineTotalCents: l.lineTotalCents,
         }));
         oldItems = cur.items;
+      } else if (fields.shippingCents !== undefined && fields.shippingCents !== cur.shippingCents) {
+        // Shipping alone changed — it's a flat, untaxed add-on (see
+        // Sale.shippingCents), so the total just moves by the same delta;
+        // no need to re-derive tax/discount from the items again.
+        const newTotalCents = cur.totalCents - cur.shippingCents + fields.shippingCents;
+        if (newTotalCents < cur.refundedCents) {
+          throw new HttpError(
+            400,
+            `This invoice has ${formatMoney(cur.refundedCents)} already refunded — the new total ` +
+              `can't be less than that.`,
+          );
+        }
+        const effectivePaidCents =
+          cur.status === "COMPLETED" ? Math.max(cur.amountPaidCents, cur.totalCents) : cur.amountPaidCents;
+        const settled = effectivePaidCents >= newTotalCents;
+        data.totalCents = newTotalCents;
+        data.amountPaidCents = effectivePaidCents;
+        data.status = settled ? "COMPLETED" : "INVOICED";
+        data.paidAt = settled ? (cur.paidAt ?? new Date()) : null;
       }
 
       const sale = await prisma.$transaction(async (tx) => {
