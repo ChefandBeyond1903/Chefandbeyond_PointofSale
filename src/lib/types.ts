@@ -290,6 +290,8 @@ export interface Bill {
   shippingCents: number;
   minOrderFeeCents: number;
   dropShipFeeCents: number;
+  processingFeeBps: number;
+  processingFeeCents: number;
   earlyPayDiscountBps: number;
   vendorCreditCents: number;
   storeId: string | null;
@@ -840,9 +842,11 @@ export interface PurchasesByVendorRow {
     amountCents: number;
     /** This bill's rebate basis is less than its total — an excluded item, shipping cost, or both. */
     hasRebateAdjustment: boolean;
+    discountCents: number;
   }[];
   rebateBps: number;
   rebateCents: number;
+  discountCents: number;
   strataBuyingGroup: boolean;
   hasOpenAccount: boolean;
 }
@@ -851,6 +855,7 @@ export interface PurchasesByVendorTotals {
   billCount: number;
   paidCents: number;
   rebateCents: number;
+  discountCents: number;
 }
 
 export interface InventoryValuationItem {

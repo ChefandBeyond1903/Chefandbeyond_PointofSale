@@ -104,7 +104,8 @@ export async function POST(req: NextRequest, { params }: Params) {
     // discount / vendor credit are entered per bill (the form pre-fills the
     // PO's shipping and drop-ship fee on its first bill).
     const extraChargesCents = po.taxCents + po.expenses.reduce((s, e) => s + e.amountCents, 0);
-    const feesCents = body.shippingCents + body.minOrderFeeCents + body.dropShipFeeCents;
+    const feesCents =
+      body.shippingCents + body.minOrderFeeCents + body.dropShipFeeCents + body.processingFeeCents;
     const discountCents = earlyPayDiscountCents(itemsCents, body.earlyPayDiscountBps);
 
     // The bill inherits the PO's vendor — make sure it's in the directory.
@@ -132,6 +133,8 @@ export async function POST(req: NextRequest, { params }: Params) {
             shippingCents: body.shippingCents,
             minOrderFeeCents: body.minOrderFeeCents,
             dropShipFeeCents: body.dropShipFeeCents,
+            processingFeeBps: body.processingFeeBps,
+            processingFeeCents: body.processingFeeCents,
             earlyPayDiscountBps: body.earlyPayDiscountBps,
             vendorCreditCents: body.vendorCreditCents,
             storeId,

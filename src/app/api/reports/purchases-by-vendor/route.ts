@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireScopedRole, scopeStoreId } from "@/lib/scope";
+import { earlyPayDiscountCents } from "@/lib/billFees";
 import { ok, toErrorResponse } from "@/lib/api";
 
 // What we've actually paid each vendor, grouped by vendor — PAID bills only
@@ -42,6 +43,7 @@ export async function GET(req: NextRequest) {
               shippingCents: true,
               minOrderFeeCents: true,
               dropShipFeeCents: true,
+              earlyPayDiscountBps: true,
               dueDate: true,
               paidAt: true,
               po: { select: { id: true, poNumber: true } },
@@ -70,6 +72,7 @@ export async function GET(req: NextRequest) {
         billCount: number;
         paidCents: number;
         rebateEligibleCents: number;
+        discountCents: number;
         bills: {
           id: string;
           billNumber: string;
@@ -79,6 +82,7 @@ export async function GET(req: NextRequest) {
           paidAt: string | null;
           amountCents: number;
           hasRebateAdjustment: boolean;
+          discountCents: number;
         }[];
       }
     >();
@@ -88,6 +92,7 @@ export async function GET(req: NextRequest) {
         billCount: 0,
         paidCents: 0,
         rebateEligibleCents: 0,
+        discountCents: 0,
         bills: [],
       };
       // Items flagged "exclude from rebate" (Products), plus shipping,
@@ -102,9 +107,12 @@ export async function GET(req: NextRequest) {
         0,
         b.subtotalCents - excludedItemCents - excludedFeeCents,
       );
+      const itemsCents = b.items.reduce((s, it) => s + it.lineCostCents, 0);
+      const discountCents = earlyPayDiscountCents(itemsCents, b.earlyPayDiscountBps);
       row.billCount += 1;
       row.paidCents += b.subtotalCents;
       row.rebateEligibleCents += rebateEligibleCents;
+      row.discountCents += discountCents;
       row.bills.push({
         id: b.id,
         billNumber: b.billNumber,
@@ -114,6 +122,7 @@ export async function GET(req: NextRequest) {
         paidAt: b.paidAt?.toISOString() ?? null,
         amountCents: b.subtotalCents,
         hasRebateAdjustment: excludedItemCents > 0 || excludedFeeCents > 0,
+        discountCents,
       });
       byVendor.set(vendor, row);
     }
@@ -131,6 +140,7 @@ export async function GET(req: NextRequest) {
           ),
           rebateBps,
           rebateCents: Math.round((v.rebateEligibleCents * rebateBps) / 10_000),
+          discountCents: v.discountCents,
           strataBuyingGroup: vendorRow?.strataBuyingGroup ?? false,
           hasOpenAccount: vendorRow?.hasOpenAccount ?? false,
         };
@@ -143,8 +153,9 @@ export async function GET(req: NextRequest) {
           billCount: t.billCount + r.billCount,
           paidCents: t.paidCents + r.paidCents,
           rebateCents: t.rebateCents + r.rebateCents,
+          discountCents: t.discountCents + r.discountCents,
         }),
-        { billCount: 0, paidCents: 0, rebateCents: 0 },
+        { billCount: 0, paidCents: 0, rebateCents: 0, discountCents: 0 },
       );
     }
 

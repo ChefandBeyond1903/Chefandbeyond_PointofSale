@@ -734,6 +734,8 @@ function BillDetailModal({
     shippingCents: 0,
     minOrderFeeCents: 0,
     dropShipFeeCents: 0,
+    processingFeeBps: 0,
+    processingFeeCents: 0,
     earlyPayDiscountBps: 0,
     vendorCreditCents: 0,
   });
@@ -764,6 +766,8 @@ function BillDetailModal({
         shippingCents: res.bill.shippingCents ?? 0,
         minOrderFeeCents: res.bill.minOrderFeeCents ?? 0,
         dropShipFeeCents: res.bill.dropShipFeeCents ?? 0,
+        processingFeeBps: res.bill.processingFeeBps ?? 0,
+        processingFeeCents: res.bill.processingFeeCents ?? 0,
         earlyPayDiscountBps: res.bill.earlyPayDiscountBps ?? 0,
         vendorCreditCents: res.bill.vendorCreditCents ?? 0,
       });
@@ -824,11 +828,12 @@ function BillDetailModal({
   const otherCents = bill
     ? bill.subtotalCents -
       savedItemsCents -
-      (bill.shippingCents + bill.minOrderFeeCents + bill.dropShipFeeCents) +
+      (bill.shippingCents + bill.minOrderFeeCents + bill.dropShipFeeCents + bill.processingFeeCents) +
       earlyPayDiscountCents(savedItemsCents, bill.earlyPayDiscountBps) +
       bill.vendorCreditCents
     : 0;
-  const feesCents = adj.shippingCents + adj.minOrderFeeCents + adj.dropShipFeeCents;
+  const feesCents =
+    adj.shippingCents + adj.minOrderFeeCents + adj.dropShipFeeCents + adj.processingFeeCents;
   const discountCents = earlyPayDiscountCents(itemsCents, adj.earlyPayDiscountBps);
   const totalCents = itemsCents + otherCents + feesCents - discountCents - adj.vendorCreditCents;
 

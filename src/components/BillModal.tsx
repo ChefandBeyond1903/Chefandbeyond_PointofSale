@@ -66,6 +66,8 @@ export function BillModal({
     shippingCents: 0,
     minOrderFeeCents: 0,
     dropShipFeeCents: 0,
+    processingFeeBps: 0,
+    processingFeeCents: 0,
     earlyPayDiscountBps: 0,
     vendorCreditCents: 0,
   });
@@ -157,7 +159,8 @@ export function BillModal({
   const poExtraChargesCents =
     (po?.taxCents ?? 0) + (po?.expenses?.reduce((s, e) => s + e.amountCents, 0) ?? 0);
   const extraChargesCents = isFirstBill ? poExtraChargesCents : 0;
-  const feesCents = adj.shippingCents + adj.minOrderFeeCents + adj.dropShipFeeCents;
+  const feesCents =
+    adj.shippingCents + adj.minOrderFeeCents + adj.dropShipFeeCents + adj.processingFeeCents;
   const discountCents = earlyPayDiscountCents(itemsTotal, adj.earlyPayDiscountBps);
   const creditCents = adj.vendorCreditCents;
   const total = itemsTotal + extraChargesCents + feesCents - discountCents - creditCents;

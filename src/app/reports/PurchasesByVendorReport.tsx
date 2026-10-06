@@ -83,8 +83,8 @@ export function PurchasesByVendorReport({ isAdmin }: { isAdmin: boolean }) {
             expenses aren&apos;t included. Rebate is a percentage of amount paid, set per vendor
             under Vendors, minus shipping, minimum-order and drop-ship fees, and the cost of any
             item marked &ldquo;exclude from rebate&rdquo; on the product (bills with any of these
-            are flagged &ldquo;partial rebate&rdquo; below). Split below by whether the vendor is
-            in the Strata buying group.
+            are flagged &ldquo;partial rebate&rdquo; below). Discount saved is each bill&apos;s
+            early-pay discount %. Split below by whether the vendor is in the Strata buying group.
           </p>
           <VendorSection
             title="Strata buying group"
@@ -143,12 +143,13 @@ function VendorSection({
               <th className="px-4 py-2 text-right">Total paid</th>
               <th className="px-4 py-2 text-right">Rebate %</th>
               <th className="px-4 py-2 text-right">Rebate amount</th>
+              <th className="px-4 py-2 text-right">Discount saved</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-100">
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-zinc-400">
+                <td colSpan={6} className="px-4 py-6 text-center text-zinc-400">
                   {emptyLabel}
                 </td>
               </tr>
@@ -182,10 +183,13 @@ function VendorSection({
                     <td className="px-4 py-2 text-right font-semibold text-green-700">
                       {r.rebateCents > 0 ? formatMoney(r.rebateCents) : "—"}
                     </td>
+                    <td className="px-4 py-2 text-right font-semibold text-green-700">
+                      {r.discountCents > 0 ? formatMoney(r.discountCents) : "—"}
+                    </td>
                   </tr>
                   {expanded.has(r.vendor) && (
                     <tr className="bg-zinc-50/60">
-                      <td colSpan={5} className="px-4 pb-3 pt-1">
+                      <td colSpan={6} className="px-4 pb-3 pt-1">
                         <table className="w-full text-xs">
                           <thead className="text-left uppercase tracking-wide text-zinc-400">
                             <tr>
@@ -194,6 +198,7 @@ function VendorSection({
                               <th className="py-1">Due</th>
                               <th className="py-1">Paid</th>
                               <th className="py-1 text-right">Amount</th>
+                              <th className="py-1 text-right">Discount</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-zinc-100">
@@ -229,6 +234,9 @@ function VendorSection({
                                 <td className="py-1.5 text-right font-medium">
                                   {formatMoney(b.amountCents)}
                                 </td>
+                                <td className="py-1.5 text-right text-green-700">
+                                  {b.discountCents > 0 ? formatMoney(b.discountCents) : "—"}
+                                </td>
                               </tr>
                             ))}
                           </tbody>
@@ -249,6 +257,9 @@ function VendorSection({
                 <td className="px-4 py-2"></td>
                 <td className="px-4 py-2 text-right text-green-700">
                   {formatMoney(totals.rebateCents)}
+                </td>
+                <td className="px-4 py-2 text-right text-green-700">
+                  {formatMoney(totals.discountCents)}
                 </td>
               </tr>
             </tfoot>

@@ -68,12 +68,15 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (body.shippingCents !== undefined) data.shippingCents = body.shippingCents;
     if (body.minOrderFeeCents !== undefined) data.minOrderFeeCents = body.minOrderFeeCents;
     if (body.dropShipFeeCents !== undefined) data.dropShipFeeCents = body.dropShipFeeCents;
+    if (body.processingFeeBps !== undefined) data.processingFeeBps = body.processingFeeBps;
+    if (body.processingFeeCents !== undefined) data.processingFeeCents = body.processingFeeCents;
     if (body.earlyPayDiscountBps !== undefined) data.earlyPayDiscountBps = body.earlyPayDiscountBps;
     if (body.vendorCreditCents !== undefined) data.vendorCreditCents = body.vendorCreditCents;
     const adjustsTotal =
       body.shippingCents !== undefined ||
       body.minOrderFeeCents !== undefined ||
       body.dropShipFeeCents !== undefined ||
+      body.processingFeeCents !== undefined ||
       body.earlyPayDiscountBps !== undefined ||
       body.vendorCreditCents !== undefined;
 
@@ -149,7 +152,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         const legacyExtraCents =
           current.subtotalCents -
           originalItemsCents -
-          (current.shippingCents + current.minOrderFeeCents + current.dropShipFeeCents) +
+          (current.shippingCents +
+            current.minOrderFeeCents +
+            current.dropShipFeeCents +
+            current.processingFeeCents) +
           earlyPayDiscountCents(originalItemsCents, current.earlyPayDiscountBps) +
           current.vendorCreditCents;
         const fresh = await tx.billItem.findMany({
@@ -162,6 +168,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
             | "shippingCents"
             | "minOrderFeeCents"
             | "dropShipFeeCents"
+            | "processingFeeCents"
             | "earlyPayDiscountBps"
             | "vendorCreditCents",
         ) => (data[k] as number | undefined) ?? current[k];
@@ -170,7 +177,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           legacyExtraCents +
           num("shippingCents") +
           num("minOrderFeeCents") +
-          num("dropShipFeeCents") -
+          num("dropShipFeeCents") +
+          num("processingFeeCents") -
           earlyPayDiscountCents(itemsCents, num("earlyPayDiscountBps")) -
           num("vendorCreditCents");
       }

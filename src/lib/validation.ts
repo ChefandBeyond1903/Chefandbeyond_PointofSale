@@ -113,6 +113,8 @@ export const billCreateSchema = z
     shippingCents: z.number().int().min(0).default(0),
     minOrderFeeCents: z.number().int().min(0).default(0),
     dropShipFeeCents: z.number().int().min(0).default(0),
+    processingFeeBps: z.number().int().min(0).max(10_000).default(0),
+    processingFeeCents: z.number().int().min(0).default(0),
     earlyPayDiscountBps: z.number().int().min(0).max(10_000).default(0),
     vendorCreditCents: z.number().int().min(0).default(0),
     lines: z
@@ -206,6 +208,8 @@ export const billUpdateSchema = z.object({
   shippingCents: z.number().int().min(0).optional(),
   minOrderFeeCents: z.number().int().min(0).optional(),
   dropShipFeeCents: z.number().int().min(0).optional(),
+  processingFeeBps: z.number().int().min(0).max(10_000).optional(),
+  processingFeeCents: z.number().int().min(0).optional(),
   earlyPayDiscountBps: z.number().int().min(0).max(10_000).optional(),
   vendorCreditCents: z.number().int().min(0).optional(),
   // Correct a mis-entered line: new quantity / unit cost per existing bill item.

@@ -672,6 +672,12 @@ model Bill {
   shippingCents       Int @default(0)
   minOrderFeeCents    Int @default(0)
   dropShipFeeCents    Int @default(0)
+  // Card/payment processing fee, entered as either a flat $ amount or a % of
+  // the item total — processingFeeBps is only kept to redisplay/re-edit that
+  // % later; the applied cost is always processingFeeCents (0 when entered
+  // as a flat $ amount instead).
+  processingFeeBps    Int @default(0)
+  processingFeeCents  Int @default(0)
   // Early-pay discount in basis points (200 = 2.00%) of the item total, for
   // vendors who give extra off when paid within terms (e.g. Net 15).
   earlyPayDiscountBps Int @default(0)

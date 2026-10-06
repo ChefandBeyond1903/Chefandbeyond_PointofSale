@@ -4,10 +4,16 @@ export const BILL_FEE_CATEGORIES = {
   shippingCents: "Shipping & postage",
   minOrderFeeCents: "Minimum Order Fee",
   dropShipFeeCents: "Drop Ship Fee",
+  processingFeeCents: "Processing Fee",
 } as const;
 
 /** Early-pay discount, taken off the item total only (not fees). */
 export function earlyPayDiscountCents(itemsCents: number, bps: number): number {
+  return Math.round((Math.max(0, itemsCents) * bps) / 10_000);
+}
+
+/** The $ a processing-fee % resolves to against the item total, rounded. */
+export function processingFeePctCents(itemsCents: number, bps: number): number {
   return Math.round((Math.max(0, itemsCents) * bps) / 10_000);
 }
 
@@ -29,6 +35,7 @@ export async function syncBillFeeExpenses(
     shippingCents: number;
     minOrderFeeCents: number;
     dropShipFeeCents: number;
+    processingFeeCents: number;
   },
   actorId: string,
 ): Promise<void> {
