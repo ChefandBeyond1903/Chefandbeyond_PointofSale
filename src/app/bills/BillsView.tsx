@@ -10,6 +10,8 @@ import { earlyPayDiscountCents } from "@/lib/billFees";
 import { VendorPicker } from "@/components/VendorPicker";
 import { BILL_TERMS, dueDateFromTerms } from "@/lib/terms";
 import { usePaged } from "@/lib/usePaged";
+import { useSort } from "@/lib/useSort";
+import { SortTh } from "@/components/SortTh";
 import { Pager } from "@/components/Pager";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import {
@@ -21,12 +23,17 @@ import { PaidStamp } from "@/components/PaidStamp";
 import { methodLabel } from "@/lib/payments";
 import type { DateRange } from "@/lib/dateRange";
 import { ExpensesPanel } from "./ExpensesPanel";
-import type { Bill, Store } from "@/lib/types";
+import type { Bill, Expense, Store } from "@/lib/types";
 
 const FILTERS = ["ALL", "OPEN", "OVERDUE", "PAID"] as const;
 type Filter = (typeof FILTERS)[number];
 
-type SortKey =
+// A vendor Bill and a due/payable operating Expense (most often posted from
+// a recurring template — rent, insurance, a subscription) show in the same
+// list so an open one of either kind is just as visible and payable.
+type Row = { kind: "BILL"; id: string; bill: Bill } | { kind: "EXPENSE"; id: string; expense: Expense };
+
+type RowSortKey =
   | "billNumber"
   | "vendor"
   | "po"
@@ -38,29 +45,71 @@ type SortKey =
   | "paymentType"
   | "status";
 
-function sortValue(b: Bill, key: SortKey, paymentMethods: PaymentMethodOption[]): string | number {
+// Sort fields that don't apply to one kind (e.g. a bill #, or a due date on
+// an expense) resolve to null, which useSort always sorts last.
+function rowValue(
+  r: Row,
+  key: RowSortKey,
+  paymentMethods: PaymentMethodOption[],
+): string | number | null {
+  if (r.kind === "BILL") {
+    const b = r.bill;
+    switch (key) {
+      case "billNumber":
+        return b.billNumber || null;
+      case "vendor":
+        return b.vendor;
+      case "po":
+        return b.po?.poNumber ?? null;
+      case "store":
+        return b.store?.name ?? null;
+      case "billDate":
+        return new Date(b.billDate).getTime();
+      case "terms":
+        return b.terms || null;
+      case "due":
+        return b.dueDate ? new Date(b.dueDate).getTime() : null;
+      case "amount":
+        return b.subtotalCents;
+      case "paymentType":
+        return methodLabel(b.paymentMethod, paymentMethods);
+      case "status":
+        return b.status === "PAID" ? 1 : 0;
+    }
+  }
+  const e = r.expense;
   switch (key) {
     case "billNumber":
-      return b.billNumber || "";
+      return null;
     case "vendor":
-      return b.vendor;
+      return e.payee || e.category;
     case "po":
-      return b.po?.poNumber ?? "";
+      return null;
     case "store":
-      return b.store?.name ?? "";
+      return e.store?.name ?? null;
     case "billDate":
-      return new Date(b.billDate).getTime();
+      return new Date(e.expenseDate).getTime();
     case "terms":
-      return b.terms;
+      return null;
     case "due":
-      return b.dueDate ? new Date(b.dueDate).getTime() : Number.POSITIVE_INFINITY;
+      return new Date(e.expenseDate).getTime();
     case "amount":
-      return b.subtotalCents;
+      return e.amountCents;
     case "paymentType":
-      return methodLabel(b.paymentMethod, paymentMethods);
+      return methodLabel(e.paymentMethod, paymentMethods);
     case "status":
-      return b.status;
+      return e.status === "PAID" ? 1 : 0;
   }
+}
+
+function matchesExpenseSearch(e: Expense, q: string): boolean {
+  const needle = q.toLowerCase();
+  return (
+    e.category.toLowerCase().includes(needle) ||
+    e.payee.toLowerCase().includes(needle) ||
+    e.memo.toLowerCase().includes(needle) ||
+    formatMoney(e.amountCents).toLowerCase().includes(needle)
+  );
 }
 
 function fmtDate(s: string | null) {
@@ -89,11 +138,13 @@ export function BillsView({
   isAdmin?: boolean;
 }) {
   const [bills, setBills] = useState<Bill[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
   const [filter, setFilter] = useState<Filter>("OPEN");
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [openExpenseId, setOpenExpenseId] = useState<string | null>(null);
   const [stores, setStores] = useState<Store[]>([]);
   const [storeId, setStoreId] = useState(""); // "" = all stores (admin only)
   // null = no date filter (every bill, the long-standing default) — set once
@@ -101,7 +152,6 @@ export function BillsView({
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
   const [dateLabel, setDateLabel] = useState("");
   const [paymentMethods] = usePaymentMethods();
-  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" } | null>(null);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -114,17 +164,36 @@ export function BillsView({
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams();
-      if (filter === "OVERDUE") params.set("overdue", "1");
-      else if (filter !== "ALL") params.set("status", filter);
-      if (q.trim()) params.set("q", q.trim());
-      if (isAdmin && storeId) params.set("storeId", storeId);
+      const billParams = new URLSearchParams();
+      if (filter === "OVERDUE") billParams.set("overdue", "1");
+      else if (filter !== "ALL") billParams.set("status", filter);
+      if (q.trim()) billParams.set("q", q.trim());
+      if (isAdmin && storeId) billParams.set("storeId", storeId);
       if (dateRange) {
-        params.set("from", dateRange.from.toISOString());
-        params.set("to", dateRange.to.toISOString());
+        billParams.set("from", dateRange.from.toISOString());
+        billParams.set("to", dateRange.to.toISOString());
       }
-      const res = await api<{ bills: Bill[] }>(`/api/bills?${params.toString()}`);
-      setBills(res.bills);
+
+      // Expenses don't have a due date distinct from when they're logged, so
+      // there's no "overdue" notion for them — that tab shows bills only.
+      const expenseParams = new URLSearchParams();
+      if (filter === "OPEN") expenseParams.set("status", "UNPAID");
+      else if (filter === "PAID") expenseParams.set("status", "PAID");
+      if (isAdmin && storeId) expenseParams.set("storeId", storeId);
+      if (dateRange) {
+        expenseParams.set("from", dateRange.from.toISOString());
+        expenseParams.set("to", dateRange.to.toISOString());
+      }
+
+      const [billsRes, expensesRes] = await Promise.all([
+        api<{ bills: Bill[] }>(`/api/bills?${billParams.toString()}`),
+        filter === "OVERDUE"
+          ? Promise.resolve({ expenses: [] as Expense[] })
+          : api<{ expenses: Expense[] }>(`/api/expenses?${expenseParams.toString()}`),
+      ]);
+      setBills(billsRes.bills);
+      const q2 = q.trim();
+      setExpenses(q2 ? expensesRes.expenses.filter((e) => matchesExpenseSearch(e, q2)) : expensesRes.expenses);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load bills");
     } finally {
@@ -137,6 +206,17 @@ export function BillsView({
     return () => clearTimeout(t);
   }, [load]);
 
+  // Recurring bills (rent, insurance, subscriptions…) auto-post as soon as
+  // they're due — right when the Bills page opens, so they show up as open
+  // items below with no manual "Post" step first.
+  useEffect(() => {
+    api("/api/recurring-expenses/run", { method: "POST", body: "{}" })
+      .catch(() => {})
+      .finally(() => load());
+    // Intentionally once per mount — not tied to `load`'s own identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Deep link from a related record (e.g. a purchase order's "Bills" line):
   // /bills?open=<id> opens that bill straight away.
   useEffect(() => {
@@ -148,58 +228,52 @@ export function BillsView({
   }, []);
 
   const totalOpen = useMemo(
-    () => bills.filter((b) => b.status === "OPEN").reduce((s, b) => s + b.subtotalCents, 0),
-    [bills],
+    () =>
+      bills.filter((b) => b.status === "OPEN").reduce((s, b) => s + b.subtotalCents, 0) +
+      expenses.filter((e) => e.status === "UNPAID").reduce((s, e) => s + e.amountCents, 0),
+    [bills, expenses],
+  );
+  const openCount =
+    bills.filter((b) => b.status === "OPEN").length + expenses.filter((e) => e.status === "UNPAID").length;
+
+  const rows: Row[] = useMemo(
+    () => [
+      ...bills.map((bill) => ({ kind: "BILL" as const, id: bill.id, bill })),
+      ...expenses.map((expense) => ({ kind: "EXPENSE" as const, id: expense.id, expense })),
+    ],
+    [bills, expenses],
   );
 
-  const sortedBills = useMemo(() => {
-    if (!sort) return bills;
-    const mul = sort.dir === "asc" ? 1 : -1;
-    return [...bills].sort((a, b) => {
-      const av = sortValue(a, sort.key, paymentMethods);
-      const bv = sortValue(b, sort.key, paymentMethods);
-      if (typeof av === "number" && typeof bv === "number") return (av - bv) * mul;
-      return String(av).localeCompare(String(bv), undefined, { numeric: true }) * mul;
-    });
-  }, [bills, sort, paymentMethods]);
+  // Unpaid first, soonest due first, until a column header is clicked.
+  const defaultSort = useCallback(
+    (a: Row, b: Row) => {
+      const aPaid = rowValue(a, "status", paymentMethods) as number;
+      const bPaid = rowValue(b, "status", paymentMethods) as number;
+      if (aPaid !== bPaid) return aPaid - bPaid;
+      const ad = rowValue(a, "due", paymentMethods) as number | null;
+      const bd = rowValue(b, "due", paymentMethods) as number | null;
+      if (ad == null && bd == null) return 0;
+      if (ad == null) return 1;
+      if (bd == null) return -1;
+      return ad - bd;
+    },
+    [paymentMethods],
+  );
 
-  function toggleSort(key: SortKey) {
-    setSort((s) => (s?.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }));
-  }
+  const { sorted, sortKey, sortDir, sortBy } = useSort<Row, RowSortKey>(
+    rows,
+    (r, key) => rowValue(r, key, paymentMethods),
+    defaultSort,
+  );
 
-  function Th({
-    label,
-    sortKey,
-    align,
-  }: {
-    label: string;
-    sortKey: SortKey;
-    align?: "right";
-  }) {
-    const active = sort?.key === sortKey;
-    return (
-      <th
-        onClick={() => toggleSort(sortKey)}
-        className={`cursor-pointer select-none px-4 py-2.5 hover:text-zinc-700 ${
-          align === "right" ? "text-right" : ""
-        }`}
-      >
-        {label}
-        <span className="ml-1 inline-block w-2.5 text-zinc-400">
-          {active ? (sort!.dir === "asc" ? "▲" : "▼") : ""}
-        </span>
-      </th>
-    );
-  }
-
-  const pg = usePaged(sortedBills);
+  const pg = usePaged(sorted);
 
   return (
     <div className="w-full flex-1 p-4">
       <div className="mb-3 flex flex-wrap items-center gap-3">
         <h1 className="text-xl font-semibold">Bills</h1>
         <span className="text-sm text-zinc-400">
-          {bills.filter((b) => b.status === "OPEN").length} open · {formatMoney(totalOpen)} payable
+          {openCount} open · {formatMoney(totalOpen)} payable
         </span>
         <div className="ml-auto flex gap-1 rounded-md bg-zinc-100 p-1 text-sm">
           {FILTERS.map((f) => (
@@ -255,12 +329,13 @@ export function BillsView({
           }}
         />
         <span className="text-xs text-zinc-400">
-          {bills.length} shown{dateRange ? ` · ${dateLabel.toLowerCase()}` : ""}
+          {rows.length} shown{dateRange ? ` · ${dateLabel.toLowerCase()}` : ""}
         </span>
       </div>
 
       <p className="mb-3 text-xs text-zinc-400">
-        Bills are created when you receive items on a purchase order.
+        Bills are created when you receive items on a purchase order. Recurring bills (rent,
+        insurance, subscriptions…) show here as open the moment they&rsquo;re due.
       </p>
 
       {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
@@ -271,16 +346,43 @@ export function BillsView({
         <table className="w-full min-w-[820px] text-sm">
           <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
             <tr>
-              <Th label="Bill #" sortKey="billNumber" />
-              <Th label="Vendor" sortKey="vendor" />
-              <Th label="PO" sortKey="po" />
-              <Th label="Store" sortKey="store" />
-              <Th label="Bill date" sortKey="billDate" />
-              <Th label="Terms" sortKey="terms" />
-              <Th label="Due" sortKey="due" />
-              <Th label="Amount" sortKey="amount" align="right" />
-              <Th label="Payment type" sortKey="paymentType" />
-              <Th label="Status" sortKey="status" />
+              <SortTh sortKey="billNumber" activeKey={sortKey} dir={sortDir} onSort={sortBy} className="px-4 py-2.5">
+                Bill #
+              </SortTh>
+              <SortTh sortKey="vendor" activeKey={sortKey} dir={sortDir} onSort={sortBy} className="px-4 py-2.5">
+                Vendor
+              </SortTh>
+              <SortTh sortKey="po" activeKey={sortKey} dir={sortDir} onSort={sortBy} className="px-4 py-2.5">
+                PO
+              </SortTh>
+              <SortTh sortKey="store" activeKey={sortKey} dir={sortDir} onSort={sortBy} className="px-4 py-2.5">
+                Store
+              </SortTh>
+              <SortTh sortKey="billDate" activeKey={sortKey} dir={sortDir} onSort={sortBy} className="px-4 py-2.5">
+                Bill date
+              </SortTh>
+              <SortTh sortKey="terms" activeKey={sortKey} dir={sortDir} onSort={sortBy} className="px-4 py-2.5">
+                Terms
+              </SortTh>
+              <SortTh sortKey="due" activeKey={sortKey} dir={sortDir} onSort={sortBy} className="px-4 py-2.5">
+                Due
+              </SortTh>
+              <SortTh
+                sortKey="amount"
+                activeKey={sortKey}
+                dir={sortDir}
+                onSort={sortBy}
+                align="right"
+                className="px-4 py-2.5 text-right"
+              >
+                Amount
+              </SortTh>
+              <SortTh sortKey="paymentType" activeKey={sortKey} dir={sortDir} onSort={sortBy} className="px-4 py-2.5">
+                Payment type
+              </SortTh>
+              <SortTh sortKey="status" activeKey={sortKey} dir={sortDir} onSort={sortBy} className="px-4 py-2.5">
+                Status
+              </SortTh>
               <th className="px-4 py-2.5"></th>
             </tr>
           </thead>
@@ -298,48 +400,103 @@ export function BillsView({
                 </td>
               </tr>
             ) : (
-              pg.pageItems.map((b) => {
-                const d = daysFromNow(b.dueDate);
-                const overdue = b.status === "OPEN" && d !== null && d < 0;
+              pg.pageItems.map((r) => {
+                if (r.kind === "BILL") {
+                  const b = r.bill;
+                  const d = daysFromNow(b.dueDate);
+                  const overdue = b.status === "OPEN" && d !== null && d < 0;
+                  return (
+                    <tr
+                      key={b.id}
+                      onClick={() => setOpenId(b.id)}
+                      className="cursor-pointer hover:bg-zinc-50"
+                    >
+                      <td className="px-4 py-2.5 font-medium">{b.billNumber || "—"}</td>
+                      <td className="px-4 py-2.5">{b.vendor}</td>
+                      <td className="px-4 py-2.5 font-mono text-zinc-500">{b.po?.poNumber ?? "—"}</td>
+                      <td className="px-4 py-2.5 text-zinc-500">
+                        {b.store?.name.replace(/^Chef and Beyond - /, "") ?? "—"}
+                      </td>
+                      <td className="px-4 py-2.5 text-zinc-500">{formatDateOnly(b.billDate)}</td>
+                      <td className="px-4 py-2.5 text-zinc-500">{b.terms || "—"}</td>
+                      <td className={`px-4 py-2.5 ${overdue ? "font-medium text-red-600" : "text-zinc-500"}`}>
+                        {formatDateOnly(b.dueDate)}
+                        {b.status === "OPEN" && d !== null && (
+                          <span className="ml-1 text-xs">
+                            ({d < 0 ? `${-d}d late` : d === 0 ? "today" : `${d}d`})
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-medium">
+                        {formatMoney(b.subtotalCents)}
+                      </td>
+                      <td className="px-4 py-2.5 text-zinc-500">
+                        {methodLabel(b.paymentMethod, paymentMethods)}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                            b.status === "PAID"
+                              ? "bg-green-100 text-green-700"
+                              : overdue
+                                ? "bg-red-100 text-red-700"
+                                : "bg-amber-100 text-amber-700"
+                          }`}
+                        >
+                          {overdue ? "OVERDUE" : b.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenId(b.id);
+                          }}
+                          className="btn-ghost text-xs text-indigo-600"
+                        >
+                          {canManage ? "Edit" : "View"}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                }
+                const ex = r.expense;
                 return (
                   <tr
-                    key={b.id}
-                    onClick={() => setOpenId(b.id)}
+                    key={ex.id}
+                    onClick={() => setOpenExpenseId(ex.id)}
                     className="cursor-pointer hover:bg-zinc-50"
                   >
-                    <td className="px-4 py-2.5 font-medium">{b.billNumber || "—"}</td>
-                    <td className="px-4 py-2.5">{b.vendor}</td>
-                    <td className="px-4 py-2.5 font-mono text-zinc-500">{b.po?.poNumber ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-zinc-400">—</td>
+                    <td className="px-4 py-2.5">
+                      {ex.payee || ex.category}
+                      <span className="ml-1.5 rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400">
+                        Expense
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-zinc-400">—</td>
                     <td className="px-4 py-2.5 text-zinc-500">
-                      {b.store?.name.replace(/^Chef and Beyond - /, "") ?? "—"}
+                      {ex.store?.name.replace(/^Chef and Beyond - /, "") ?? "—"}
                     </td>
-                    <td className="px-4 py-2.5 text-zinc-500">{formatDateOnly(b.billDate)}</td>
-                    <td className="px-4 py-2.5 text-zinc-500">{b.terms || "—"}</td>
-                    <td className={`px-4 py-2.5 ${overdue ? "font-medium text-red-600" : "text-zinc-500"}`}>
-                      {formatDateOnly(b.dueDate)}
-                      {b.status === "OPEN" && d !== null && (
-                        <span className="ml-1 text-xs">
-                          ({d < 0 ? `${-d}d late` : d === 0 ? "today" : `${d}d`})
-                        </span>
-                      )}
-                    </td>
+                    <td className="px-4 py-2.5 text-zinc-500">{formatDateOnly(ex.expenseDate)}</td>
+                    <td className="px-4 py-2.5 text-zinc-400">—</td>
+                    <td className="px-4 py-2.5 text-zinc-500">{formatDateOnly(ex.expenseDate)}</td>
                     <td className="px-4 py-2.5 text-right font-medium">
-                      {formatMoney(b.subtotalCents)}
+                      {formatMoney(ex.amountCents)}
                     </td>
                     <td className="px-4 py-2.5 text-zinc-500">
-                      {methodLabel(b.paymentMethod, paymentMethods)}
+                      {methodLabel(ex.paymentMethod, paymentMethods)}
                     </td>
                     <td className="px-4 py-2.5">
                       <span
                         className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                          b.status === "PAID"
+                          ex.status === "PAID"
                             ? "bg-green-100 text-green-700"
-                            : overdue
-                              ? "bg-red-100 text-red-700"
-                              : "bg-amber-100 text-amber-700"
+                            : "bg-amber-100 text-amber-700"
                         }`}
                       >
-                        {overdue ? "OVERDUE" : b.status}
+                        {ex.status}
                       </span>
                     </td>
                     <td className="px-4 py-2.5 text-right">
@@ -347,7 +504,7 @@ export function BillsView({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setOpenId(b.id);
+                          setOpenExpenseId(ex.id);
                         }}
                         className="btn-ghost text-xs text-indigo-600"
                       >
@@ -372,6 +529,190 @@ export function BillsView({
           onChanged={load}
         />
       )}
+
+      {openExpenseId &&
+        (() => {
+          const ex = expenses.find((e) => e.id === openExpenseId);
+          if (!ex) return null;
+          return (
+            <ExpenseDetailModal
+              expense={ex}
+              canManage={canManage}
+              onClose={() => setOpenExpenseId(null)}
+              onChanged={load}
+            />
+          );
+        })()}
+    </div>
+  );
+}
+
+function ExpenseDetailModal({
+  expense,
+  canManage,
+  onClose,
+  onChanged,
+}: {
+  expense: Expense;
+  canManage: boolean;
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const [edit, setEdit] = useState({
+    category: expense.category,
+    payee: expense.payee,
+    amountCents: expense.amountCents,
+    expenseDate: expense.expenseDate.slice(0, 10),
+    memo: expense.memo,
+    paymentMethod: expense.paymentMethod,
+  });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [paymentMethods, setPaymentMethods] = usePaymentMethods();
+
+  async function patch(data: Record<string, unknown>) {
+    setBusy(true);
+    setErr(null);
+    try {
+      await api(`/api/expenses/${expense.id}`, { method: "PATCH", body: JSON.stringify(data) });
+      onChanged();
+      onClose();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Could not save");
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (!confirm("Delete this expense?")) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await api(`/api/expenses/${expense.id}`, { method: "DELETE" });
+      onChanged();
+      onClose();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Could not delete");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4">
+      <div className="card max-h-[90vh] w-full max-w-lg overflow-y-auto p-6">
+        <div className="mb-1 flex items-center justify-between gap-3">
+          <h2 className="flex flex-wrap items-center gap-2 text-lg font-semibold">
+            {canManage ? "Edit expense" : "Expense"}
+            {expense.status === "PAID" && (
+              <PaidStamp detail={methodLabel(expense.paymentMethod, paymentMethods)} />
+            )}
+          </h2>
+          <button onClick={onClose} className="btn-ghost px-2 py-1 text-sm">
+            ✕
+          </button>
+        </div>
+        <p className="mb-4 text-sm text-zinc-500">
+          {expense.store?.name ?? "Company-wide"} · from {expense.createdBy?.name ?? "—"} on{" "}
+          {formatDateOnly(expense.createdAt)}
+        </p>
+
+        {err && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{err}</p>}
+
+        <div className="mb-4 grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className="label">Category</label>
+            <input
+              className="input"
+              value={edit.category}
+              disabled={!canManage}
+              onChange={(e) => setEdit({ ...edit, category: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="label">Payee</label>
+            <input
+              className="input"
+              value={edit.payee}
+              disabled={!canManage}
+              onChange={(e) => setEdit({ ...edit, payee: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="label">Amount</label>
+            <MoneyInput
+              cents={edit.amountCents}
+              onCentsChange={(c) => setEdit({ ...edit, amountCents: c })}
+              disabled={!canManage}
+            />
+          </div>
+          <div>
+            <label className="label">Date</label>
+            <input
+              type="date"
+              className="input"
+              value={edit.expenseDate}
+              disabled={!canManage}
+              onChange={(e) => setEdit({ ...edit, expenseDate: e.target.value })}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="label">Memo</label>
+            <input
+              className="input"
+              value={edit.memo}
+              disabled={!canManage}
+              onChange={(e) => setEdit({ ...edit, memo: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="label">Payment method</label>
+            <PaymentMethodSelect
+              value={edit.paymentMethod}
+              onChange={(code) => setEdit({ ...edit, paymentMethod: code })}
+              methods={paymentMethods}
+              onAdded={(m) => setPaymentMethods((cur) => [...cur, m])}
+              disabled={!canManage}
+            />
+          </div>
+        </div>
+
+        {canManage && (
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() =>
+                patch({
+                  category: edit.category.trim(),
+                  payee: edit.payee.trim(),
+                  amountCents: edit.amountCents,
+                  expenseDate: edit.expenseDate,
+                  memo: edit.memo.trim(),
+                  paymentMethod: edit.paymentMethod,
+                })
+              }
+              disabled={busy}
+              className="btn-secondary"
+            >
+              Save changes
+            </button>
+            {expense.status === "UNPAID" ? (
+              <button
+                onClick={() => patch({ status: "PAID", paymentMethod: edit.paymentMethod })}
+                disabled={busy}
+                className="btn-primary"
+              >
+                Mark paid
+              </button>
+            ) : (
+              <button onClick={() => patch({ status: "UNPAID" })} disabled={busy} className="btn-secondary">
+                Reopen
+              </button>
+            )}
+            <button onClick={remove} disabled={busy} className="btn-ghost text-red-500">
+              Delete
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
