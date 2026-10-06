@@ -338,7 +338,12 @@ export function InvoiceForm({
     setLines((rows) => [...rows, blankLine()]);
   }
   function removeLine(key: string) {
-    setLines((rows) => (rows.length > 1 ? rows.filter((r) => r.key !== key) : rows));
+    // Removing the only line leaves one blank row instead of none, so
+    // there's always a row to add the next product to.
+    setLines((rows) => {
+      const next = rows.filter((r) => r.key !== key);
+      return next.length > 0 ? next : [blankLine()];
+    });
   }
 
   // Switch a line between $ and % without losing the value — same as the
@@ -657,6 +662,17 @@ export function InvoiceForm({
     setError(null);
   }
 
+  // Leaving on purpose (not an interrupted session) — drop any draft so the
+  // form comes back clear next time instead of restoring this one.
+  function leaveWithoutSaving() {
+    try {
+      localStorage.removeItem(DRAFT_KEY);
+    } catch {
+      /* ignore */
+    }
+    router.push("/invoices");
+  }
+
   async function handleSaveAndClose() {
     const s = await doSave();
     if (s) router.push("/invoices");
@@ -689,7 +705,7 @@ export function InvoiceForm({
         <h1 className="text-xl font-semibold">
           {savedSale ? `Invoice #${savedSale.number}` : "Create invoice"}
         </h1>
-        <button onClick={() => router.push("/invoices")} className="btn-ghost text-sm">
+        <button onClick={leaveWithoutSaving} className="btn-ghost text-sm">
           ← Back to invoices
         </button>
       </div>
@@ -943,15 +959,13 @@ export function InvoiceForm({
                         {formatMoney(amount)}
                       </td>
                       <td className="py-1 text-right">
-                        {lines.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => removeLine(row.key)}
-                            className="btn-ghost h-8 px-2 text-xs text-red-500"
-                          >
-                            ✕
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => removeLine(row.key)}
+                          className="btn-ghost h-8 px-2 text-xs text-red-500"
+                        >
+                          ✕
+                        </button>
                       </td>
                     </tr>
                   );
