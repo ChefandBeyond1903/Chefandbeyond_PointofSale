@@ -85,7 +85,6 @@ type InvoiceDraft = {
   custCompany: string;
   custAddress: string;
   lines: Line[];
-  orderDiscountCents: number;
   shippingCents: number;
   leaveUnpaid: boolean;
   paymentMethod: string;
@@ -142,7 +141,6 @@ export function InvoiceForm({
   const [lines, setLines] = useState<Line[]>([blankLine()]);
   const [quickAddRowKey, setQuickAddRowKey] = useState<string | null>(null);
 
-  const [orderDiscountCents, setOrderDiscountCents] = useState(0);
   const [shippingCents, setShippingCents] = useState(0);
 
   const [leaveUnpaid, setLeaveUnpaid] = useState(false);
@@ -243,7 +241,6 @@ export function InvoiceForm({
           if (d.custCompany !== undefined) setCustCompany(d.custCompany);
           if (d.custAddress !== undefined) setCustAddress(d.custAddress);
           if (Array.isArray(d.lines) && d.lines.length > 0) setLines(d.lines);
-          if (d.orderDiscountCents !== undefined) setOrderDiscountCents(d.orderDiscountCents);
           if (d.shippingCents !== undefined) setShippingCents(d.shippingCents);
           if (d.leaveUnpaid !== undefined) setLeaveUnpaid(d.leaveUnpaid);
           if (d.paymentMethod !== undefined) setPaymentMethod(d.paymentMethod);
@@ -372,10 +369,7 @@ export function InvoiceForm({
 
   const itemsSubtotalCents = lines.reduce((s, l) => s + l.quantity * l.unitPriceCents, 0);
   const lineDiscountsCents = lines.reduce((s, l) => s + resolveLineDiscount(l), 0);
-  const netBeforeTaxCents = Math.max(
-    0,
-    itemsSubtotalCents - lineDiscountsCents - orderDiscountCents + shippingCents,
-  );
+  const netBeforeTaxCents = Math.max(0, itemsSubtotalCents - lineDiscountsCents + shippingCents);
   const validLines = lines.filter((l) => l.productId && l.quantity > 0);
   // Flags any line still below its minimum price — for a non-admin this
   // shouldn't normally happen (snapLineToUmrp corrects it on commit), but is
@@ -432,7 +426,6 @@ export function InvoiceForm({
         custCompany,
         custAddress,
         lines,
-        orderDiscountCents,
         shippingCents,
         leaveUnpaid,
         paymentMethod,
@@ -457,7 +450,6 @@ export function InvoiceForm({
     custCompany,
     custAddress,
     lines,
-    orderDiscountCents,
     shippingCents,
     leaveUnpaid,
     paymentMethod,
@@ -494,7 +486,6 @@ export function InvoiceForm({
         unitPriceCents: l.unitPriceCents,
         ...(l.serialNumber.trim() ? { serialNumber: l.serialNumber.trim() } : {}),
       })),
-      orderDiscountCents,
       shippingCents,
       ...(isAdmin && storeId ? { storeId } : {}),
       ...(isAdmin && manualNumber.trim() ? { number: parseInt(manualNumber.trim(), 10) } : {}),
@@ -561,7 +552,6 @@ export function InvoiceForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     lines,
-    orderDiscountCents,
     shippingCents,
     custId,
     custName,
@@ -646,7 +636,6 @@ export function InvoiceForm({
     setCustPhone("");
     setCustCompany("");
     setCustAddress("");
-    setOrderDiscountCents(0);
     setShippingCents(0);
     setLeaveUnpaid(false);
     setPaymentMethod("CASH");
@@ -979,15 +968,8 @@ export function InvoiceForm({
         </section>
 
         <section className="card mb-4 p-4">
-          <h2 className="mb-3 text-sm font-semibold text-zinc-700">Discounts, shipping &amp; tax</h2>
+          <h2 className="mb-3 text-sm font-semibold text-zinc-700">Shipping &amp; tax</h2>
           <div className="grid gap-3 sm:grid-cols-3">
-            <div>
-              <label className="label">Order discount</label>
-              <MoneyInput
-                cents={orderDiscountCents}
-                onCentsChange={(c) => setOrderDiscountCents(Math.max(0, c))}
-              />
-            </div>
             <div>
               <label className="label">Shipping</label>
               <MoneyInput cents={shippingCents} onCentsChange={(c) => setShippingCents(Math.max(0, c))} />
@@ -1008,9 +990,6 @@ export function InvoiceForm({
             <Row label="Items" value={formatMoney(itemsSubtotalCents)} />
             {lineDiscountsCents > 0 && (
               <Row label="Line discounts" value={`− ${formatMoney(lineDiscountsCents)}`} />
-            )}
-            {orderDiscountCents > 0 && (
-              <Row label="Order discount" value={`− ${formatMoney(orderDiscountCents)}`} />
             )}
             {shippingCents > 0 && <Row label="Shipping" value={formatMoney(shippingCents)} />}
             <Row
