@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney, formatBps } from "@/lib/money";
 import { formatDateOnly, todayInputValue } from "@/lib/date";
-import { splitSerials, joinSerials } from "@/lib/serials";
+import { splitSerials, joinSerials, tracksSerials } from "@/lib/serials";
 import { MoneyInput } from "@/components/MoneyInput";
 import { CardReaderPanel, type ReaderOption, type CardPaid } from "@/components/CardReaderPanel";
 import { ManualCardPanel, manualCardAvailable } from "@/components/ManualCardPanel";
@@ -14,7 +14,14 @@ import { RefundReceiptModal } from "@/components/RefundReceiptModal";
 import type { InvoiceDetail, PurchaseOrder, Sale, Vendor } from "@/lib/types";
 
 type Person = { id: string; name: string };
-type ProductLite = { id: string; name: string; sku: string; priceCents: number; umrpCents: number };
+type ProductLite = {
+  id: string;
+  name: string;
+  sku: string;
+  priceCents: number;
+  umrpCents: number;
+  category: { id: string; name: string } | null;
+};
 type EditLine = {
   productId: string;
   name: string;
@@ -735,6 +742,8 @@ export function InvoiceModal({
                   <div className="space-y-2">
                     {editItems.map((it, idx) => {
                       const violation = umrpViolations.find((v) => v.idx === idx);
+                      const itProduct = products.find((p) => p.id === it.productId);
+                      const showSerial = tracksSerials(itProduct?.category?.name);
                       return (
                       <div key={idx} className="rounded-md border border-zinc-200 bg-white p-2">
                         <div className="relative">
@@ -798,7 +807,7 @@ export function InvoiceModal({
                             onCommit={() => snapItemToUmrp(idx)}
                             className={`input h-8 w-24 text-right ${violation ? "border-red-400" : ""}`}
                           />
-                          {it.quantity === 1 && (
+                          {showSerial && it.quantity === 1 && (
                             <input
                               className="input h-8 flex-1"
                               placeholder="Serial # (optional)"
@@ -815,7 +824,7 @@ export function InvoiceModal({
                             ✕
                           </button>
                         </div>
-                        {it.quantity > 1 && (
+                        {showSerial && it.quantity > 1 && (
                           <div className="mt-1 space-y-1">
                             {splitSerials(it.serialNumber, it.quantity).map((sn, i, arr) => (
                               <input

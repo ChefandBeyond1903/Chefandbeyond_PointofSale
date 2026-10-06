@@ -17,3 +17,9 @@ export function splitSerials(serialNumber: string, quantity: number): string[] {
 export function joinSerials(parts: string[]): string {
   return parts.map((s) => s.trim()).filter(Boolean).join(", ");
 }
+
+/** Smallwares (utensils, pans, small tools...) are never individually
+ * serialized — no serial # entry for a product in that category. */
+export function tracksSerials(categoryName: string | null | undefined): boolean {
+  return categoryName?.trim().toLowerCase() !== "smallwares";
+}

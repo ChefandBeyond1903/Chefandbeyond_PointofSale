@@ -6,7 +6,7 @@ import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
 import { todayInputValue } from "@/lib/date";
 import { matchesSearch } from "@/lib/search";
-import { splitSerials, joinSerials } from "@/lib/serials";
+import { splitSerials, joinSerials, tracksSerials } from "@/lib/serials";
 import { MoneyInput } from "@/components/MoneyInput";
 import { PercentInput } from "@/components/PercentInput";
 import { QuickAddProductModal } from "@/components/QuickAddProductModal";
@@ -22,6 +22,7 @@ type ProductLite = {
   umrpCents: number;
   description: string | null;
   vendor: string;
+  category: { id: string; name: string } | null;
 };
 
 type DiscMode = "AMOUNT" | "PERCENT";
@@ -866,6 +867,7 @@ export function InvoiceForm({
                   const lineDisc = resolveLineDiscount(row);
                   const amount = Math.max(0, row.quantity * row.unitPriceCents - lineDisc);
                   const violation = umrpViolations.find((v) => v.key === row.key);
+                  const rowProduct = products.find((p) => p.id === row.productId);
                   return (
                     <tr key={row.key} className="border-t border-zinc-100 align-top">
                       <td className="py-1 pr-2">
@@ -876,30 +878,31 @@ export function InvoiceForm({
                           onSelect={(p) => onProductSelect(row.key, p)}
                           onAddNew={() => setQuickAddRowKey(row.key)}
                         />
-                        {row.quantity > 1 ? (
-                          <div className="mt-1 space-y-1">
-                            {splitSerials(row.serialNumber, row.quantity).map((sn, i, arr) => (
-                              <input
-                                key={i}
-                                className="input h-7 w-full text-xs"
-                                placeholder={`Serial # ${i + 1} of ${row.quantity} (optional)`}
-                                value={sn}
-                                onChange={(e) => {
-                                  const next = [...arr];
-                                  next[i] = e.target.value;
-                                  setLineSerial(row.key, joinSerials(next));
-                                }}
-                              />
-                            ))}
-                          </div>
-                        ) : (
-                          <input
-                            className="input mt-1 h-7 w-full text-xs"
-                            placeholder="Serial # (optional)"
-                            value={row.serialNumber}
-                            onChange={(e) => setLineSerial(row.key, e.target.value)}
-                          />
-                        )}
+                        {tracksSerials(rowProduct?.category?.name) &&
+                          (row.quantity > 1 ? (
+                            <div className="mt-1 space-y-1">
+                              {splitSerials(row.serialNumber, row.quantity).map((sn, i, arr) => (
+                                <input
+                                  key={i}
+                                  className="input h-7 w-full text-xs"
+                                  placeholder={`Serial # ${i + 1} of ${row.quantity} (optional)`}
+                                  value={sn}
+                                  onChange={(e) => {
+                                    const next = [...arr];
+                                    next[i] = e.target.value;
+                                    setLineSerial(row.key, joinSerials(next));
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          ) : (
+                            <input
+                              className="input mt-1 h-7 w-full text-xs"
+                              placeholder="Serial # (optional)"
+                              value={row.serialNumber}
+                              onChange={(e) => setLineSerial(row.key, e.target.value)}
+                            />
+                          ))}
                       </td>
                       <td className="py-1 pr-2 text-zinc-500">{row.sku}</td>
                       <td className="py-1 pr-2">
@@ -1185,6 +1188,7 @@ export function InvoiceForm({
                   umrpCents: product.umrpCents,
                   description: product.description ?? null,
                   vendor: product.vendor ?? "",
+                  category: product.category ?? null,
                 };
                 setProducts((cur) => [...cur, lite]);
                 onProductSelect(rowKey, lite);

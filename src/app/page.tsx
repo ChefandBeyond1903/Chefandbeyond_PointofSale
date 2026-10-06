@@ -16,6 +16,7 @@ import { dueDateFromTerms } from "@/lib/terms";
 import { phoneDigits, formatPhone } from "@/lib/phone";
 import { PhoneInput } from "@/components/PhoneInput";
 import { matchesSearch } from "@/lib/search";
+import { tracksSerials } from "@/lib/serials";
 import { AddressFields, stateToDraft, resolveState } from "@/components/AddressFields";
 import { formatAddress } from "@/lib/address";
 import {
@@ -2047,12 +2048,14 @@ export default function RegisterPage() {
                         No cost set — enter a cost for this product before it can be sold.
                       </p>
                     )}
-                    <input
-                      className="input mt-1.5 h-7 w-full text-xs"
-                      placeholder="Serial # (optional)"
-                      value={line.serialNumber ?? ""}
-                      onChange={(e) => setLineSerial(line.product.id, e.target.value)}
-                    />
+                    {tracksSerials(line.product.category?.name) && (
+                      <input
+                        className="input mt-1.5 h-7 w-full text-xs"
+                        placeholder="Serial # (optional)"
+                        value={line.serialNumber ?? ""}
+                        onChange={(e) => setLineSerial(line.product.id, e.target.value)}
+                      />
+                    )}
                   </li>
                   );
                 })}
