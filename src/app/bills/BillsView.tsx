@@ -12,7 +12,11 @@ import { BILL_TERMS, dueDateFromTerms } from "@/lib/terms";
 import { usePaged } from "@/lib/usePaged";
 import { Pager } from "@/components/Pager";
 import { DateRangePicker } from "@/components/DateRangePicker";
-import { PaymentMethodSelect, usePaymentMethods } from "@/components/PaymentMethodPicker";
+import {
+  PaymentMethodSelect,
+  usePaymentMethods,
+  type PaymentMethodOption,
+} from "@/components/PaymentMethodPicker";
 import { PaidStamp } from "@/components/PaidStamp";
 import { methodLabel } from "@/lib/payments";
 import type { DateRange } from "@/lib/dateRange";
@@ -21,6 +25,43 @@ import type { Bill, Store } from "@/lib/types";
 
 const FILTERS = ["ALL", "OPEN", "OVERDUE", "PAID"] as const;
 type Filter = (typeof FILTERS)[number];
+
+type SortKey =
+  | "billNumber"
+  | "vendor"
+  | "po"
+  | "store"
+  | "billDate"
+  | "terms"
+  | "due"
+  | "amount"
+  | "paymentType"
+  | "status";
+
+function sortValue(b: Bill, key: SortKey, paymentMethods: PaymentMethodOption[]): string | number {
+  switch (key) {
+    case "billNumber":
+      return b.billNumber || "";
+    case "vendor":
+      return b.vendor;
+    case "po":
+      return b.po?.poNumber ?? "";
+    case "store":
+      return b.store?.name ?? "";
+    case "billDate":
+      return new Date(b.billDate).getTime();
+    case "terms":
+      return b.terms;
+    case "due":
+      return b.dueDate ? new Date(b.dueDate).getTime() : Number.POSITIVE_INFINITY;
+    case "amount":
+      return b.subtotalCents;
+    case "paymentType":
+      return methodLabel(b.paymentMethod, paymentMethods);
+    case "status":
+      return b.status;
+  }
+}
 
 function fmtDate(s: string | null) {
   return s ? new Date(s).toLocaleDateString() : "—";
@@ -59,6 +100,8 @@ export function BillsView({
   // the picker below is touched.
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
   const [dateLabel, setDateLabel] = useState("");
+  const [paymentMethods] = usePaymentMethods();
+  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" } | null>(null);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -109,7 +152,47 @@ export function BillsView({
     [bills],
   );
 
-  const pg = usePaged(bills);
+  const sortedBills = useMemo(() => {
+    if (!sort) return bills;
+    const mul = sort.dir === "asc" ? 1 : -1;
+    return [...bills].sort((a, b) => {
+      const av = sortValue(a, sort.key, paymentMethods);
+      const bv = sortValue(b, sort.key, paymentMethods);
+      if (typeof av === "number" && typeof bv === "number") return (av - bv) * mul;
+      return String(av).localeCompare(String(bv), undefined, { numeric: true }) * mul;
+    });
+  }, [bills, sort, paymentMethods]);
+
+  function toggleSort(key: SortKey) {
+    setSort((s) => (s?.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }));
+  }
+
+  function Th({
+    label,
+    sortKey,
+    align,
+  }: {
+    label: string;
+    sortKey: SortKey;
+    align?: "right";
+  }) {
+    const active = sort?.key === sortKey;
+    return (
+      <th
+        onClick={() => toggleSort(sortKey)}
+        className={`cursor-pointer select-none px-4 py-2.5 hover:text-zinc-700 ${
+          align === "right" ? "text-right" : ""
+        }`}
+      >
+        {label}
+        <span className="ml-1 inline-block w-2.5 text-zinc-400">
+          {active ? (sort!.dir === "asc" ? "▲" : "▼") : ""}
+        </span>
+      </th>
+    );
+  }
+
+  const pg = usePaged(sortedBills);
 
   return (
     <div className="w-full flex-1 p-4">
@@ -188,28 +271,29 @@ export function BillsView({
         <table className="w-full min-w-[820px] text-sm">
           <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
             <tr>
-              <th className="px-4 py-2.5">Bill #</th>
-              <th className="px-4 py-2.5">Vendor</th>
-              <th className="px-4 py-2.5">PO</th>
-              <th className="px-4 py-2.5">Store</th>
-              <th className="px-4 py-2.5">Bill date</th>
-              <th className="px-4 py-2.5">Terms</th>
-              <th className="px-4 py-2.5">Due</th>
-              <th className="px-4 py-2.5 text-right">Amount</th>
-              <th className="px-4 py-2.5">Status</th>
+              <Th label="Bill #" sortKey="billNumber" />
+              <Th label="Vendor" sortKey="vendor" />
+              <Th label="PO" sortKey="po" />
+              <Th label="Store" sortKey="store" />
+              <Th label="Bill date" sortKey="billDate" />
+              <Th label="Terms" sortKey="terms" />
+              <Th label="Due" sortKey="due" />
+              <Th label="Amount" sortKey="amount" align="right" />
+              <Th label="Payment type" sortKey="paymentType" />
+              <Th label="Status" sortKey="status" />
               <th className="px-4 py-2.5"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-100">
             {loading ? (
               <tr>
-                <td colSpan={10} className="px-4 py-8 text-center text-zinc-400">
+                <td colSpan={11} className="px-4 py-8 text-center text-zinc-400">
                   Loading…
                 </td>
               </tr>
             ) : pg.total === 0 ? (
               <tr>
-                <td colSpan={10} className="px-4 py-8 text-center text-zinc-400">
+                <td colSpan={11} className="px-4 py-8 text-center text-zinc-400">
                   No bills{filter === "ALL" ? "" : ` (${filter.toLowerCase()})`}.
                 </td>
               </tr>
@@ -241,6 +325,9 @@ export function BillsView({
                     </td>
                     <td className="px-4 py-2.5 text-right font-medium">
                       {formatMoney(b.subtotalCents)}
+                    </td>
+                    <td className="px-4 py-2.5 text-zinc-500">
+                      {methodLabel(b.paymentMethod, paymentMethods)}
                     </td>
                     <td className="px-4 py-2.5">
                       <span
