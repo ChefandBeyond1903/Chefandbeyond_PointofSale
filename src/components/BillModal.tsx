@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
 import { MoneyInput } from "@/components/MoneyInput";
@@ -18,6 +18,31 @@ type Line = {
   received: number;
   now: string; // receive-and-bill qty
   costCents: number;
+};
+
+// Keeps an in-progress receive-and-bill across an accidental sign-out (the
+// idle timer, a dropped session) — nothing entered (received quantities,
+// cost overrides, fees...) is lost logging back in. One slot per PO per
+// browser, keyed to the signed-in user so a different person on the same
+// device doesn't inherit it.
+const draftKey = (poId: string) => `cbpos.billDraft.${poId}`;
+
+type BillDraft = {
+  userId: string;
+  poId: string;
+  billNumber: string;
+  billDate: string;
+  terms: string;
+  dueDate: string;
+  dueTouched: boolean;
+  memo: string;
+  adj: BillAdjustmentValues;
+  storeId: string;
+  // Only the parts of each line a person actually edits — matched back onto
+  // whatever lines load() fetches fresh from the server, by id, so a line
+  // someone else already fully received in the meantime (and so dropped off
+  // the outstanding list) doesn't reappear.
+  lineOverrides: Record<string, { now: string; costCents: number }>;
 };
 
 function todayISO() {
@@ -71,6 +96,9 @@ export function BillModal({
     earlyPayDiscountBps: 0,
     vendorCreditCents: 0,
   });
+  const draftHydrated = useRef(false);
+  const [draftRestored, setDraftRestored] = useState(false);
+  const [sessionUserId, setSessionUserId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -80,6 +108,7 @@ export function BillModal({
       ]);
       const purchaseOrder = res.purchaseOrder;
       setPo(purchaseOrder);
+      setSessionUserId(meRes.user?.id ?? null);
       setStoreId(purchaseOrder.storeId ?? "");
       // The PO's shipping and drop-ship fee belong on its first bill; pre-fill
       // them there (editable) so they're booked once as operating expenses.
@@ -125,6 +154,38 @@ export function BillModal({
         const match = shipTo ? list.find((s) => s.name.trim().toLowerCase() === shipTo) : undefined;
         setStoreId(match?.id ?? purchaseOrder.storeId ?? list[0]?.id ?? "");
       }
+
+      // Restore an in-progress draft left from before a sign-out/reload, on
+      // top of whatever was just loaded fresh from the server — applied last
+      // so it wins over the PO's own defaults.
+      try {
+        const raw = localStorage.getItem(draftKey(poId));
+        if (raw) {
+          const d = JSON.parse(raw) as Partial<BillDraft>;
+          if (d.userId !== meRes.user?.id || d.poId !== poId) {
+            localStorage.removeItem(draftKey(poId));
+          } else {
+            setDraftRestored(true);
+            if (d.billNumber !== undefined) setBillNumber(d.billNumber);
+            if (d.billDate !== undefined) setBillDate(d.billDate);
+            if (d.terms !== undefined) setTerms(d.terms);
+            if (d.dueDate !== undefined) setDueDate(d.dueDate);
+            if (d.dueTouched !== undefined) setDueTouched(d.dueTouched);
+            if (d.memo !== undefined) setMemo(d.memo);
+            if (d.adj !== undefined) setAdj(d.adj);
+            if (d.storeId !== undefined) setStoreId(d.storeId);
+            if (d.lineOverrides) {
+              const overrides = d.lineOverrides;
+              setLines((cur) =>
+                cur.map((l) => (overrides[l.id] ? { ...l, ...overrides[l.id] } : l)),
+              );
+            }
+          }
+        }
+      } catch {
+        /* ignore malformed/unavailable storage */
+      }
+      draftHydrated.current = true;
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "Failed to load purchase order");
     }
@@ -140,6 +201,41 @@ export function BillModal({
     const d = dueDateFromTerms(new Date(billDate || todayISO()), terms);
     setDueDate(d ? toISO(d) : "");
   }, [terms, billDate, dueTouched]);
+
+  // Save the draft on every change; drop it once there's nothing worth
+  // keeping (nothing's actually being received/billed yet).
+  useEffect(() => {
+    if (!draftHydrated.current) return;
+    try {
+      const key = draftKey(poId);
+      const hasContent =
+        billNumber.trim() !== "" ||
+        memo.trim() !== "" ||
+        lines.some((l) => (parseInt(l.now || "0", 10) || 0) > 0);
+      if (!hasContent) {
+        localStorage.removeItem(key);
+        return;
+      }
+      const lineOverrides: BillDraft["lineOverrides"] = {};
+      for (const l of lines) lineOverrides[l.id] = { now: l.now, costCents: l.costCents };
+      const draft: BillDraft = {
+        userId: sessionUserId ?? "",
+        poId,
+        billNumber,
+        billDate,
+        terms,
+        dueDate,
+        dueTouched,
+        memo,
+        adj,
+        storeId,
+        lineOverrides,
+      };
+      localStorage.setItem(key, JSON.stringify(draft));
+    } catch {
+      /* storage full or unavailable — non-fatal */
+    }
+  }, [poId, sessionUserId, billNumber, billDate, terms, dueDate, dueTouched, memo, adj, storeId, lines]);
 
   function setNow(id: string, raw: string) {
     setLines((cur) => cur.map((l) => (l.id === id ? { ...l, now: raw.replace(/[^0-9-]/g, "") } : l)));
@@ -196,6 +292,11 @@ export function BillModal({
           lines: payload,
         }),
       });
+      try {
+        localStorage.removeItem(draftKey(poId));
+      } catch {
+        /* ignore */
+      }
       onDone?.();
       onClose();
     } catch (e) {
@@ -220,6 +321,27 @@ export function BillModal({
                 ✕
               </button>
             </div>
+            {draftRestored && (
+              <p className="mb-3 rounded bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                Restored your unsaved receiving/billing entries from before — nothing was lost.{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      localStorage.removeItem(draftKey(poId));
+                    } catch {
+                      /* ignore */
+                    }
+                    setDraftRestored(false);
+                    load();
+                  }}
+                  className="font-medium underline"
+                >
+                  Discard it and start over
+                </button>
+                .
+              </p>
+            )}
             <p className="mb-4 text-sm text-zinc-500">
               {po.vendor} — the quantity entered below is received{" "}
               {isAdmin ? (

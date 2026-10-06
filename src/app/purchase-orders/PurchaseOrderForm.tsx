@@ -54,6 +54,38 @@ type ProductLite = {
 const uid = () =>
   typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
 
+// Keeps an in-progress new PO across an accidental sign-out (the idle timer,
+// a dropped session) — nothing entered is lost logging back in. One slot per
+// browser, keyed to the signed-in user so a different person on the same
+// device doesn't inherit it. Only for a brand-new PO, never while editing an
+// existing one (that's server state, not something to silently overwrite).
+const DRAFT_KEY = "cbpos.poDraft";
+
+type PoDraft = {
+  userId: string;
+  vendor: string;
+  status: PurchaseOrderStatus;
+  poNumber: string;
+  email: string;
+  ccBcc: string;
+  showCcBcc: boolean;
+  mailingAddress: string;
+  shipTo: string;
+  shippingAddress: string;
+  poDate: string;
+  dueDate: string;
+  terms: string;
+  shipVia: string;
+  storeName: string;
+  permitNumber: string;
+  messageToVendor: string;
+  memo: string;
+  shippingCents: number;
+  dropShipFeeCents: number;
+  taxCents: number;
+  itemLines: ItemRow[];
+};
+
 const blankItem = (): ItemRow => ({
   key: uid(),
   productId: null,
@@ -94,10 +126,12 @@ export function PurchaseOrderForm({
   id,
   readOnly = false,
   role,
+  userId,
 }: {
   id?: string;
   readOnly?: boolean;
   role?: "CASHIER" | "MANAGER" | "ADMIN";
+  userId?: string;
 }) {
   const router = useRouter();
   const isEdit = !!id;
@@ -157,6 +191,7 @@ export function PurchaseOrderForm({
   const [dropShipFeeCents, setDropShipFeeCents] = useState(0);
   const [taxCents, setTaxCents] = useState(0);
   const [itemLines, setItemLines] = useState<ItemRow[]>([blankItem(), blankItem()]);
+  const [draftRestored, setDraftRestored] = useState(false);
 
   const [itemOpen, setItemOpen] = useState(true);
   // Related records, one click apart: the invoice this PO was raised from
@@ -250,6 +285,114 @@ export function PurchaseOrderForm({
       }
     })();
   }, [id, isEdit, applyPo, canAddExpense]);
+
+  // Restore an in-progress draft left from before a sign-out/reload — once,
+  // on mount, before the save effect below starts overwriting it. Only for a
+  // brand-new PO; editing an existing one always reflects the server copy.
+  const draftHydrated = useRef(false);
+  useEffect(() => {
+    if (isEdit || draftHydrated.current) return;
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (raw) {
+        const d = JSON.parse(raw) as Partial<PoDraft>;
+        if (d.userId !== userId) {
+          localStorage.removeItem(DRAFT_KEY);
+        } else {
+          setDraftRestored(true);
+          if (d.vendor !== undefined) setVendor(d.vendor);
+          if (d.status !== undefined) setStatus(d.status);
+          if (d.poNumber !== undefined) setPoNumber(d.poNumber);
+          if (d.email !== undefined) setEmail(d.email);
+          if (d.ccBcc !== undefined) setCcBcc(d.ccBcc);
+          if (d.showCcBcc !== undefined) setShowCcBcc(d.showCcBcc);
+          if (d.mailingAddress !== undefined) setMailingAddress(d.mailingAddress);
+          if (d.shipTo !== undefined) setShipTo(d.shipTo);
+          if (d.shippingAddress !== undefined) setShippingAddress(d.shippingAddress);
+          if (d.poDate !== undefined) setPoDate(d.poDate);
+          if (d.dueDate !== undefined) setDueDate(d.dueDate);
+          if (d.terms !== undefined) setTerms(d.terms);
+          if (d.shipVia !== undefined) setShipVia(d.shipVia);
+          if (d.storeName !== undefined) setStoreName(d.storeName);
+          if (d.permitNumber !== undefined) setPermitNumber(d.permitNumber);
+          if (d.messageToVendor !== undefined) setMessageToVendor(d.messageToVendor);
+          if (d.memo !== undefined) setMemo(d.memo);
+          if (d.shippingCents !== undefined) setShippingCents(d.shippingCents);
+          if (d.dropShipFeeCents !== undefined) setDropShipFeeCents(d.dropShipFeeCents);
+          if (d.taxCents !== undefined) setTaxCents(d.taxCents);
+          if (Array.isArray(d.itemLines) && d.itemLines.length > 0) setItemLines(d.itemLines);
+        }
+      }
+    } catch {
+      /* ignore malformed/unavailable storage */
+    }
+    draftHydrated.current = true;
+  }, [isEdit, userId]);
+
+  // Save the draft on every change; drop it once there's nothing worth
+  // keeping (a fresh/empty form). Only while creating a new PO.
+  useEffect(() => {
+    if (isEdit || !draftHydrated.current) return;
+    try {
+      const hasContent =
+        vendor.trim() !== "" || itemLines.some((l) => l.productService || l.description || l.quantity);
+      if (!hasContent) {
+        localStorage.removeItem(DRAFT_KEY);
+        return;
+      }
+      const draft: PoDraft = {
+        userId: userId ?? "",
+        vendor,
+        status,
+        poNumber,
+        email,
+        ccBcc,
+        showCcBcc,
+        mailingAddress,
+        shipTo,
+        shippingAddress,
+        poDate,
+        dueDate,
+        terms,
+        shipVia,
+        storeName,
+        permitNumber,
+        messageToVendor,
+        memo,
+        shippingCents,
+        dropShipFeeCents,
+        taxCents,
+        itemLines,
+      };
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    } catch {
+      /* storage full or unavailable — non-fatal */
+    }
+  }, [
+    isEdit,
+    userId,
+    vendor,
+    status,
+    poNumber,
+    email,
+    ccBcc,
+    showCcBcc,
+    mailingAddress,
+    shipTo,
+    shippingAddress,
+    poDate,
+    dueDate,
+    terms,
+    shipVia,
+    storeName,
+    permitNumber,
+    messageToVendor,
+    memo,
+    shippingCents,
+    dropShipFeeCents,
+    taxCents,
+    itemLines,
+  ]);
 
   // Warn as soon as a typed PO number collides with an existing one, instead
   // of only finding out after Save — debounced so it doesn't fire on every
@@ -493,6 +636,11 @@ export function PurchaseOrderForm({
         await api(`/api/purchase-orders/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
       } else {
         await api("/api/purchase-orders", { method: "POST", body: JSON.stringify(payload) });
+        try {
+          localStorage.removeItem(DRAFT_KEY);
+        } catch {
+          /* ignore */
+        }
       }
       if (send) alert("Saved and marked as SENT. (Email delivery isn't configured yet.)");
       router.push("/purchase-orders");
@@ -592,6 +740,11 @@ export function PurchaseOrderForm({
     setDropShipFeeCents(0);
     setTaxCents(0);
     setItemLines([blankItem(), blankItem()]);
+    try {
+      localStorage.removeItem(DRAFT_KEY);
+    } catch {
+      /* ignore */
+    }
   }
 
   if (loading) {
@@ -611,6 +764,23 @@ export function PurchaseOrderForm({
           </span>
         )}
       </div>
+
+      {draftRestored && !isEdit && (
+        <p className="mb-3 rounded bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+          Restored your unsaved purchase order from before — nothing was lost.{" "}
+          <button
+            type="button"
+            onClick={() => {
+              setDraftRestored(false);
+              clearForm();
+            }}
+            className="font-medium underline"
+          >
+            Discard it and start over
+          </button>
+          .
+        </p>
+      )}
 
       {/* Related records, one click apart. */}
       {(sourceSale || bills.length > 0) && (
