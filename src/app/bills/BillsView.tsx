@@ -13,6 +13,7 @@ import { usePaged } from "@/lib/usePaged";
 import { useSort } from "@/lib/useSort";
 import { SortTh } from "@/components/SortTh";
 import { Pager } from "@/components/Pager";
+import { ListHeader, FilterChips } from "@/components/ListToolbar";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import {
   PaymentMethodSelect,
@@ -270,27 +271,10 @@ export function BillsView({
 
   return (
     <div className="w-full flex-1 p-4">
-      <div className="mb-3 flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-semibold">Bills</h1>
+      <ListHeader title="Bills">
         <span className="text-sm text-zinc-400">
           {openCount} open · {formatMoney(totalOpen)} payable
         </span>
-        <div className="ml-auto flex gap-1 rounded-md bg-zinc-100 p-1 text-sm">
-          {FILTERS.map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`rounded px-3 py-1 font-medium ${
-                filter === f ? "bg-white shadow-sm" : "text-zinc-500"
-              }`}
-            >
-              {f[0] + f.slice(1).toLowerCase()}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="mb-3 flex flex-wrap items-center gap-2">
         <input
           className="input max-w-md"
           placeholder="Search bill #, vendor, PO, item, SKU, memo, amount…"
@@ -302,40 +286,45 @@ export function BillsView({
             Clear
           </button>
         )}
-        {isAdmin && (
-          <select
-            className="input h-8 w-auto min-w-56"
-            value={storeId}
-            onChange={(e) => setStoreId(e.target.value)}
-          >
-            <option value="">All stores (combined)</option>
-            {stores.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        )}
-        <DateRangePicker
-          defaultPreset="all"
-          allowAll
-          onChange={(r, l) => {
-            setDateRange(r);
-            setDateLabel(l);
-          }}
-          onClear={() => {
-            setDateRange(null);
-            setDateLabel("");
-          }}
-        />
-        <span className="text-xs text-zinc-400">
-          {rows.length} shown{dateRange ? ` · ${dateLabel.toLowerCase()}` : ""}
-        </span>
-      </div>
+        <div className="ml-auto flex flex-wrap items-center gap-1">
+          {isAdmin && (
+            <select
+              className="input mr-1 h-8 w-auto min-w-44 text-sm"
+              value={storeId}
+              onChange={(e) => setStoreId(e.target.value)}
+            >
+              <option value="">All stores (combined)</option>
+              {stores.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          )}
+          <FilterChips
+            options={FILTERS.map((f) => ({ key: f, label: f[0] + f.slice(1).toLowerCase() }))}
+            value={filter}
+            onChange={setFilter}
+          />
+          <DateRangePicker
+            defaultPreset="all"
+            allowAll
+            onChange={(r, l) => {
+              setDateRange(r);
+              setDateLabel(l);
+            }}
+            onClear={() => {
+              setDateRange(null);
+              setDateLabel("");
+            }}
+          />
+        </div>
+      </ListHeader>
 
       <p className="mb-3 text-xs text-zinc-400">
-        Bills are created when you receive items on a purchase order. Recurring bills (rent,
-        insurance, subscriptions…) show here as open the moment they&rsquo;re due.
+        {rows.length} shown{dateRange ? ` · showing ${dateLabel.toLowerCase()}` : ""} · Bills are
+        created when you receive items on a purchase order; recurring bills (rent, insurance,
+        subscriptions…) show here as open the moment they&rsquo;re due.
       </p>
 
       {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}

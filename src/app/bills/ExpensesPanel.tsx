@@ -650,6 +650,11 @@ function RecurringExpensesSection({
   const [err, setErr] = useState<string | null>(null);
   const [paymentMethods, setPaymentMethods] = usePaymentMethods();
 
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<RecurForm>(emptyRecurForm);
+  const [editBusy, setEditBusy] = useState(false);
+  const [editErr, setEditErr] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     try {
       const r = await api<{ recurring: RecurringExpense[]; dueCount: number }>(
@@ -717,6 +722,53 @@ function RecurringExpensesSection({
       load();
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "Could not delete");
+    }
+  }
+
+  function startEdit(r: RecurringExpense) {
+    setEditErr(null);
+    setEditForm({
+      category: r.category,
+      payee: r.payee,
+      amountCents: r.amountCents,
+      memo: r.memo,
+      status: r.status,
+      paymentMethod: r.paymentMethod,
+      frequency: r.frequency,
+      nextDate: r.nextDate.slice(0, 10),
+      storeId: r.storeId ?? "",
+    });
+    setEditId(r.id);
+  }
+
+  async function saveEdit() {
+    if (!editId) return;
+    if (!editForm.category.trim()) return setEditErr("Enter a category");
+    if (editForm.amountCents <= 0) return setEditErr("Enter an amount");
+    setEditBusy(true);
+    setEditErr(null);
+    try {
+      await ensureCategory(editForm.category);
+      await api(`/api/recurring-expenses/${editId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          category: editForm.category.trim(),
+          payee: editForm.payee.trim(),
+          amountCents: editForm.amountCents,
+          memo: editForm.memo.trim(),
+          status: editForm.status,
+          paymentMethod: editForm.paymentMethod,
+          frequency: editForm.frequency,
+          nextDate: editForm.nextDate,
+          ...(isAdmin ? { storeId: editForm.storeId || null } : {}),
+        }),
+      });
+      setEditId(null);
+      load();
+    } catch (e) {
+      setEditErr(e instanceof ApiError ? e.message : "Could not save");
+    } finally {
+      setEditBusy(false);
     }
   }
 
@@ -975,6 +1027,9 @@ function RecurringExpensesSection({
                   </td>
                   <td className="py-2 text-right tabular-nums">{formatMoney(r.amountCents)}</td>
                   <td className="py-2 text-right whitespace-nowrap">
+                    <button onClick={() => startEdit(r)} className="btn-ghost text-xs text-indigo-600">
+                      Edit
+                    </button>
                     <button onClick={() => toggleActive(r)} className="btn-ghost text-xs">
                       {r.active ? "Pause" : "Resume"}
                     </button>
@@ -989,6 +1044,123 @@ function RecurringExpensesSection({
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {editId && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4">
+          <div className="card max-h-[90vh] w-full max-w-lg overflow-y-auto p-6">
+            <h3 className="mb-4 text-lg font-semibold">Edit recurring bill</h3>
+            {editErr && (
+              <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{editErr}</p>
+            )}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="label">Category</label>
+                <input
+                  className="input"
+                  list="expense-category-options"
+                  value={editForm.category}
+                  onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="label">Payee (optional)</label>
+                <input
+                  className="input"
+                  value={editForm.payee}
+                  onChange={(e) => setEditForm({ ...editForm, payee: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="label">Amount</label>
+                <MoneyInput
+                  cents={editForm.amountCents}
+                  onCentsChange={(c) => setEditForm({ ...editForm, amountCents: c })}
+                />
+              </div>
+              <div>
+                <label className="label">Repeats</label>
+                <select
+                  className="input"
+                  value={editForm.frequency}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, frequency: e.target.value as RecurForm["frequency"] })
+                  }
+                >
+                  {FREQUENCIES.map((f) => (
+                    <option key={f} value={f}>
+                      {RECUR_FREQUENCY_LABEL[f]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label">Next due</label>
+                <input
+                  type="date"
+                  className="input"
+                  value={editForm.nextDate}
+                  onChange={(e) => setEditForm({ ...editForm, nextDate: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="label">Default status</label>
+                <select
+                  className="input"
+                  value={editForm.status}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, status: e.target.value as "PAID" | "UNPAID" })
+                  }
+                >
+                  <option value="PAID">Paid</option>
+                  <option value="UNPAID">Unpaid</option>
+                </select>
+              </div>
+              <div>
+                <label className="label">Payment method</label>
+                <PaymentMethodSelect
+                  value={editForm.paymentMethod}
+                  onChange={(code) => setEditForm({ ...editForm, paymentMethod: code })}
+                  methods={paymentMethods}
+                  onAdded={(m) => setPaymentMethods((cur) => [...cur, m])}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="label">Memo (optional)</label>
+                <input
+                  className="input"
+                  value={editForm.memo}
+                  onChange={(e) => setEditForm({ ...editForm, memo: e.target.value })}
+                />
+              </div>
+              {isAdmin && (
+                <div>
+                  <label className="label">Store</label>
+                  <select
+                    className="input"
+                    value={editForm.storeId}
+                    onChange={(e) => setEditForm({ ...editForm, storeId: e.target.value })}
+                  >
+                    <option value="">Company-wide</option>
+                    {stores.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+            <div className="mt-5 flex gap-2">
+              <button onClick={() => setEditId(null)} className="btn-secondary flex-1">
+                Cancel
+              </button>
+              <button onClick={saveEdit} disabled={editBusy} className="btn-primary flex-1">
+                {editBusy ? "Saving…" : "Save changes"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
