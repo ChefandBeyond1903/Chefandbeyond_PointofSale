@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireScopedUser, requireScopedRole, scopeStoreId } from "@/lib/scope";
 import { recurringExpenseCreateSchema } from "@/lib/validation";
 import { parseDateInput } from "@/lib/date";
+import { recurDueThreshold } from "@/lib/recur";
 import { ok, toErrorResponse } from "@/lib/api";
 
 const select = {
@@ -34,8 +35,8 @@ export async function GET() {
       orderBy: [{ active: "desc" }, { nextDate: "asc" }],
       select,
     });
-    const now = new Date();
-    const dueCount = recurring.filter((r) => r.active && r.nextDate <= now).length;
+    const threshold = recurDueThreshold();
+    const dueCount = recurring.filter((r) => r.active && r.nextDate <= threshold).length;
     return ok({ recurring, dueCount });
   } catch (err) {
     return toErrorResponse(err);

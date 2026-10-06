@@ -8,6 +8,18 @@ export const RECUR_FREQUENCY_LABEL: Record<string, string> = {
   YEARLY: "Yearly",
 };
 
+// A recurring bill counts as "due" (and auto-posts as an open bill) this
+// many days before its actual due date — enough advance notice to see it on
+// the Bills page and pay it on time, not just once it's already due.
+export const RECUR_LEAD_DAYS = 5;
+
+/** `now` plus the lead time — a recurring bill is "due" once nextDate <= this. */
+export function recurDueThreshold(now: Date = new Date()): Date {
+  const t = new Date(now);
+  t.setUTCDate(t.getUTCDate() + RECUR_LEAD_DAYS);
+  return t;
+}
+
 // Add whole months in UTC, keeping the day-of-month but clamping to the last
 // day of the target month (so the 31st -> Feb 28, not spilling into March).
 function addMonths(d: Date, months: number): Date {

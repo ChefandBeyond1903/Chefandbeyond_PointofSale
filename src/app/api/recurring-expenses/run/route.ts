@@ -1,12 +1,16 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireScopedRole, scopeStoreId } from "@/lib/scope";
-import { advanceRecurDate } from "@/lib/recur";
+import { advanceRecurDate, recurDueThreshold } from "@/lib/recur";
 import { ok, toErrorResponse } from "@/lib/api";
 
-// Post every recurring expense whose nextDate has arrived: create a real
-// Expense row for each occurrence and roll nextDate forward. Catches up if a
-// template is several periods overdue (capped so it can't run away).
+// Post every recurring expense whose nextDate is due — or due within the
+// next few days (recurDueThreshold), so it shows as an open bill on the
+// Bills page with time to plan the payment, not just once it's already
+// due: create a real Expense row for each occurrence (dated for its actual
+// nextDate, even if that's a few days out) and roll nextDate forward.
+// Catches up if a template is several periods overdue (capped so it can't
+// run away).
 //
 // Whether each occurrence posts as Paid or Unpaid is chosen per template by
 // the caller (the Bills page shows a checklist before posting) — not every
@@ -16,7 +20,7 @@ export async function POST(req: NextRequest) {
   try {
     const actor = await requireScopedRole("MANAGER", "ADMIN");
     const scoped = scopeStoreId(actor);
-    const now = new Date();
+    const threshold = recurDueThreshold();
 
     let statuses: Record<string, "PAID" | "UNPAID"> = {};
     try {
@@ -27,7 +31,7 @@ export async function POST(req: NextRequest) {
     }
 
     const due = await prisma.recurringExpense.findMany({
-      where: { active: true, nextDate: { lte: now }, ...(scoped ? { storeId: scoped } : {}) },
+      where: { active: true, nextDate: { lte: threshold }, ...(scoped ? { storeId: scoped } : {}) },
     });
 
     let posted = 0;
@@ -36,7 +40,7 @@ export async function POST(req: NextRequest) {
       let next = r.nextDate;
       let guard = 0;
       await prisma.$transaction(async (tx) => {
-        while (next <= now && guard < 60) {
+        while (next <= threshold && guard < 60) {
           await tx.expense.create({
             data: {
               category: r.category,

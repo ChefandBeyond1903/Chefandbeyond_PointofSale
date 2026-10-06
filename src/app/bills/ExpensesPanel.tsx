@@ -5,7 +5,7 @@ import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
 import { formatDateOnly } from "@/lib/date";
 import { MoneyInput } from "@/components/MoneyInput";
-import { RECUR_FREQUENCY_LABEL } from "@/lib/recur";
+import { RECUR_FREQUENCY_LABEL, recurDueThreshold } from "@/lib/recur";
 import { methodLabel } from "@/lib/payments";
 import { PaymentMethodSelect, usePaymentMethods } from "@/components/PaymentMethodPicker";
 import type { DateRange } from "@/lib/dateRange";
@@ -773,7 +773,7 @@ function RecurringExpensesSection({
   }
 
   const isDue = (r: RecurringExpense) =>
-    r.active && new Date(r.nextDate).getTime() <= Date.now();
+    r.active && new Date(r.nextDate).getTime() <= recurDueThreshold().getTime();
 
   // Reviewing the due templates before posting — not every due bill has
   // actually been paid yet just because it's due, so each one gets its own
