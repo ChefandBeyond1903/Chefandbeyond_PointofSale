@@ -6,6 +6,7 @@ import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
 import { todayInputValue } from "@/lib/date";
 import { matchesSearch } from "@/lib/search";
+import { splitSerials, joinSerials } from "@/lib/serials";
 import { MoneyInput } from "@/components/MoneyInput";
 import { PercentInput } from "@/components/PercentInput";
 import { QuickAddProductModal } from "@/components/QuickAddProductModal";
@@ -875,12 +876,30 @@ export function InvoiceForm({
                           onSelect={(p) => onProductSelect(row.key, p)}
                           onAddNew={() => setQuickAddRowKey(row.key)}
                         />
-                        <input
-                          className="input mt-1 h-7 w-full text-xs"
-                          placeholder="Serial # (optional)"
-                          value={row.serialNumber}
-                          onChange={(e) => setLineSerial(row.key, e.target.value)}
-                        />
+                        {row.quantity > 1 ? (
+                          <div className="mt-1 space-y-1">
+                            {splitSerials(row.serialNumber, row.quantity).map((sn, i, arr) => (
+                              <input
+                                key={i}
+                                className="input h-7 w-full text-xs"
+                                placeholder={`Serial # ${i + 1} of ${row.quantity} (optional)`}
+                                value={sn}
+                                onChange={(e) => {
+                                  const next = [...arr];
+                                  next[i] = e.target.value;
+                                  setLineSerial(row.key, joinSerials(next));
+                                }}
+                              />
+                            ))}
+                          </div>
+                        ) : (
+                          <input
+                            className="input mt-1 h-7 w-full text-xs"
+                            placeholder="Serial # (optional)"
+                            value={row.serialNumber}
+                            onChange={(e) => setLineSerial(row.key, e.target.value)}
+                          />
+                        )}
                       </td>
                       <td className="py-1 pr-2 text-zinc-500">{row.sku}</td>
                       <td className="py-1 pr-2">

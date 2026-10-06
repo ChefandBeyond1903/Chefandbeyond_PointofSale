@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney, formatBps } from "@/lib/money";
 import { formatDateOnly, todayInputValue } from "@/lib/date";
+import { splitSerials, joinSerials } from "@/lib/serials";
 import { MoneyInput } from "@/components/MoneyInput";
 import { CardReaderPanel, type ReaderOption, type CardPaid } from "@/components/CardReaderPanel";
 import { ManualCardPanel, manualCardAvailable } from "@/components/ManualCardPanel";
@@ -797,12 +798,14 @@ export function InvoiceModal({
                             onCommit={() => snapItemToUmrp(idx)}
                             className={`input h-8 w-24 text-right ${violation ? "border-red-400" : ""}`}
                           />
-                          <input
-                            className="input h-8 flex-1"
-                            placeholder="Serial # (optional)"
-                            value={it.serialNumber}
-                            onChange={(e) => setItemField(idx, "serialNumber", e.target.value)}
-                          />
+                          {it.quantity === 1 && (
+                            <input
+                              className="input h-8 flex-1"
+                              placeholder="Serial # (optional)"
+                              value={it.serialNumber}
+                              onChange={(e) => setItemField(idx, "serialNumber", e.target.value)}
+                            />
+                          )}
                           <button
                             type="button"
                             onClick={() => removeItem(idx)}
@@ -812,6 +815,23 @@ export function InvoiceModal({
                             ✕
                           </button>
                         </div>
+                        {it.quantity > 1 && (
+                          <div className="mt-1 space-y-1">
+                            {splitSerials(it.serialNumber, it.quantity).map((sn, i, arr) => (
+                              <input
+                                key={i}
+                                className="input h-7 w-full text-xs"
+                                placeholder={`Serial # ${i + 1} of ${it.quantity} (optional)`}
+                                value={sn}
+                                onChange={(e) => {
+                                  const next = [...arr];
+                                  next[i] = e.target.value;
+                                  setItemField(idx, "serialNumber", joinSerials(next));
+                                }}
+                              />
+                            ))}
+                          </div>
+                        )}
                         {!it.productId && it.name && (
                           <p className="mt-1 text-[11px] text-amber-600">
                             Pick a match from the list above.
