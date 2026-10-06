@@ -4,7 +4,7 @@ import { HttpError } from "@/lib/auth";
 import { requireScopedUser, requireScopedRole, scopeStoreId } from "@/lib/scope";
 import { salePaymentSchema, saleEditSchema } from "@/lib/validation";
 import { computeSale, type PricedInput } from "@/lib/sale";
-import { formatMoney } from "@/lib/money";
+import { formatMoney, taxOn } from "@/lib/money";
 import { parseEventDate } from "@/lib/date";
 import { ok, toErrorResponse } from "@/lib/api";
 import { verifyPaidIntent } from "@/lib/terminal";
@@ -92,6 +92,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           number: true,
           taxRateBps: true,
           shippingCents: true,
+          subtotalCents: true,
+          discountCents: true,
           totalCents: true,
           customerTaxExemptSnapshot: true,
           amountPaidCents: true,
@@ -261,10 +263,18 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         }));
         oldItems = cur.items;
       } else if (fields.shippingCents !== undefined && fields.shippingCents !== cur.shippingCents) {
-        // Shipping alone changed — it's a flat, untaxed add-on (see
-        // Sale.shippingCents), so the total just moves by the same delta;
-        // no need to re-derive tax/discount from the items again.
-        const newTotalCents = cur.totalCents - cur.shippingCents + fields.shippingCents;
+        // Shipping alone changed — shipping is taxed like an item (see
+        // computeSale), so tax has to move too, not just the total. What the
+        // items themselves net out to (subtotal - discount) doesn't change,
+        // so it's recomputed from that fixed figure rather than by patching
+        // cur.taxCents — correct even for a sale whose stored tax predates
+        // taxing shipping at all.
+        const taxRateBps = cur.customerTaxExemptSnapshot ? 0 : cur.taxRateBps;
+        const itemsNetCents = cur.subtotalCents - cur.discountCents;
+        const newShippingCents = Math.max(0, fields.shippingCents);
+        const newTaxCents = taxOn(itemsNetCents, taxRateBps) + taxOn(newShippingCents, taxRateBps);
+        const newTotalCents = itemsNetCents + newTaxCents + newShippingCents;
+        data.taxCents = newTaxCents;
         if (newTotalCents < cur.refundedCents) {
           throw new HttpError(
             400,

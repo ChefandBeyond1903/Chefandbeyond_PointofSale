@@ -876,9 +876,12 @@ export default function RegisterPage() {
       .filter((l) => (l.product.costCents ?? 0) <= 0)
       .map((l) => ({ productId: l.product.id, name: l.product.name }));
 
+    const shipping = Math.max(0, shippingCents);
+    // Shipping is taxed like an item (see computeSale) — skipped under a
+    // manual tax override, same as every line's own tax.
+    if (!manualTaxOpen) tax += taxOn(shipping, rateBps);
     if (manualTaxOpen) tax = manualTaxCents;
     const discount = lineAdjust;
-    const shipping = Math.max(0, shippingCents);
     const total = subtotal - discount + tax + shipping;
     // "Customer total saving" vs. catalog list — only when it's actually a saving.
     // A ticket priced above list is never surfaced as such.

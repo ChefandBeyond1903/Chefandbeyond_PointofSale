@@ -23,16 +23,17 @@ export interface ComputedSale {
   subtotalCents: number; // sum of unitPrice * qty, before any discount
   discountCents: number; // total discounts (line + order)
   taxRateBps: number; // the store rate applied to every line
-  taxCents: number;
-  shippingCents: number; // flat shipping charge, not taxed
+  taxCents: number; // includes tax on shippingCents
+  shippingCents: number; // flat shipping charge, taxed like an item
   totalCents: number; // subtotal - discount + tax + shipping
 }
 
 /**
  * Authoritative money math for a sale. A single tax rate (the cashier's store
- * rate, in basis points) is charged on every line. The order-level discount is
- * spread across lines in proportion to each line's post-line-discount amount,
- * so tax is charged on what the customer actually pays.
+ * rate, in basis points) is charged on every line, and on the flat shipping
+ * charge too. The order-level discount is spread across lines in proportion
+ * to each line's post-line-discount amount, so tax is charged on what the
+ * customer actually pays.
  */
 export function computeSale(
   inputs: PricedInput[],
@@ -79,11 +80,12 @@ export function computeSale(
   });
 
   const discountCents = lineDiscount.reduce((a, b) => a + b, 0) + orderDiscount;
-  const taxCents = lines.reduce((sum, _l, idx) => {
+  const shipping = Math.max(0, Math.round(shippingCents));
+  const itemTaxCents = lines.reduce((sum, _l, idx) => {
     const net = afterLine[idx] - orderShare[idx];
     return sum + taxOn(net, taxRateBps);
   }, 0);
-  const shipping = Math.max(0, Math.round(shippingCents));
+  const taxCents = itemTaxCents + taxOn(shipping, taxRateBps);
   const totalCents = subtotalCents - discountCents + taxCents + shipping;
 
   return {
