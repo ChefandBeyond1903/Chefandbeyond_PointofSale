@@ -13,7 +13,7 @@ import { RefundReceiptModal } from "@/components/RefundReceiptModal";
 import type { InvoiceDetail, PurchaseOrder, Sale, Vendor } from "@/lib/types";
 
 type Person = { id: string; name: string };
-type ProductLite = { id: string; name: string; sku: string; priceCents: number };
+type ProductLite = { id: string; name: string; sku: string; priceCents: number; umrpCents: number };
 type EditLine = {
   productId: string;
   name: string;
@@ -192,6 +192,27 @@ export function InvoiceModal({
     setEditItems((cur) => cur.map((l, i) => (i === idx ? { ...l, [field]: value } : l)));
   }
 
+  function lineNetCents(l: EditLine): number {
+    return Math.max(0, l.quantity * l.unitPriceCents - l.discountCents);
+  }
+
+  // A line may never be priced below its minimum (UMRP) after its discount —
+  // except an admin, who's only warned (see umrpViolations below) and may
+  // knowingly override it. Same "snap on commit, not every keystroke" rule
+  // as the register and the Create invoice form.
+  function snapItemToUmrp(idx: number) {
+    if (isAdmin) return;
+    setEditItems((cur) =>
+      cur.map((l, i) => {
+        if (i !== idx || !l.productId) return l;
+        const umrp = products.find((p) => p.id === l.productId)?.umrpCents ?? 0;
+        if (umrp <= 0 || l.quantity <= 0) return l;
+        if (lineNetCents(l) >= umrp * l.quantity) return l;
+        return { ...l, unitPriceCents: umrp, discountCents: 0 };
+      }),
+    );
+  }
+
   function removeItem(idx: number) {
     setItemsTouched(true);
     setEditItems((cur) => cur.filter((_, i) => i !== idx));
@@ -206,6 +227,20 @@ export function InvoiceModal({
     setItemMenuIdx(editItems.length);
   }
 
+  // Flags any edited line still below its minimum price — for a non-admin
+  // this shouldn't normally happen (snapItemToUmrp corrects it on commit),
+  // but is checked again at save time as a hard stop; for an admin it's a
+  // warning only, since they're allowed to knowingly override it.
+  const umrpViolations = editItems.flatMap((l, idx) => {
+    if (!l.productId) return [];
+    const p = products.find((pp) => pp.id === l.productId);
+    const umrp = p?.umrpCents ?? 0;
+    if (umrp <= 0) return [];
+    const net = lineNetCents(l);
+    if (net >= umrp * l.quantity) return [];
+    return [{ idx, name: p?.name ?? l.name, minEachCents: umrp }];
+  });
+
   async function saveEdit() {
     if (itemsTouched) {
       if (editItems.length === 0) {
@@ -214,6 +249,13 @@ export function InvoiceModal({
       }
       if (editItems.some((l) => !l.productId)) {
         setErr("Pick a product from the list for every item.");
+        return;
+      }
+      if (!isAdmin && umrpViolations.length > 0) {
+        const v = umrpViolations[0];
+        setErr(
+          `"${v.name}" is below its minimum price of ${formatMoney(v.minEachCents)} each — only an admin can sell below minimum.`,
+        );
         return;
       }
     }
@@ -690,7 +732,9 @@ export function InvoiceModal({
                     Items — replace a product or change its price/quantity/discount
                   </p>
                   <div className="space-y-2">
-                    {editItems.map((it, idx) => (
+                    {editItems.map((it, idx) => {
+                      const violation = umrpViolations.find((v) => v.idx === idx);
+                      return (
                       <div key={idx} className="rounded-md border border-zinc-200 bg-white p-2">
                         <div className="relative">
                           <input
@@ -744,12 +788,14 @@ export function InvoiceModal({
                           <MoneyInput
                             cents={it.unitPriceCents}
                             onCentsChange={(c) => setItemField(idx, "unitPriceCents", c)}
-                            className="input h-8 w-24 text-right"
+                            onCommit={() => snapItemToUmrp(idx)}
+                            className={`input h-8 w-24 text-right ${violation ? "border-red-400" : ""}`}
                           />
                           <MoneyInput
                             cents={it.discountCents}
                             onCentsChange={(c) => setItemField(idx, "discountCents", Math.max(0, c))}
-                            className="input h-8 w-24 text-right"
+                            onCommit={() => snapItemToUmrp(idx)}
+                            className={`input h-8 w-24 text-right ${violation ? "border-red-400" : ""}`}
                           />
                           <input
                             className="input h-8 flex-1"
@@ -771,12 +817,29 @@ export function InvoiceModal({
                             Pick a match from the list above.
                           </p>
                         )}
+                        {violation && (
+                          <p className="mt-1 text-[11px] text-red-600">
+                            Below minimum price of {formatMoney(violation.minEachCents)} each.
+                          </p>
+                        )}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                   <button type="button" onClick={addBlankItem} className="btn-ghost mt-2 h-8 text-xs">
                     + Add item
                   </button>
+                  {umrpViolations.length > 0 && (
+                    <p
+                      className={`mt-1.5 rounded px-2 py-1.5 text-[11px] ${
+                        isAdmin ? "bg-amber-50 text-amber-800" : "bg-red-50 text-red-700"
+                      }`}
+                    >
+                      {isAdmin
+                        ? "One or more items are below their minimum price — see the flagged lines above. Saving will override it."
+                        : "One or more items are below their minimum price — see the flagged lines above. Only an admin can sell below minimum."}
+                    </p>
+                  )}
                   <p className="mt-1 text-[11px] text-zinc-400">
                     Same rules as ringing a sale apply — no item may go below its minimum resale
                     price (after its discount), and every item needs a cost on file.
