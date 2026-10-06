@@ -160,8 +160,12 @@ export function Nav({ user }: { user: SessionUser }) {
     };
   }, [drawerOpen]);
 
-  // Auto sign-out after 10 minutes with no mouse/keyboard/touch/scroll
-  // activity anywhere on the page. Reads the current URL at fire time (not
+  // Auto sign-out after 10 minutes with no activity anywhere on the page.
+  // "Activity" includes typing, pasting (Ctrl+V and the right-click/native
+  // "Paste" menu — data entry from a PDF or spreadsheet is often pasted, not
+  // typed), and simply switching back to this tab after being away — not
+  // just mouse/keyboard events, so genuinely working the form never trips
+  // it, only true inactivity does. Reads the current URL at fire time (not
   // the pathname prop) so it always lands back on wherever the user actually
   // was, even after they've navigated around since the effect first ran.
   useEffect(() => {
@@ -182,6 +186,9 @@ export function Nav({ user }: { user: SessionUser }) {
       clearTimeout(timer);
       timer = setTimeout(idleLogout, IDLE_MS);
     }
+    function onVisible() {
+      if (document.visibilityState === "visible") reset();
+    }
     const events: (keyof WindowEventMap)[] = [
       "mousemove",
       "mousedown",
@@ -189,12 +196,17 @@ export function Nav({ user }: { user: SessionUser }) {
       "touchstart",
       "scroll",
       "wheel",
+      "paste",
+      "input",
+      "focus",
     ];
     for (const e of events) window.addEventListener(e, reset, { passive: true });
+    document.addEventListener("visibilitychange", onVisible);
     reset();
     return () => {
       clearTimeout(timer);
       for (const e of events) window.removeEventListener(e, reset);
+      document.removeEventListener("visibilitychange", onVisible);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
