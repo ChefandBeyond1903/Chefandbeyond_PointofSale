@@ -177,7 +177,10 @@ export function BillsView({
 
       // Expenses don't have a due date distinct from when they're logged, so
       // there's no "overdue" notion for them — that tab shows bills only.
-      const expenseParams = new URLSearchParams();
+      // "standalone" excludes a bill's own shipping/drop-ship/etc. fee
+      // mirrors — their $ is already inside that bill's total, so listing
+      // them here too would double it up.
+      const expenseParams = new URLSearchParams({ standalone: "1" });
       if (filter === "OPEN") expenseParams.set("status", "UNPAID");
       else if (filter === "PAID") expenseParams.set("status", "PAID");
       if (isAdmin && storeId) expenseParams.set("storeId", storeId);

@@ -32,6 +32,11 @@ export async function GET(req: NextRequest) {
     const from = searchParams.get("from");
     const to = searchParams.get("to");
     const paymentMethod = searchParams.get("paymentMethod")?.trim();
+    // Excludes the shipping/minimum-order/drop-ship/processing fee rows a
+    // vendor bill auto-generates (Expense.billId set) — those are only a
+    // category breakdown for Reports; their $ is already inside that bill's
+    // own total, so a caller listing payables (not the P&L) asks for this.
+    const standalone = searchParams.get("standalone") === "1";
 
     const where: Prisma.ExpenseWhereInput = {};
     const scoped = scopeStoreId(actor);
@@ -39,6 +44,7 @@ export async function GET(req: NextRequest) {
     else if (storeParam) where.storeId = storeParam;
     if (status === "PAID" || status === "UNPAID") where.status = status;
     if (paymentMethod) where.paymentMethod = paymentMethod.toUpperCase();
+    if (standalone) where.billId = null;
     if (from || to) {
       where.expenseDate = {};
       if (from) where.expenseDate.gte = new Date(from);
