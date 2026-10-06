@@ -33,7 +33,14 @@ export async function GET(_req: NextRequest, { params }: Params) {
         sale: { select: { id: true, number: true, createdAt: true } },
         bills: {
           orderBy: { createdAt: "asc" },
-          select: { id: true, billNumber: true, status: true, subtotalCents: true },
+          select: {
+            id: true,
+            billNumber: true,
+            status: true,
+            subtotalCents: true,
+            paidAt: true,
+            paymentMethod: true,
+          },
         },
         expenses: {
           orderBy: { createdAt: "asc" },

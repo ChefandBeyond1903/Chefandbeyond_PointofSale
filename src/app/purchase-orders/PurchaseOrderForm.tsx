@@ -9,6 +9,9 @@ import { MoneyInput } from "@/components/MoneyInput";
 import { Badge } from "@/components/Badge";
 import { QuickAddProductModal } from "@/components/QuickAddProductModal";
 import { NewVendorModal } from "@/components/NewVendorModal";
+import { PaidStamp } from "@/components/PaidStamp";
+import { usePaymentMethods } from "@/components/PaymentMethodPicker";
+import { methodLabel } from "@/lib/payments";
 import { PO_TERMS, dueDateFromTerms } from "@/lib/terms";
 import type {
   Category,
@@ -155,8 +158,20 @@ export function PurchaseOrderForm({
   // (if any), and any vendor bill(s) created from receiving it.
   const [sourceSale, setSourceSale] = useState<PurchaseOrder["sale"]>(null);
   const [bills, setBills] = useState<NonNullable<PurchaseOrder["bills"]>>([]);
+  const [paymentMethods] = usePaymentMethods();
 
   const prevVendorRef = useRef<Vendor | null>(null);
+
+  // PAID once every bill against this PO has been paid. Show how (and when)
+  // — usually just one bill, but a few payment methods if it was split.
+  const paidBills = bills.filter((b) => b.status === "PAID");
+  const fullyPaid = bills.length > 0 && paidBills.length === bills.length;
+  const paidDetail = fullyPaid
+    ? [...new Set(paidBills.map((b) => methodLabel(b.paymentMethod, paymentMethods)))].join(", ") +
+      (paidBills.length === 1 && paidBills[0].paidAt
+        ? ` · paid ${new Date(paidBills[0].paidAt).toLocaleDateString()}`
+        : "")
+    : "";
 
   const applyPo = useCallback((po: PurchaseOrder) => {
     setSourceSale(po.sale ?? null);
@@ -499,6 +514,7 @@ export function PurchaseOrderForm({
         <h1 className="text-xl font-semibold">
           {isEdit ? `Purchase order ${poNumber}` : "New purchase order"}
         </h1>
+        {fullyPaid && <PaidStamp detail={paidDetail} />}
         {readOnly && (
           <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs text-zinc-500">
             View only

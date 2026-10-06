@@ -13,6 +13,8 @@ import { usePaged } from "@/lib/usePaged";
 import { Pager } from "@/components/Pager";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { PaymentMethodSelect, usePaymentMethods } from "@/components/PaymentMethodPicker";
+import { PaidStamp } from "@/components/PaidStamp";
+import { methodLabel } from "@/lib/payments";
 import type { DateRange } from "@/lib/dateRange";
 import { ExpensesPanel } from "./ExpensesPanel";
 import type { Bill, Store } from "@/lib/types";
@@ -420,10 +422,18 @@ function BillDetailModal({
           <p className="text-sm text-zinc-500">{err ?? "Loading…"}</p>
         ) : (
           <>
-            <div className="mb-1 flex items-center justify-between">
-              <h2 className="text-lg font-semibold">
+            <div className="mb-1 flex items-center justify-between gap-3">
+              <h2 className="flex flex-wrap items-center gap-2 text-lg font-semibold">
                 {canManage ? "Edit bill" : "Bill"}{" "}
                 {bill.billNumber ? `#${bill.billNumber}` : ""} · {bill.vendor}
+                {bill.status === "PAID" && (
+                  <PaidStamp
+                    detail={
+                      methodLabel(bill.paymentMethod, paymentMethods) +
+                      (bill.paidAt ? ` · paid ${fmtDate(bill.paidAt)}` : "")
+                    }
+                  />
+                )}
               </h2>
               <button onClick={onClose} className="btn-ghost px-2 py-1 text-sm">
                 ✕

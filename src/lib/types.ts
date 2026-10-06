@@ -385,7 +385,14 @@ export interface PurchaseOrder {
   sale?: { id: string; number: number; createdAt?: string } | null;
   items?: PurchaseOrderItem[];
   categoryLines?: PurchaseOrderCategoryLine[];
-  bills?: { id: string; billNumber: string; status: string; subtotalCents: number }[];
+  bills?: {
+    id: string;
+    billNumber: string;
+    status: string;
+    subtotalCents: number;
+    paidAt: string | null;
+    paymentMethod: string;
+  }[];
   expenses?: { id: string; category: string; amountCents: number; memo: string; status: ExpenseStatus }[];
   _count?: { items: number; bills?: number };
 }
