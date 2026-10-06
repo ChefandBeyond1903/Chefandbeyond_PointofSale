@@ -18,6 +18,7 @@ type ProductLite = {
   name: string;
   sku: string;
   priceCents: number;
+  umrpCents: number;
   description: string | null;
   vendor: string;
 };
@@ -60,6 +61,10 @@ function resolveLineDiscount(l: Line): number {
   const base = l.quantity * l.unitPriceCents;
   const raw = l.discMode === "PERCENT" ? Math.round((base * l.discPercent) / 100) : l.discountCents;
   return Math.max(0, Math.min(base, raw));
+}
+
+function lineNetCents(l: Line): number {
+  return Math.max(0, l.quantity * l.unitPriceCents - resolveLineDiscount(l));
 }
 
 // Keeps an in-progress invoice across an accidental sign-out (the idle
@@ -282,6 +287,30 @@ export function InvoiceForm({
   function updateLine(key: string, patch: Partial<Line>) {
     setLines((rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   }
+
+  // A line may never be priced below its minimum (UMRP) — except an admin,
+  // who's only warned (see umrpViolations below) and may knowingly override
+  // it. Same rule, and the same "snap on commit, not every keystroke"
+  // approach, as the register (see snapLineToUmrp there).
+  function snapLineToUmrp(key: string) {
+    if (isAdmin) return;
+    setLines((rows) =>
+      rows.map((l) => {
+        if (l.key !== key || !l.productId) return l;
+        const umrp = products.find((p) => p.id === l.productId)?.umrpCents ?? 0;
+        if (umrp <= 0 || l.quantity <= 0) return l;
+        if (lineNetCents(l) >= umrp * l.quantity) return l;
+        return {
+          ...l,
+          unitPriceCents: umrp,
+          discountCents: 0,
+          discPercent: 0,
+          discMode: "AMOUNT" as const,
+        };
+      }),
+    );
+  }
+
   function addLine() {
     setLines((rows) => [...rows, blankLine()]);
   }
@@ -320,6 +349,25 @@ export function InvoiceForm({
     itemsSubtotalCents - lineDiscountsCents - orderDiscountCents + shippingCents,
   );
   const validLines = lines.filter((l) => l.productId && l.quantity > 0);
+  // Flags any line still below its minimum price — for a non-admin this
+  // shouldn't normally happen (snapLineToUmrp corrects it on commit), but is
+  // checked again at save time as a hard stop; for an admin it's a warning
+  // only, since they're allowed to knowingly override it.
+  const umrpViolations = validLines.flatMap((l) => {
+    const p = products.find((pp) => pp.id === l.productId);
+    const umrp = p?.umrpCents ?? 0;
+    if (umrp <= 0) return [];
+    const net = lineNetCents(l);
+    if (net >= umrp * l.quantity) return [];
+    return [
+      {
+        key: l.key,
+        name: p?.name ?? l.productName,
+        minEachCents: umrp,
+        eachCents: Math.floor(net / l.quantity),
+      },
+    ];
+  });
   const hasCustomer = !!custId || custName.trim().length > 0;
   // Same rule as the register: only a customer set up with payment terms can
   // be left unpaid (billed later). Anyone else must have a payment recorded.
@@ -513,6 +561,13 @@ export function InvoiceForm({
     }
     if (validLines.length === 0) {
       setError("Add at least one product.");
+      return null;
+    }
+    if (!isAdmin && umrpViolations.length > 0) {
+      const v = umrpViolations[0];
+      setError(
+        `"${v.name}" is below its minimum price of ${formatMoney(v.minEachCents)} each — only an admin can sell below minimum.`,
+      );
       return null;
     }
     if (
@@ -771,6 +826,7 @@ export function InvoiceForm({
                 {lines.map((row) => {
                   const lineDisc = resolveLineDiscount(row);
                   const amount = Math.max(0, row.quantity * row.unitPriceCents - lineDisc);
+                  const violation = umrpViolations.find((v) => v.key === row.key);
                   return (
                     <tr key={row.key} className="border-t border-zinc-100 align-top">
                       <td className="py-1 pr-2">
@@ -805,7 +861,8 @@ export function InvoiceForm({
                         <MoneyInput
                           cents={row.unitPriceCents}
                           onCentsChange={(c) => updateLine(row.key, { unitPriceCents: c })}
-                          className="input h-8 text-right"
+                          onCommit={() => snapLineToUmrp(row.key)}
+                          className={`input h-8 text-right ${violation ? "border-red-400" : ""}`}
                         />
                       </td>
                       <td className="py-1 pr-2">
@@ -830,17 +887,24 @@ export function InvoiceForm({
                             <PercentInput
                               value={row.discPercent}
                               onValueChange={(n) => setLineDiscPercent(row.key, n)}
-                              className="input h-8 w-16 text-right"
+                              onCommit={() => snapLineToUmrp(row.key)}
+                              className={`input h-8 w-16 text-right ${violation ? "border-red-400" : ""}`}
                               aria-label="Discount percent"
                             />
                           ) : (
                             <MoneyInput
                               cents={lineDisc}
                               onCentsChange={(c) => setLineDiscAmount(row.key, c)}
-                              className="input h-8 w-20 text-right"
+                              onCommit={() => snapLineToUmrp(row.key)}
+                              className={`input h-8 w-20 text-right ${violation ? "border-red-400" : ""}`}
                             />
                           )}
                         </div>
+                        {violation && (
+                          <p className="mt-0.5 text-right text-[11px] text-red-600">
+                            Below min {formatMoney(violation.minEachCents)} each
+                          </p>
+                        )}
                       </td>
                       <td className="py-1 pr-2 text-right font-medium tabular-nums">
                         {formatMoney(amount)}
@@ -882,6 +946,17 @@ export function InvoiceForm({
               <MoneyInput cents={shippingCents} onCentsChange={(c) => setShippingCents(Math.max(0, c))} />
             </div>
           </div>
+          {umrpViolations.length > 0 && (
+            <p
+              className={`mt-3 rounded px-3 py-2 text-xs ${
+                isAdmin ? "bg-amber-50 text-amber-800" : "bg-red-50 text-red-700"
+              }`}
+            >
+              {isAdmin
+                ? "One or more items are below their minimum price — see the flagged lines above. Saving will override it."
+                : "One or more items are below their minimum price — see the flagged lines above. Only an admin can sell below minimum."}
+            </p>
+          )}
           <div className="mt-4 space-y-1 border-t border-zinc-100 pt-3 text-sm">
             <Row label="Items" value={formatMoney(itemsSubtotalCents)} />
             {lineDiscountsCents > 0 && (
@@ -1062,6 +1137,7 @@ export function InvoiceForm({
                   name: product.name,
                   sku: product.sku,
                   priceCents: product.priceCents,
+                  umrpCents: product.umrpCents,
                   description: product.description ?? null,
                   vendor: product.vendor ?? "",
                 };
