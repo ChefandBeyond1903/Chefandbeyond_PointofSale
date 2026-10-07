@@ -1,14 +1,17 @@
-// Payment methods. The built-in four carry behavior: CARD is charged a
+// Payment methods. The built-in five carry behavior: CARD is charged a
 // processing fee in the reports, CREDIT moves a customer's store-credit
-// balance, CHECK asks for a check number, CASH tracks tendered/change.
-// Anything else (Zelle, Venmo, wire, …) is added in Settings and treated as
-// plain tender — money received, no fee, no balance effect.
+// balance, CHECK asks for a check number, CASH tracks tendered/change, TRADE
+// (invoice only, for now) creates the traded-in item as a product and
+// receives it into inventory. Anything else (Zelle, Venmo, wire, …) is added
+// in Settings and treated as plain tender — money received, no fee, no
+// balance effect.
 
 export const BUILTIN_PAYMENT_METHODS = [
   { code: "CASH", label: "Cash" },
   { code: "CARD", label: "Card" },
   { code: "CHECK", label: "Check" },
   { code: "CREDIT", label: "Store credit" },
+  { code: "TRADE", label: "Trade-in" },
 ] as const;
 
 export const BUILTIN_METHOD_CODES = BUILTIN_PAYMENT_METHODS.map((m) => m.code);

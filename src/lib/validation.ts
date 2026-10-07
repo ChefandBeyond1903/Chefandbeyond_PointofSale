@@ -371,6 +371,16 @@ export const saleCreateSchema = z.object({
     )
     .max(4)
     .optional(),
+  // Required when any payment (paymentMethod / depositMethod / a payments[]
+  // entry) uses method "TRADE" — what's being traded in. Its value is
+  // whatever that payment's amountCents resolves to; saving the sale creates
+  // it as a new product and receives one unit into the selling store's
+  // inventory.
+  tradeIn: z
+    .object({
+      description: z.string().trim().min(1).max(300),
+    })
+    .optional(),
   // Staff credited with the sale. Omit to credit the signed-in operator.
   salespersonId: z.string().min(1).optional(),
   // Proof an admin's password was entered at this register (see

@@ -94,6 +94,7 @@ type InvoiceDraft = {
   tenderedCents: number;
   checkNumber: string;
   paymentNote: string;
+  tradeInDescription: string;
 };
 
 /**
@@ -157,6 +158,9 @@ export function InvoiceForm({
   // a standalone terminal, …), never a live Stripe charge. This is where
   // that reference/confirmation # goes.
   const [paymentNote, setPaymentNote] = useState("");
+  // What's being traded in, when paymentMethod is TRADE — becomes a new
+  // product received into inventory when the invoice saves.
+  const [tradeInDescription, setTradeInDescription] = useState("");
 
   // Non-admin: the operator's own store (name + tax rate), shown for parity
   // with the register. An admin instead picks one below — required, since
@@ -250,6 +254,7 @@ export function InvoiceForm({
           if (d.tenderedCents !== undefined) setTenderedCents(d.tenderedCents);
           if (d.checkNumber !== undefined) setCheckNumber(d.checkNumber);
           if (d.paymentNote !== undefined) setPaymentNote(d.paymentNote);
+          if (d.tradeInDescription !== undefined) setTradeInDescription(d.tradeInDescription);
         }
       }
     } catch {
@@ -435,6 +440,7 @@ export function InvoiceForm({
         tenderedCents,
         checkNumber,
         paymentNote,
+        tradeInDescription,
       };
       localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
     } catch {
@@ -459,6 +465,7 @@ export function InvoiceForm({
     tenderedCents,
     checkNumber,
     paymentNote,
+    tradeInDescription,
     hasCustomer,
   ]);
 
@@ -509,11 +516,14 @@ export function InvoiceForm({
     if (leaveUnpaid) return {};
     const amt = Math.max(0, Math.min(amountReceived ?? totalCents, totalCents));
     if (amt <= 0) return {};
+    const tradeInField =
+      paymentMethod === "TRADE" ? { tradeIn: { description: tradeInDescription.trim() } } : {};
     if (amt >= totalCents) {
       return {
         paymentMethod,
         ...(paymentMethod === "CASH" ? { tenderedCents: Math.max(tenderedCents, amt) } : {}),
         ...(paymentMethod === "CHECK" ? { checkNumber: checkNumber.trim() } : {}),
+        ...tradeInField,
       };
     }
     return {
@@ -521,6 +531,7 @@ export function InvoiceForm({
       depositMethod: paymentMethod,
       ...(paymentMethod === "CASH" ? { tenderedCents: Math.max(tenderedCents, amt) } : {}),
       ...(paymentMethod === "CHECK" ? { checkNumber: checkNumber.trim() } : {}),
+      ...tradeInField,
     };
   }
 
@@ -603,6 +614,15 @@ export function InvoiceForm({
       setError("Enter the check number.");
       return null;
     }
+    if (
+      !leaveUnpaid &&
+      paymentMethod === "TRADE" &&
+      !tradeInDescription.trim() &&
+      (amountReceived ?? 1) > 0
+    ) {
+      setError("Describe what's being traded in.");
+      return null;
+    }
     setSaving(true);
     try {
       const dry = await api<{ ok: true; totalCents: number }>("/api/sales", {
@@ -647,6 +667,7 @@ export function InvoiceForm({
     setManualNumber("");
     setManualDate("");
     setPaymentNote("");
+    setTradeInDescription("");
     setPreviewTotalCents(null);
     setPreviewError(null);
     setSavedSale(null);
@@ -1065,16 +1086,21 @@ export function InvoiceForm({
                   onChange={setPaymentMethod}
                   methods={paymentMethods}
                   onAdded={(m) => setPaymentMethods((cur) => [...cur, m])}
+                  excludeCodes={["CREDIT"]}
                 />
               </div>
               <div>
-                <label className="label">Amount received</label>
+                <label className="label">
+                  {paymentMethod === "TRADE" ? "Trade-in value" : "Amount received"}
+                </label>
                 <MoneyInput
                   cents={amountReceived ?? displayTotalCents}
                   onCentsChange={(c) => setAmountReceived(Math.max(0, c))}
                 />
                 <p className="mt-0.5 text-[11px] text-zinc-400">
-                  Less than the total leaves a balance due (a deposit).
+                  {paymentMethod === "TRADE"
+                    ? "What the traded item is worth — less than the total leaves a balance due."
+                    : "Less than the total leaves a balance due (a deposit)."}
                 </p>
               </div>
               {paymentMethod === "CASH" && (
@@ -1106,6 +1132,21 @@ export function InvoiceForm({
                     This form doesn&rsquo;t run a card itself — choosing Card just records that the
                     customer paid by card (e.g. already charged on the website or a standalone
                     terminal). Note what it refers to here.
+                  </p>
+                </div>
+              )}
+              {paymentMethod === "TRADE" && (
+                <div className="sm:col-span-3">
+                  <label className="label">What&rsquo;s being traded in</label>
+                  <input
+                    className="input"
+                    placeholder="e.g. True T-49 Reach-In Refrigerator, used"
+                    value={tradeInDescription}
+                    onChange={(e) => setTradeInDescription(e.target.value)}
+                  />
+                  <p className="mt-0.5 text-[11px] text-zinc-400">
+                    Saving this invoice adds it to the catalog (under Used) and receives 1 unit into
+                    inventory at the trade-in value above — review its price afterward.
                   </p>
                 </div>
               )}

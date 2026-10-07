@@ -27,7 +27,7 @@ export function PaymentMethodSelect({
   onChange,
   methods,
   onAdded,
-  excludeCodes = ["CREDIT"],
+  excludeCodes = ["CREDIT", "TRADE"],
   className = "input",
   disabled = false,
 }: {
@@ -35,8 +35,9 @@ export function PaymentMethodSelect({
   onChange: (code: string) => void;
   methods: PaymentMethodOption[];
   onAdded: (m: PaymentMethodOption) => void;
-  // Store credit doesn't make sense for money going OUT to a vendor — hidden
-  // by default; pass [] to show every built-in.
+  // Store credit and trade-in don't make sense for money going OUT to a
+  // vendor, or outside a sale at all — hidden by default; pass [] (or a list
+  // without them) to show one or both.
   excludeCodes?: string[];
   className?: string;
   disabled?: boolean;

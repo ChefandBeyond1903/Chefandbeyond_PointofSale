@@ -415,11 +415,25 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Trade-in: creates a new product from what's being traded in and
+    // receives one unit of it into the selling store's inventory. Not
+    // validated on a dry run (the live total preview sends the picked
+    // method before the description is necessarily filled in yet).
+    const tradePayment = paymentList.find((p) => p.method === "TRADE");
+    if (tradePayment && !body.dryRun) {
+      if (!body.tradeIn?.description) {
+        throw new HttpError(400, "Describe what's being traded in.");
+      }
+      if (!storeId) {
+        throw new HttpError(400, "A trade-in needs a store to receive the item into.");
+      }
+    }
+
     const settledNow = paidNowCents >= total;
     // "Method" recorded on the sale header — SPLIT when more than one was used.
     const methodsUsed = [...new Set(paymentList.map((p) => p.method))];
     const payMethod = methodsUsed.length === 1 ? methodsUsed[0] : methodsUsed.length > 1 ? "SPLIT" : "";
-    const openShift = paymentList.some((p) => p.method !== "CREDIT")
+    const openShift = paymentList.some((p) => p.method !== "CREDIT" && p.method !== "TRADE")
       ? await prisma.shift.findFirst({
           where: { userId: user.id, status: "OPEN" },
           orderBy: { openedAt: "desc" },
@@ -624,6 +638,36 @@ export async function POST(req: NextRequest) {
         });
       }
 
+      // Trade-in: the traded item becomes a new product, received as 1 unit
+      // into the selling store — created once here, then linked from its
+      // SalePayment row below. costCents/priceCents both start at the
+      // trade value; staff adjusts the resale price once it's assessed.
+      let tradeInProductId: string | null = null;
+      if (tradePayment && body.tradeIn && storeId) {
+        const usedCategory = await tx.category.findFirst({
+          where: { name: { equals: "Used", mode: "insensitive" } },
+          select: { id: true },
+        });
+        const tradeProduct = await tx.product.create({
+          data: {
+            name: body.tradeIn.description,
+            sku: `TRADE-${number}`,
+            costCents: tradePayment.amountCents,
+            priceCents: tradePayment.amountCents,
+            vendor: "Trade-In",
+            categoryId: usedCategory?.id ?? null,
+            trackStock: true,
+            active: true,
+          },
+        });
+        await tx.storeInventory.upsert({
+          where: { productId_storeId: { productId: tradeProduct.id, storeId } },
+          create: { productId: tradeProduct.id, storeId, quantity: 1 },
+          update: { quantity: { increment: 1 } },
+        });
+        tradeInProductId = tradeProduct.id;
+      }
+
       // One SalePayment row per tender so the till and the customer-deposit /
       // store-credit balances reconcile precisely.
       for (const p of paymentList) {
@@ -636,10 +680,13 @@ export async function POST(req: NextRequest) {
             paidAt: saleDate,
             isDeposit: !settledNow,
             createdById: user.id,
-            shiftId: p.method === "CREDIT" ? null : (openShift?.id ?? null),
+            shiftId: p.method === "CREDIT" || p.method === "TRADE" ? null : (openShift?.id ?? null),
             stripePaymentIntentId: p.stripePaymentIntentId,
             cardBrand: p.cardBrand,
             cardLast4: p.cardLast4,
+            ...(p.method === "TRADE"
+              ? { tradeInProductId, note: `Trade-in: ${body.tradeIn?.description ?? ""}` }
+              : {}),
           },
         });
       }

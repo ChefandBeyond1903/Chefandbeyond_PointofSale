@@ -297,6 +297,8 @@ model Product {
   poItems    PurchaseOrderItem[]
   inventory  StoreInventory[]
   billItems  BillItem[]
+  // Sale payments this product was created from (trade-ins) — see SalePayment.tradeInProductId.
+  tradeInPayments SalePayment[] @relation("TradeInPayments")
 
   @@index([categoryId])
   @@index([active])
@@ -827,7 +829,11 @@ model SalePayment {
   saleId                String
   sale                  Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
   amountCents           Int
-  method                String // "CASH" | "CARD" | "CHECK" | "CREDIT" (store credit)
+  method                String // "CASH" | "CARD" | "CHECK" | "CREDIT" (store credit) | "TRADE" (trade-in)
+  // Set when method is TRADE — the product created from the traded-in item
+  // (and received into inventory) when this payment was recorded.
+  tradeInProductId String?
+  tradeInProduct   Product? @relation("TradeInPayments", fields: [tradeInProductId], references: [id])
   // The customer's check number, when method is CHECK.
   checkNumber           String   @default("")
   // The day the money was received — deposits and balance payments each land on
