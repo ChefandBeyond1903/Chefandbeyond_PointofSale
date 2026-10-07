@@ -86,6 +86,7 @@ type InvoiceDraft = {
   custPhone: string;
   custCompany: string;
   custAddress: string;
+  custLocationId: string;
   lines: Line[];
   shippingCents: number;
   leaveUnpaid: boolean;
@@ -138,6 +139,10 @@ export function InvoiceForm({
   const [custPhone, setCustPhone] = useState("");
   const [custCompany, setCustCompany] = useState("");
   const [custAddress, setCustAddress] = useState("");
+  // A specific ship-to location, for a customer with more than one on file
+  // (e.g. a district with several school sites) — its address/contact win
+  // over the customer's own when picked.
+  const [custLocationId, setCustLocationId] = useState("");
   const [custOpen, setCustOpen] = useState(false);
   const custInputRef = useRef<HTMLInputElement>(null);
 
@@ -246,6 +251,7 @@ export function InvoiceForm({
           if (d.custPhone !== undefined) setCustPhone(d.custPhone);
           if (d.custCompany !== undefined) setCustCompany(d.custCompany);
           if (d.custAddress !== undefined) setCustAddress(d.custAddress);
+          if (d.custLocationId !== undefined) setCustLocationId(d.custLocationId);
           if (Array.isArray(d.lines) && d.lines.length > 0) setLines(d.lines);
           if (d.shippingCents !== undefined) setShippingCents(d.shippingCents);
           if (d.leaveUnpaid !== undefined) setLeaveUnpaid(d.leaveUnpaid);
@@ -270,10 +276,26 @@ export function InvoiceForm({
     setCustPhone(c.phone);
     setCustCompany(c.company);
     setCustAddress(c.address);
+    setCustLocationId("");
     setCustOpen(false);
     // Switching to a customer with no payment terms — "leave unpaid" no
     // longer applies to this invoice.
     if (!c.paymentTerms) setLeaveUnpaid(false);
+  }
+
+  function pickCustomerLocation(locId: string) {
+    setCustLocationId(locId);
+    const c = customers.find((x) => x.id === custId);
+    const loc = c?.locations?.find((l) => l.id === locId);
+    if (loc) {
+      if (loc.address) setCustAddress(loc.address);
+      if (loc.phone) setCustPhone(loc.phone);
+      if (loc.email) setCustEmail(loc.email);
+    } else if (c) {
+      setCustAddress(c.address);
+      setCustPhone(c.phone);
+      setCustEmail(c.email);
+    }
   }
 
   const custMatches = useMemo(() => {
@@ -432,6 +454,7 @@ export function InvoiceForm({
         custPhone,
         custCompany,
         custAddress,
+        custLocationId,
         lines,
         shippingCents,
         leaveUnpaid,
@@ -457,6 +480,7 @@ export function InvoiceForm({
     custPhone,
     custCompany,
     custAddress,
+    custLocationId,
     lines,
     shippingCents,
     leaveUnpaid,
@@ -470,7 +494,9 @@ export function InvoiceForm({
   ]);
 
   function customerPayload() {
-    if (custId) return { customerId: custId };
+    if (custId) {
+      return { customerId: custId, ...(custLocationId ? { customerLocationId: custLocationId } : {}) };
+    }
     if (custName.trim()) {
       return {
         customer: {
@@ -658,6 +684,7 @@ export function InvoiceForm({
     setCustPhone("");
     setCustCompany("");
     setCustAddress("");
+    setCustLocationId("");
     setShippingCents(0);
     setLeaveUnpaid(false);
     setPaymentMethod("CASH");
@@ -836,6 +863,25 @@ export function InvoiceForm({
                 </ul>
               )}
             </div>
+            {!!customers.find((c) => c.id === custId)?.locations?.length && (
+              <div className="sm:col-span-2">
+                <label className="label">Location</label>
+                <select
+                  className="input"
+                  value={custLocationId}
+                  onChange={(e) => pickCustomerLocation(e.target.value)}
+                >
+                  <option value="">Use {custName}&apos;s main address…</option>
+                  {customers
+                    .find((c) => c.id === custId)
+                    ?.locations?.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.label}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            )}
             <div>
               <label className="label">Company</label>
               <input
