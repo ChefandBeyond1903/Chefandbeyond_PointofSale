@@ -699,6 +699,7 @@ export function InvoiceForm({
     setPreviewError(null);
     setSavedSale(null);
     setError(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   // Leaving on purpose (not an interrupted session) — drop any draft so the
