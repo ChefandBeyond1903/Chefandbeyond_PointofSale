@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { api } from "@/lib/client";
 import { ReceiptBody } from "@/components/ReceiptModal";
 import { PrintPaperToggle, usePrintPaper } from "@/components/PrintPaperToggle";
@@ -35,7 +36,10 @@ export function BulkReceiptModal({
     };
   }, [companyProp]);
 
-  return (
+  // Portal straight onto <body> (see globals.css) so printing isn't fighting
+  // the rest of the page's layout for space; this is only ever rendered
+  // client-side in response to a user action (never part of SSR output).
+  return createPortal(
     <div
       className="receipt-modal-overlay fixed inset-0 z-[60] grid place-items-center overflow-y-auto bg-black/40 p-4"
       onClick={(e) => {
@@ -49,7 +53,7 @@ export function BulkReceiptModal({
         }`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="w-full">
+        <div className="receipt-modal-inner w-full">
           <p className="mb-3 text-sm font-medium">
             {sales.length} invoice{sales.length === 1 ? "" : "s"} selected
           </p>
@@ -82,6 +86,7 @@ export function BulkReceiptModal({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

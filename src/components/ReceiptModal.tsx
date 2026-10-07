@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { api } from "@/lib/client";
 import { formatBps, formatMoney } from "@/lib/money";
 import { formatDateOnly } from "@/lib/date";
@@ -62,7 +63,10 @@ export function ReceiptModal({
     };
   }, [companyProp]);
 
-  return (
+  // Portal straight onto <body> (see globals.css) so printing isn't fighting
+  // the rest of the page's layout for space; this is only ever rendered
+  // client-side in response to a user action (never part of SSR output).
+  return createPortal(
     <div
       className="receipt-modal-overlay fixed inset-0 z-[60] grid place-items-center overflow-y-auto bg-black/40 p-4"
       onClick={(e) => {
@@ -76,7 +80,7 @@ export function ReceiptModal({
         }`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="w-full">
+        <div className="receipt-modal-inner w-full">
           {!sale ? (
             <p className="py-8 text-center text-sm text-zinc-500">
               {error ?? "Loading invoice…"}
@@ -107,7 +111,8 @@ export function ReceiptModal({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

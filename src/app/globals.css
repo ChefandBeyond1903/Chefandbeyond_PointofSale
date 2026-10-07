@@ -203,40 +203,54 @@ body {
     border: none !important;
   }
 
-  /* When a receipt modal is on screen, print only the receipt. */
-  body:has(#receipt) * {
-    visibility: hidden;
+  /* When a receipt/refund/quote modal is on screen, print only the receipt.
+     ReceiptModal, BulkReceiptModal, RefundReceiptModal and QuoteReceiptModal
+     all render through a React portal straight onto <body> (so the only
+     thing left under <body> besides the portal is the app's own root), and
+     keep the print target in NORMAL document flow rather than
+     position:absolute/fixed. That matters: a real printer driver (reported
+     against a Brother printer) does not reliably paginate absolutely
+     positioned overflow content across physical pages the way Chrome's own
+     print-preview / "Save as PDF" does — it only printed page 1. Normal
+     flow content paginates consistently everywhere. */
+  body:has(#receipt) > :not(.receipt-modal-overlay),
+  body:has(#bulk-receipts) > :not(.receipt-modal-overlay) {
+    display: none !important;
   }
-  body:has(#receipt) #receipt,
-  body:has(#receipt) #receipt * {
-    visibility: visible;
+  body:has(#receipt) .receipt-modal-overlay,
+  body:has(#bulk-receipts) .receipt-modal-overlay {
+    position: static !important;
+    display: block !important;
+    inset: auto !important;
+    background: none !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+  body:has(#receipt) .receipt-modal-card,
+  body:has(#bulk-receipts) .receipt-modal-card {
+    position: static !important;
+    display: block !important;
+    overflow: visible !important;
+    max-height: none !important;
+    width: auto !important;
+    max-width: none !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  /* Drop everything in the modal except the print target itself (loading
+     text, the paper-size toggle, the Print/Close buttons). */
+  body:has(#receipt) .receipt-modal-inner > :not(#receipt),
+  body:has(#bulk-receipts) .receipt-modal-inner > :not(#bulk-receipts) {
+    display: none !important;
   }
   body:has(#receipt) #receipt {
-    position: absolute;
-    top: 0;
-    left: 0;
     border: none !important;
     box-shadow: none !important;
     border-radius: 0 !important;
     color: #000;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
-  }
-  /* The on-screen modal caps its own height and scrolls internally
-     (max-h-[92vh]/overflow-y-auto) so it fits the browser window — but that
-     same clipping box still applies to its (now invisible, but still laid
-     out) ancestors while printing, cutting a longer invoice off wherever the
-     modal's scroll window would have ended instead of flowing it across as
-     many pages as it needs. Release every ancestor's height/overflow once
-     we're actually printing. */
-  body:has(#receipt) .receipt-modal-overlay,
-  body:has(#receipt) .receipt-modal-card,
-  body:has(#bulk-receipts) .receipt-modal-overlay,
-  body:has(#bulk-receipts) .receipt-modal-card {
-    position: static !important;
-    overflow: visible !important;
-    max-height: none !important;
-    height: auto !important;
   }
   /* 80 mm thermal roll. */
   body:has(#receipt) #receipt.receipt-thermal {
@@ -270,21 +284,10 @@ body {
 
   /* Bulk invoice printing: one receipt per page, same layout rules as the
      single #receipt above but scoped to a class (several print at once, so
-     no duplicate ids). */
-  body:has(#bulk-receipts) * {
-    visibility: hidden;
-  }
-  body:has(#bulk-receipts) #bulk-receipts,
-  body:has(#bulk-receipts) #bulk-receipts * {
-    visibility: visible;
-  }
+     no duplicate ids). Visibility/positioning is handled by the shared
+     rules above — just release #bulk-receipts' own internal scroll cap
+     (max-h-[60vh] on screen). */
   body:has(#bulk-receipts) #bulk-receipts {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    /* It also scrolls internally on screen (max-h-[60vh]) — same clipping
-       problem as the modal wrappers above, released here too. */
     overflow: visible !important;
     max-height: none !important;
   }

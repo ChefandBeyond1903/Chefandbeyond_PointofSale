@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { api } from "@/lib/client";
 import { formatBps, formatMoney } from "@/lib/money";
 import { PrintPaperToggle, usePrintPaper } from "@/components/PrintPaperToggle";
@@ -60,21 +61,24 @@ export function QuoteReceiptModal({
     };
   }, [companyProp]);
 
-  return (
+  // Portal straight onto <body> (see globals.css) so printing isn't fighting
+  // the rest of the page's layout for space; this is only ever rendered
+  // client-side in response to a user action (never part of SSR output).
+  return createPortal(
     <div
-      className="fixed inset-0 z-[60] grid place-items-center overflow-y-auto bg-black/40 p-4"
+      className="receipt-modal-overlay fixed inset-0 z-[60] grid place-items-center overflow-y-auto bg-black/40 p-4"
       onClick={(e) => {
         e.stopPropagation();
         onClose();
       }}
     >
       <div
-        className={`card max-h-[92vh] w-full overflow-y-auto p-4 sm:p-6 ${
+        className={`receipt-modal-card card max-h-[92vh] w-full overflow-y-auto p-4 sm:p-6 ${
           paper === "full" ? "max-w-xl" : "max-w-sm"
         }`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="w-full">
+        <div className="receipt-modal-inner w-full">
           {!quote ? (
             <p className="py-8 text-center text-sm text-zinc-500">{error ?? "Loading quote…"}</p>
           ) : (
@@ -192,6 +196,7 @@ export function QuoteReceiptModal({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
