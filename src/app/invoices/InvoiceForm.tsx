@@ -146,7 +146,7 @@ export function InvoiceForm({
   const [custOpen, setCustOpen] = useState(false);
   const custInputRef = useRef<HTMLInputElement>(null);
 
-  const [lines, setLines] = useState<Line[]>([blankLine()]);
+  const [lines, setLines] = useState<Line[]>([blankLine(), blankLine(), blankLine()]);
   const [quickAddRowKey, setQuickAddRowKey] = useState<string | null>(null);
 
   const [shippingCents, setShippingCents] = useState(0);
@@ -677,7 +677,7 @@ export function InvoiceForm({
   }
 
   function resetForm() {
-    setLines([blankLine()]);
+    setLines([blankLine(), blankLine(), blankLine()]);
     setCustId(null);
     setCustName("");
     setCustEmail("");
@@ -945,7 +945,8 @@ export function InvoiceForm({
                           onSelect={(p) => onProductSelect(row.key, p)}
                           onAddNew={() => setQuickAddRowKey(row.key)}
                         />
-                        {tracksSerials(rowProduct?.category?.name) &&
+                        {!!row.productId &&
+                          tracksSerials(rowProduct?.category?.name) &&
                           (row.quantity > 1 ? (
                             <div className="mt-1 space-y-1">
                               {splitSerials(row.serialNumber, row.quantity).map((sn, i, arr) => (

@@ -749,7 +749,7 @@ export function InvoiceModal({
                     {editItems.map((it, idx) => {
                       const violation = umrpViolations.find((v) => v.idx === idx);
                       const itProduct = products.find((p) => p.id === it.productId);
-                      const showSerial = tracksSerials(itProduct?.category?.name);
+                      const showSerial = !!it.productId && tracksSerials(itProduct?.category?.name);
                       return (
                       <div key={idx} className="rounded-md border border-zinc-200 bg-white p-2">
                         <div className="relative">
