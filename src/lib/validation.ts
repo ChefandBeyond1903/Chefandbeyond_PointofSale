@@ -318,6 +318,9 @@ export const saleCreateSchema = z.object({
   items: z.array(saleItemSchema).min(1),
   orderDiscountCents: z.number().int().min(0).default(0),
   shippingCents: z.number().int().min(0).default(0),
+  // Card-processing surcharge, as a % (basis points) of the total — not
+  // taxed, added on top. Invoice-only; the register doesn't offer it.
+  ccFeeBps: z.number().int().min(0).max(10_000).default(0),
   deliveryMethod: z.enum(["PICKUP", "DELIVERY"]).default("PICKUP"),
   deliveryStreet: z.string().trim().max(200).default(""),
   deliveryCity: z.string().trim().max(120).default(""),

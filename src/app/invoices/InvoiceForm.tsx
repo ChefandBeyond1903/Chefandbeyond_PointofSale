@@ -89,6 +89,7 @@ type InvoiceDraft = {
   custLocationId: string;
   lines: Line[];
   shippingCents: number;
+  ccFeeBps: number;
   leaveUnpaid: boolean;
   paymentMethod: string;
   amountReceived: number | null;
@@ -150,6 +151,10 @@ export function InvoiceForm({
   const [quickAddRowKey, setQuickAddRowKey] = useState<string | null>(null);
 
   const [shippingCents, setShippingCents] = useState(0);
+  // Card-processing surcharge, as a % of the total — not taxed, added on
+  // top, only when actually needed for this invoice.
+  const [ccFeeBps, setCcFeeBps] = useState(0);
+  const [ccFeeCentsPreview, setCcFeeCentsPreview] = useState(0);
 
   const [leaveUnpaid, setLeaveUnpaid] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("CASH");
@@ -262,6 +267,7 @@ export function InvoiceForm({
           if (d.custLocationId !== undefined) setCustLocationId(d.custLocationId);
           if (Array.isArray(d.lines) && d.lines.length > 0) setLines(d.lines);
           if (d.shippingCents !== undefined) setShippingCents(d.shippingCents);
+          if (d.ccFeeBps !== undefined) setCcFeeBps(d.ccFeeBps);
           if (d.leaveUnpaid !== undefined) setLeaveUnpaid(d.leaveUnpaid);
           if (d.paymentMethod !== undefined) setPaymentMethod(d.paymentMethod);
           if (d.amountReceived !== undefined) setAmountReceived(d.amountReceived);
@@ -437,7 +443,8 @@ export function InvoiceForm({
   const storeMissing = isAdmin && stores.length > 0 && !storeId;
   const selectedStore = stores.find((s) => s.id === storeId) ?? null;
   const taxRateBps = isAdmin ? (selectedStore?.taxRateBps ?? null) : myStoreTaxRateBps;
-  const estTaxCents = previewTotalCents !== null ? previewTotalCents - netBeforeTaxCents : null;
+  const estTaxCents =
+    previewTotalCents !== null ? previewTotalCents - netBeforeTaxCents - ccFeeCentsPreview : null;
   const displayTotalCents = previewTotalCents ?? netBeforeTaxCents;
   const dueNowCents = leaveUnpaid ? 0 : Math.max(0, Math.min(amountReceived ?? displayTotalCents, displayTotalCents));
 
@@ -465,6 +472,7 @@ export function InvoiceForm({
         custLocationId,
         lines,
         shippingCents,
+        ccFeeBps,
         leaveUnpaid,
         paymentMethod,
         amountReceived,
@@ -491,6 +499,7 @@ export function InvoiceForm({
     custLocationId,
     lines,
     shippingCents,
+    ccFeeBps,
     leaveUnpaid,
     paymentMethod,
     amountReceived,
@@ -530,6 +539,7 @@ export function InvoiceForm({
         ...(l.serialNumber.trim() ? { serialNumber: l.serialNumber.trim() } : {}),
       })),
       shippingCents,
+      ccFeeBps,
       ...(isAdmin && storeId ? { storeId } : {}),
       ...(isAdmin && manualNumber.trim() ? { number: parseInt(manualNumber.trim(), 10) } : {}),
       ...(isAdmin && manualDate ? { saleDate: manualDate } : {}),
@@ -574,24 +584,28 @@ export function InvoiceForm({
   useEffect(() => {
     if (validLines.length === 0 || !hasCustomer) {
       setPreviewTotalCents(null);
+      setCcFeeCentsPreview(0);
       setPreviewError(null);
       return;
     }
     if (storeMissing) {
       setPreviewTotalCents(null);
+      setCcFeeCentsPreview(0);
       setPreviewError("Choose a store above — tax is charged at that store's rate.");
       return;
     }
     const t = setTimeout(async () => {
       try {
-        const res = await api<{ ok: true; totalCents: number }>("/api/sales", {
+        const res = await api<{ ok: true; totalCents: number; ccFeeCents: number }>("/api/sales", {
           method: "POST",
           body: JSON.stringify(buildPayload(true)),
         });
         setPreviewTotalCents(res.totalCents);
+        setCcFeeCentsPreview(res.ccFeeCents);
         setPreviewError(null);
       } catch (e) {
         setPreviewTotalCents(null);
+        setCcFeeCentsPreview(0);
         setPreviewError(e instanceof ApiError ? e.message : "Could not calculate totals");
       }
     }, 400);
@@ -600,6 +614,7 @@ export function InvoiceForm({
   }, [
     lines,
     shippingCents,
+    ccFeeBps,
     custId,
     custName,
     storeId,
@@ -694,6 +709,8 @@ export function InvoiceForm({
     setCustAddress("");
     setCustLocationId("");
     setShippingCents(0);
+    setCcFeeBps(0);
+    setCcFeeCentsPreview(0);
     setLeaveUnpaid(false);
     setPaymentMethod("CASH");
     setAmountReceived(null);
@@ -1073,6 +1090,18 @@ export function InvoiceForm({
               <label className="label">Shipping</label>
               <MoneyInput cents={shippingCents} onCentsChange={(c) => setShippingCents(Math.max(0, c))} />
             </div>
+            <div>
+              <label className="label">CC processing fee %</label>
+              <PercentInput
+                value={ccFeeBps / 100}
+                onValueChange={(n) => setCcFeeBps(Math.round(n * 100))}
+                aria-label="Card processing fee percent"
+              />
+              <p className="mt-0.5 text-[11px] text-zinc-400">
+                Only if necessary — a % of the total, not taxed
+                {ccFeeBps > 0 && ccFeeCentsPreview > 0 ? ` — adds ${formatMoney(ccFeeCentsPreview)}` : ""}.
+              </p>
+            </div>
           </div>
           {umrpViolations.length > 0 && (
             <p
@@ -1091,6 +1120,12 @@ export function InvoiceForm({
               <Row label="Line discounts" value={`− ${formatMoney(lineDiscountsCents)}`} />
             )}
             {shippingCents > 0 && <Row label="Shipping" value={formatMoney(shippingCents)} />}
+            {ccFeeBps > 0 && (
+              <Row
+                label={`CC processing fee (${(ccFeeBps / 100).toFixed(2)}%)`}
+                value={formatMoney(ccFeeCentsPreview)}
+              />
+            )}
             <Row
               label={`Tax${taxRateBps != null ? ` (${(taxRateBps / 100).toFixed(2)}%)` : ""}`}
               value={estTaxCents !== null ? formatMoney(Math.max(0, estTaxCents)) : "—"}

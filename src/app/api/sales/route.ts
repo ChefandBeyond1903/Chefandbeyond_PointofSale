@@ -288,6 +288,12 @@ export async function POST(req: NextRequest) {
       : computed.totalCents;
     const finalTaxJurisdiction: string = manualTaxRequested ? manualTaxState! : (taxJurisdiction ?? "");
 
+    // Card-processing surcharge — a % of the total, added on top, not taxed
+    // (it's a fee for the payment method, not part of the sale price).
+    // Invoice-only for now; the register never sends this.
+    const ccFeeBps = body.ccFeeBps ?? 0;
+    const ccFeeCents = Math.round((finalTotalCents * ccFeeBps) / 10_000);
+
     // UMRP floor: after every discount, no line may fall below the product's
     // minimum resale price — unless an admin is knowingly overriding it (the
     // register warns them but lets them proceed; everyone else is hard-stopped).
@@ -317,7 +323,7 @@ export async function POST(req: NextRequest) {
       products.map((p) => [p.id, { sku: p.sku, vendor: p.vendor, costCents: p.costCents }]),
     );
 
-    const total = finalTotalCents;
+    const total = finalTotalCents + ccFeeCents;
     const isTermsInvoice = customerTerms !== "";
 
     // Normalise every way the client can send money into one list of payments.
@@ -440,7 +446,7 @@ export async function POST(req: NextRequest) {
         })
       : null;
 
-    if (body.dryRun) return ok({ ok: true, totalCents: total });
+    if (body.dryRun) return ok({ ok: true, totalCents: total, ccFeeCents });
 
     const sale = await prisma.$transaction(async (tx) => {
       let number: number;
@@ -569,7 +575,9 @@ export async function POST(req: NextRequest) {
           taxCents: finalTaxCents,
           taxRateBps: computed.taxRateBps,
           shippingCents: computed.shippingCents,
-          totalCents: finalTotalCents,
+          ccFeeBps,
+          ccFeeCents,
+          totalCents: total,
           deliveryMethod: body.deliveryMethod,
           deliveryStreet: body.deliveryMethod === "DELIVERY" ? body.deliveryStreet : "",
           deliveryCity: body.deliveryMethod === "DELIVERY" ? body.deliveryCity : "",

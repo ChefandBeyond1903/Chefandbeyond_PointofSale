@@ -455,6 +455,8 @@ export interface Sale {
   taxCents: number;
   taxRateBps: number;
   shippingCents: number;
+  ccFeeBps: number;
+  ccFeeCents: number;
   totalCents: number;
   paymentMethod: string; // a method code, "SPLIT", or ""
   checkNumber?: string;
