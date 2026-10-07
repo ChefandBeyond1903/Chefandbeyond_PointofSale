@@ -18,8 +18,12 @@ export function joinSerials(parts: string[]): string {
   return parts.map((s) => s.trim()).filter(Boolean).join(", ");
 }
 
-/** Smallwares (utensils, pans, small tools...) are never individually
- * serialized — no serial # entry for a product in that category. */
+// Categories whose products are never individually serialized — no serial #
+// entry for anything in one of these. Anything else (including no category
+// at all) still asks, since most products do carry a real serial.
+const NO_SERIAL_CATEGORIES = ["smallwares", "work tables & sinks"];
+
 export function tracksSerials(categoryName: string | null | undefined): boolean {
-  return categoryName?.trim().toLowerCase() !== "smallwares";
+  const name = categoryName?.trim().toLowerCase();
+  return !name || !NO_SERIAL_CATEGORIES.includes(name);
 }
