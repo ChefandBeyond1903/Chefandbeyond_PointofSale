@@ -230,6 +230,14 @@ export function InvoiceForm({
     return () => clearTimeout(t);
   }, [isAdmin, manualNumber]);
 
+  // Scroll the error banner into view whenever one appears — Save is way up
+  // top, so after scrolling down to fill in payment/items a validation error
+  // (e.g. "Add a customer before saving") was easy to miss entirely, making
+  // repeated clicks on Save look like they weren't doing anything.
+  useEffect(() => {
+    if (error) window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [error]);
+
   // Restore an in-progress draft left from before a sign-out/reload — once,
   // on mount, before the save effect below starts overwriting it.
   const draftHydrated = useRef(false);
