@@ -37,14 +37,14 @@ export function BulkReceiptModal({
 
   return (
     <div
-      className="fixed inset-0 z-[60] grid place-items-center overflow-y-auto bg-black/40 p-4"
+      className="receipt-modal-overlay fixed inset-0 z-[60] grid place-items-center overflow-y-auto bg-black/40 p-4"
       onClick={(e) => {
         e.stopPropagation();
         onClose();
       }}
     >
       <div
-        className={`card max-h-[92vh] w-full overflow-y-auto p-4 sm:p-6 ${
+        className={`receipt-modal-card card max-h-[92vh] w-full overflow-y-auto p-4 sm:p-6 ${
           paper === "full" ? "max-w-xl" : "max-w-sm"
         }`}
         onClick={(e) => e.stopPropagation()}

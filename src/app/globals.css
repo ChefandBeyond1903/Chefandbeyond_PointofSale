@@ -222,6 +222,22 @@ body {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
+  /* The on-screen modal caps its own height and scrolls internally
+     (max-h-[92vh]/overflow-y-auto) so it fits the browser window — but that
+     same clipping box still applies to its (now invisible, but still laid
+     out) ancestors while printing, cutting a longer invoice off wherever the
+     modal's scroll window would have ended instead of flowing it across as
+     many pages as it needs. Release every ancestor's height/overflow once
+     we're actually printing. */
+  body:has(#receipt) .receipt-modal-overlay,
+  body:has(#receipt) .receipt-modal-card,
+  body:has(#bulk-receipts) .receipt-modal-overlay,
+  body:has(#bulk-receipts) .receipt-modal-card {
+    position: static !important;
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
+  }
   /* 80 mm thermal roll. */
   body:has(#receipt) #receipt.receipt-thermal {
     width: 80mm;
@@ -267,6 +283,10 @@ body {
     top: 0;
     left: 0;
     right: 0;
+    /* It also scrolls internally on screen (max-h-[60vh]) — same clipping
+       problem as the modal wrappers above, released here too. */
+    overflow: visible !important;
+    max-height: none !important;
   }
   body:has(#bulk-receipts) .bulk-receipt-doc {
     border: none !important;
