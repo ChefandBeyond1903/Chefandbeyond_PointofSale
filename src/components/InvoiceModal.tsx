@@ -228,10 +228,16 @@ export function InvoiceModal({
 
   function addBlankItem() {
     setItemsTouched(true);
-    setEditItems((cur) => [
-      ...cur,
-      { productId: "", name: "", sku: "", quantity: 1, unitPriceCents: 0, discountCents: 0, serialNumber: "" },
-    ]);
+    const blank = () => ({
+      productId: "",
+      name: "",
+      sku: "",
+      quantity: 1,
+      unitPriceCents: 0,
+      discountCents: 0,
+      serialNumber: "",
+    });
+    setEditItems((cur) => [...cur, blank(), blank(), blank(), blank(), blank()]);
     setItemMenuIdx(editItems.length);
   }
 
@@ -856,7 +862,7 @@ export function InvoiceModal({
                     })}
                   </div>
                   <button type="button" onClick={addBlankItem} className="btn-ghost mt-2 h-8 text-xs">
-                    + Add item
+                    + Add 5 items
                   </button>
                   {umrpViolations.length > 0 && (
                     <p

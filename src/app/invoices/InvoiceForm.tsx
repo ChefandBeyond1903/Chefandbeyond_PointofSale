@@ -339,7 +339,7 @@ export function InvoiceForm({
   }
 
   function addLine() {
-    setLines((rows) => [...rows, blankLine()]);
+    setLines((rows) => [...rows, blankLine(), blankLine(), blankLine(), blankLine(), blankLine()]);
   }
   function removeLine(key: string) {
     // Removing the only line leaves one blank row instead of none, so
@@ -1006,7 +1006,7 @@ export function InvoiceForm({
             </table>
           </div>
           <button type="button" onClick={addLine} className="btn-secondary mt-2 h-8 text-xs">
-            + Add line
+            + Add 5 lines
           </button>
         </section>
 
