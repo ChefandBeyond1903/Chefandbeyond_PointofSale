@@ -497,6 +497,11 @@ export interface Sale {
   deliveryZip?: string;
   taxJurisdiction?: string; // "KY" | "TN" | ""
   taxOverridden?: boolean;
+  // Customer's delivery-receipt signature. The actual image is fetched
+  // separately (private storage) via /api/sales/[id]/signature — these
+  // fields just say whether one's on file and who/when.
+  deliverySignedAt?: string | null;
+  deliverySignedName?: string;
   items: SaleItem[];
 }
 

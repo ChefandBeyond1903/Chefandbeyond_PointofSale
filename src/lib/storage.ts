@@ -29,3 +29,17 @@ export async function ensureTaxExemptBucket(): Promise<void> {
 export function safeFileName(name: string): string {
   return name.replace(/[^A-Za-z0-9._-]+/g, "_").replace(/_+/g, "_").slice(-120) || "file";
 }
+
+/** Private bucket holding customer delivery-acknowledgment signatures. */
+export const DELIVERY_SIGNATURE_BUCKET = "delivery-signatures";
+
+let signatureBucketReady = false;
+
+/** Create the private bucket on first use; a re-create error just means it exists. */
+export async function ensureDeliverySignatureBucket(): Promise<void> {
+  if (signatureBucketReady) return;
+  const admin = supabaseAdmin();
+  const { error } = await admin.storage.createBucket(DELIVERY_SIGNATURE_BUCKET, { public: false });
+  if (error && !/exist/i.test(error.message)) throw new Error(error.message);
+  signatureBucketReady = true;
+}

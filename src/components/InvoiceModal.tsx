@@ -11,6 +11,7 @@ import { CardReaderPanel, type ReaderOption, type CardPaid } from "@/components/
 import { ManualCardPanel, manualCardAvailable } from "@/components/ManualCardPanel";
 import { ReceiptModal } from "@/components/ReceiptModal";
 import { RefundReceiptModal } from "@/components/RefundReceiptModal";
+import { DeliverySignature } from "@/components/DeliverySignature";
 import type { InvoiceDetail, PurchaseOrder, Sale, Vendor } from "@/lib/types";
 
 type Person = { id: string; name: string };
@@ -901,6 +902,14 @@ export function InvoiceModal({
                 {sale.note}
               </p>
             ) : null}
+
+            <DeliverySignature
+              saleId={sale.id}
+              signedAt={sale.deliverySignedAt}
+              signedByName={sale.deliverySignedName}
+              onSigned={load}
+              canClear={isAdmin}
+            />
 
             {(() => {
               const paid = sale.amountPaidCents ?? 0;

@@ -380,6 +380,15 @@ model Sale {
   // POS auto-selected. See TaxOverrideLog for the audit trail.
   taxOverridden   Boolean          @default(false)
   taxOverrides    TaxOverrideLog[]
+
+  // Customer's signature acknowledging receipt of delivered equipment —
+  // captured on a mobile device at drop-off. Stored as a PNG in the private
+  // "delivery-signatures" Supabase bucket (path, not a public URL);
+  // deliverySignedAt null means nothing has been captured yet.
+  deliverySignaturePath String    @default("")
+  deliverySignedAt      DateTime?
+  deliverySignedName    String    @default("")
+
   paymentMethod   String
   // Set when the whole sale was settled by a single check.
   checkNumber     String           @default("")
