@@ -274,13 +274,18 @@ export function ReportsView({
               {data.byStore.length > 1 && (
                 <ProfitTable title="By store" rows={data.byStore} firstCol="Store" />
               )}
-
-              <ProfitTable
-                title="Net profit by sales staff"
-                rows={data.byStaff}
-                firstCol="Sales staff"
-              />
             </>
+          )}
+
+          {/* Admin/manager get every staff member; a cashier's own API response
+              only ever includes their own row (never anyone else's, never a
+              store/company total) — see /api/reports/summary. */}
+          {(!limited || data.byStaff.length > 0) && (
+            <ProfitTable
+              title={limited ? "Your net profit" : "Net profit by sales staff"}
+              rows={data.byStaff}
+              firstCol="Sales staff"
+            />
           )}
 
           {!limited && inv && <InventorySection inv={inv} />}

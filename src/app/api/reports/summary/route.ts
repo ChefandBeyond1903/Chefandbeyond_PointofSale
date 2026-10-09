@@ -394,9 +394,25 @@ export async function GET(req: NextRequest) {
       }))
       .sort((a, b) => b.quantity - a.quantity);
 
-    // A cashier's report carries no money figures — only counts, top sellers
-    // and the invoice list (with per-invoice profit stripped).
+    // A cashier's report carries no company-wide money figures — only counts,
+    // top sellers, the invoice list (with per-invoice profit stripped), and
+    // their OWN net/cost/profit/margin (never anyone else's, never the
+    // store or company total).
     if (limited) {
+      const mine = byStaff.get(user.id);
+      const myStaffRow = mine
+        ? [
+            {
+              key: user.id,
+              label: mine.label,
+              saleCount: mine.saleCount,
+              netCents: mine.net,
+              costCents: mine.cost,
+              profitCents: mine.profit,
+              marginPct: pct(mine.profit, mine.net),
+            },
+          ]
+        : [];
       return ok({
         range: { from: from.toISOString(), to: to.toISOString() },
         scope: {
@@ -429,7 +445,7 @@ export async function GET(req: NextRequest) {
         expensesByCategory: [],
         expensesByPaymentMethod: [],
         byStore: [],
-        byStaff: [],
+        byStaff: myStaffRow,
         byPaymentMethod: [],
         topProducts,
         topCategories,
