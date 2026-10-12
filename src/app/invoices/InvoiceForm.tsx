@@ -90,6 +90,9 @@ type InvoiceDraft = {
   lines: Line[];
   shippingCents: number;
   ccFeeBps: number;
+  manualTaxOpen: boolean;
+  manualTaxState: string;
+  manualTaxCents: number;
   leaveUnpaid: boolean;
   paymentMethod: string;
   amountReceived: number | null;
@@ -155,6 +158,12 @@ export function InvoiceForm({
   // top, only when actually needed for this invoice.
   const [ccFeeBps, setCcFeeBps] = useState(0);
   const [ccFeeCentsPreview, setCcFeeCentsPreview] = useState(0);
+  // For an invoice already taxed elsewhere (e.g. a website order taxed for
+  // another state) — replaces the calculated tax with the exact amount
+  // collected, broken out by state under Reports → Tax by state.
+  const [manualTaxOpen, setManualTaxOpen] = useState(false);
+  const [manualTaxState, setManualTaxState] = useState("");
+  const [manualTaxCents, setManualTaxCents] = useState(0);
 
   const [leaveUnpaid, setLeaveUnpaid] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("CASH");
@@ -268,6 +277,9 @@ export function InvoiceForm({
           if (Array.isArray(d.lines) && d.lines.length > 0) setLines(d.lines);
           if (d.shippingCents !== undefined) setShippingCents(d.shippingCents);
           if (d.ccFeeBps !== undefined) setCcFeeBps(d.ccFeeBps);
+          if (d.manualTaxOpen !== undefined) setManualTaxOpen(d.manualTaxOpen);
+          if (d.manualTaxState !== undefined) setManualTaxState(d.manualTaxState);
+          if (d.manualTaxCents !== undefined) setManualTaxCents(d.manualTaxCents);
           if (d.leaveUnpaid !== undefined) setLeaveUnpaid(d.leaveUnpaid);
           if (d.paymentMethod !== undefined) setPaymentMethod(d.paymentMethod);
           if (d.amountReceived !== undefined) setAmountReceived(d.amountReceived);
@@ -473,6 +485,9 @@ export function InvoiceForm({
         lines,
         shippingCents,
         ccFeeBps,
+        manualTaxOpen,
+        manualTaxState,
+        manualTaxCents,
         leaveUnpaid,
         paymentMethod,
         amountReceived,
@@ -500,6 +515,9 @@ export function InvoiceForm({
     lines,
     shippingCents,
     ccFeeBps,
+    manualTaxOpen,
+    manualTaxState,
+    manualTaxCents,
     leaveUnpaid,
     paymentMethod,
     amountReceived,
@@ -552,6 +570,9 @@ export function InvoiceForm({
       // (with the real amount/tender) replaces this.
       ...(!leaveUnpaid ? { paymentMethod } : {}),
       ...(!leaveUnpaid && paymentMethod === "CHECK" ? { checkNumber: checkNumber.trim() } : {}),
+      ...(manualTaxOpen && manualTaxState.trim().length === 2
+        ? { manualTaxCents, taxState: manualTaxState.trim().toUpperCase() }
+        : {}),
       ...customerPayload(),
     };
   }
@@ -594,6 +615,12 @@ export function InvoiceForm({
       setPreviewError("Choose a store above — tax is charged at that store's rate.");
       return;
     }
+    if (manualTaxOpen && manualTaxState.trim().length !== 2) {
+      setPreviewTotalCents(null);
+      setCcFeeCentsPreview(0);
+      setPreviewError("Enter the 2-letter state this tax was collected for.");
+      return;
+    }
     const t = setTimeout(async () => {
       try {
         const res = await api<{ ok: true; totalCents: number; ccFeeCents: number }>("/api/sales", {
@@ -615,6 +642,9 @@ export function InvoiceForm({
     lines,
     shippingCents,
     ccFeeBps,
+    manualTaxOpen,
+    manualTaxState,
+    manualTaxCents,
     custId,
     custName,
     storeId,
@@ -641,6 +671,10 @@ export function InvoiceForm({
     }
     if (manualNumberConflict) {
       setError(`Invoice #${manualNumberConflict.number} is already in use — pick a different number.`);
+      return null;
+    }
+    if (manualTaxOpen && manualTaxState.trim().length !== 2) {
+      setError("Enter the 2-letter state this tax was collected for.");
       return null;
     }
     if (validLines.length === 0) {
@@ -711,6 +745,9 @@ export function InvoiceForm({
     setShippingCents(0);
     setCcFeeBps(0);
     setCcFeeCentsPreview(0);
+    setManualTaxOpen(false);
+    setManualTaxState("");
+    setManualTaxCents(0);
     setLeaveUnpaid(false);
     setPaymentMethod("CASH");
     setAmountReceived(null);
@@ -1103,6 +1140,44 @@ export function InvoiceForm({
               </p>
             </div>
           </div>
+
+          <div className="mt-3 border-t border-zinc-100 pt-3">
+            <button
+              type="button"
+              onClick={() => setManualTaxOpen((v) => !v)}
+              className="flex w-full items-center justify-between text-left text-sm"
+            >
+              <span className="font-medium text-zinc-700">Tax collected for another state</span>
+              <span className="text-xs text-indigo-600 underline">
+                {manualTaxOpen ? "Cancel" : "Enter manually"}
+              </span>
+            </button>
+            {manualTaxOpen && (
+              <div className="mt-2 space-y-1.5 rounded-md bg-amber-50 p-2">
+                <p className="text-[11px] text-zinc-500">
+                  For an invoice already taxed elsewhere — enter the state and the exact tax
+                  collected; it replaces the calculated tax on this invoice and is broken out by
+                  state under Reports → Tax by state.
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    className="input h-8 w-16 text-center text-xs uppercase"
+                    maxLength={2}
+                    placeholder="NY"
+                    value={manualTaxState}
+                    onChange={(e) => setManualTaxState(e.target.value.toUpperCase())}
+                  />
+                  <MoneyInput
+                    cents={manualTaxCents}
+                    onCentsChange={setManualTaxCents}
+                    className="input h-8 flex-1 text-right"
+                    placeholder="Tax collected"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
           {umrpViolations.length > 0 && (
             <p
               className={`mt-3 rounded px-3 py-2 text-xs ${
@@ -1127,7 +1202,11 @@ export function InvoiceForm({
               />
             )}
             <Row
-              label={`Tax${taxRateBps != null ? ` (${(taxRateBps / 100).toFixed(2)}%)` : ""}`}
+              label={
+                manualTaxOpen
+                  ? `Tax (manual${manualTaxState.trim() ? ` — ${manualTaxState.trim()}` : ""})`
+                  : `Tax${taxRateBps != null ? ` (${(taxRateBps / 100).toFixed(2)}%)` : ""}`
+              }
               value={estTaxCents !== null ? formatMoney(Math.max(0, estTaxCents)) : "—"}
             />
             {!isAdmin && myStoreName && (
@@ -1137,7 +1216,13 @@ export function InvoiceForm({
               </p>
             )}
             {previewError && (
-              <p className={`text-xs ${storeMissing ? "font-medium text-amber-700" : "text-red-600"}`}>
+              <p
+                className={`text-xs ${
+                  storeMissing || (manualTaxOpen && manualTaxState.trim().length !== 2)
+                    ? "font-medium text-amber-700"
+                    : "text-red-600"
+                }`}
+              >
                 {previewError}
               </p>
             )}
