@@ -11,6 +11,34 @@ import { useSort } from "@/lib/useSort";
 import { SortTh } from "@/components/SortTh";
 import { Pager } from "@/components/Pager";
 import { LabelSheetModal } from "@/components/LabelSheetModal";
+import { InvoiceModal } from "@/components/InvoiceModal";
+
+type ProductSaleHistory = {
+  saleId: string;
+  number: number;
+  websiteOrderNumber: string;
+  status: string;
+  date: string;
+  customer: string;
+  store: string;
+  quantity: number;
+  unitPriceCents: number;
+  lineTotalCents: number;
+  serialNumber: string;
+};
+
+type ProductPoHistory = {
+  poId: string;
+  poNumber: string;
+  vendor: string;
+  status: string;
+  date: string;
+  store: string;
+  quantity: number;
+  receivedQuantity: number;
+  unitCostCents: number;
+  lineCostCents: number;
+};
 
 type Draft = {
   id?: string;
@@ -67,6 +95,15 @@ export function ProductManager({
   >(null);
   const [editStockLoading, setEditStockLoading] = useState(false);
   const [editableStoreIds, setEditableStoreIds] = useState<string[]>([]);
+
+  // Sales/purchase-order history for the product open in the edit modal.
+  const [history, setHistory] = useState<{
+    sales: ProductSaleHistory[];
+    purchaseOrders: ProductPoHistory[];
+  } | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  // A history row's sale, opened in the usual invoice viewer.
+  const [historySaleId, setHistorySaleId] = useState<string | null>(null);
   const [stockDraft, setStockDraft] = useState<Record<string, string>>({});
   const [savingStoreId, setSavingStoreId] = useState<string | null>(null);
 
@@ -335,6 +372,8 @@ export function ProductManager({
     setEditStockLoading(false);
     setEditableStoreIds([]);
     setStockDraft({});
+    setHistory(null);
+    setHistoryLoading(false);
     resetVendorAdd();
   }
 
@@ -343,6 +382,8 @@ export function ProductManager({
     setEditStock(null);
     setEditableStoreIds([]);
     setStockDraft({});
+    setHistory(null);
+    setHistoryLoading(false);
     resetVendorAdd();
     setDraft({ ...emptyDraft });
   }
@@ -387,6 +428,16 @@ export function ProductManager({
       })
       .catch(() => setEditStock([]))
       .finally(() => setEditStockLoading(false));
+
+    // Pull the sales/purchase-order history for this product too.
+    setHistory(null);
+    setHistoryLoading(true);
+    api<{ sales: ProductSaleHistory[]; purchaseOrders: ProductPoHistory[] }>(
+      `/api/products/${p.id}/history`,
+    )
+      .then((res) => setHistory(res))
+      .catch(() => setHistory({ sales: [], purchaseOrders: [] }))
+      .finally(() => setHistoryLoading(false));
   }
 
   // Open the edit drawer as a *new* product pre-filled from an existing one:
@@ -398,6 +449,8 @@ export function ProductManager({
     setEditStockLoading(false);
     setEditableStoreIds([]);
     setStockDraft({});
+    setHistory(null);
+    setHistoryLoading(false);
     setDraft({
       name: `${p.name} (copy)`,
       sku: p.sku ? `${p.sku}-COPY` : "",
@@ -1217,6 +1270,92 @@ export function ProductManager({
               )}
             </div>
 
+            {draft.id && (
+              <div className="mt-5 border-t border-zinc-100 pt-4">
+                <h3 className="mb-2 text-sm font-semibold text-zinc-700">History</h3>
+                {historyLoading ? (
+                  <p className="text-xs text-zinc-400">Loading…</p>
+                ) : (
+                  <div className="space-y-4">
+                    <div>
+                      <p className="mb-1 text-xs font-medium text-zinc-500">Sold on</p>
+                      {!history || history.sales.length === 0 ? (
+                        <p className="text-xs text-zinc-400">Never sold.</p>
+                      ) : (
+                        <div className="max-h-48 overflow-y-auto rounded-md border border-zinc-200">
+                          <table className="w-full text-xs">
+                            <tbody className="divide-y divide-zinc-100">
+                              {history.sales.map((s, i) => (
+                                <tr
+                                  key={`${s.saleId}-${i}`}
+                                  onClick={() => setHistorySaleId(s.saleId)}
+                                  className="cursor-pointer hover:bg-zinc-50"
+                                >
+                                  <td className="px-2 py-1.5 text-zinc-500">
+                                    {new Date(s.date).toLocaleDateString()}
+                                  </td>
+                                  <td className="px-2 py-1.5 font-medium text-indigo-600">
+                                    {s.websiteOrderNumber || `#${s.number}`}
+                                  </td>
+                                  <td className="px-2 py-1.5 text-zinc-600">
+                                    {s.customer || "—"}
+                                  </td>
+                                  <td className="px-2 py-1.5 text-right text-zinc-500">
+                                    {s.quantity}×
+                                  </td>
+                                  <td className="px-2 py-1.5 text-right font-medium">
+                                    {formatMoney(s.lineTotalCents)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <p className="mb-1 text-xs font-medium text-zinc-500">Ordered on</p>
+                      {!history || history.purchaseOrders.length === 0 ? (
+                        <p className="text-xs text-zinc-400">Never ordered.</p>
+                      ) : (
+                        <div className="max-h-48 overflow-y-auto rounded-md border border-zinc-200">
+                          <table className="w-full text-xs">
+                            <tbody className="divide-y divide-zinc-100">
+                              {history.purchaseOrders.map((po, i) => (
+                                <tr key={`${po.poId}-${i}`} className="hover:bg-zinc-50">
+                                  <td className="px-2 py-1.5 text-zinc-500">
+                                    {new Date(po.date).toLocaleDateString()}
+                                  </td>
+                                  <td className="px-2 py-1.5 font-medium">
+                                    <a
+                                      href={`/purchase-orders/${po.poId}`}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-indigo-600 underline"
+                                    >
+                                      {po.poNumber}
+                                    </a>
+                                  </td>
+                                  <td className="px-2 py-1.5 text-zinc-600">{po.vendor}</td>
+                                  <td className="px-2 py-1.5 text-right text-zinc-500">
+                                    {po.receivedQuantity}/{po.quantity}
+                                  </td>
+                                  <td className="px-2 py-1.5 text-right font-medium">
+                                    {formatMoney(po.lineCostCents)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {error && <p className="mt-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
             <div className="mt-5 flex gap-2">
@@ -1243,6 +1382,15 @@ export function ProductManager({
               priceCents: p.priceCents,
             }))}
           onClose={() => setLabelsOpen(false)}
+        />
+      )}
+
+      {historySaleId && (
+        <InvoiceModal
+          saleId={historySaleId}
+          onClose={() => setHistorySaleId(null)}
+          canManage={false}
+          isAdmin={isAdmin}
         />
       )}
     </div>
