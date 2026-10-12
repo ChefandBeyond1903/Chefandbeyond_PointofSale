@@ -39,9 +39,12 @@ export async function GET(_req: NextRequest, { params }: Params) {
     if (!sale.deliverySignaturePath) {
       return ok({ signatureUrl: null, signedAt: null, signedByName: "" });
     }
+    // Long-lived enough that the on-screen print preview (which fetches this
+    // once up front) is still valid by the time someone gets around to
+    // actually clicking Print.
     const { data, error } = await supabaseAdmin()
       .storage.from(DELIVERY_SIGNATURE_BUCKET)
-      .createSignedUrl(sale.deliverySignaturePath, 300);
+      .createSignedUrl(sale.deliverySignaturePath, 1800);
     if (error || !data) throw new HttpError(500, "Could not create a view link");
     return ok({
       signatureUrl: data.signedUrl,

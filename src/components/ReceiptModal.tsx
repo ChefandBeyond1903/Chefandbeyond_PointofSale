@@ -130,6 +130,31 @@ function cardLabel(sale: { paymentMethod: string; payments?: { method: string; c
  * BulkReceiptModal (which prints several at once, one per page).
  */
 export function ReceiptBody({ sale, company }: { sale: Sale; company: Company | null }) {
+  // Pulled in once per print target so a delivered invoice shows proof the
+  // customer received the item(s) right on the printed copy. A short-lived
+  // signed URL (private storage) — fetched here so it's already resolved by
+  // the time someone actually clicks Print from the on-screen preview.
+  const [signature, setSignature] = useState<{
+    url: string;
+    signedAt: string;
+    signedByName: string;
+  } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    api<{ signatureUrl: string | null; signedAt: string | null; signedByName: string }>(
+      `/api/sales/${sale.id}/signature`,
+    )
+      .then((r) => {
+        if (alive && r.signatureUrl && r.signedAt) {
+          setSignature({ url: r.signatureUrl, signedAt: r.signedAt, signedByName: r.signedByName });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [sale.id]);
+
   return (
     <>
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -283,6 +308,22 @@ export function ReceiptBody({ sale, company }: { sale: Sale; company: Company | 
           </p>
         );
       })()}
+      {signature && (
+        <>
+          <hr className="my-2 border-dashed" />
+          <p className="text-center text-zinc-500">Customer received the item(s):</p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={signature.url}
+            alt="Customer signature"
+            className="mx-auto mt-1 h-14 w-auto"
+          />
+          <p className="text-center text-[10px] text-zinc-500">
+            {signature.signedByName ? `Signed by ${signature.signedByName} — ` : "Signed — "}
+            {new Date(signature.signedAt).toLocaleString()}
+          </p>
+        </>
+      )}
       <hr className="my-2 border-dashed" />
       <p className="text-[10px] leading-snug text-zinc-500">{INVOICE_FINE_PRINT}</p>
     </>
