@@ -21,7 +21,12 @@ export function joinSerials(parts: string[]): string {
 // Categories whose products are never individually serialized — no serial #
 // entry for anything in one of these. Anything else (including no category
 // at all) still asks, since most products do carry a real serial.
-const NO_SERIAL_CATEGORIES = ["smallwares", "work tables & sinks", "parts & accessories"];
+const NO_SERIAL_CATEGORIES = [
+  "smallwares",
+  "work tables & sinks",
+  "parts & accessories",
+  "shelving",
+];
 
 export function tracksSerials(categoryName: string | null | undefined): boolean {
   const name = categoryName?.trim().toLowerCase();
