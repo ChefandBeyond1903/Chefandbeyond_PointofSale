@@ -534,22 +534,17 @@ export default function RegisterPage() {
     return !deliveryStreet.trim() && !deliveryCity.trim() && !deliveryZip.trim();
   }
 
+  // Free-text typing in the customer box — just updates what's typed and
+  // drives the suggestion dropdown (custMatches) below. It must NEVER
+  // auto-select a customer on its own: a short real name (e.g. a customer
+  // literally named "Joe") would otherwise exact-match while someone is
+  // still typing a longer one ("Joe Akers"), locking in the wrong customer
+  // and swapping the box for a read-only display mid-keystroke. Only an
+  // explicit dropdown click (selectCustomer) may set custId.
   function pickCustomer(name: string) {
     setCustName(name);
     setCustLocationId("");
-    const match = customers.find((c) => c.name.toLowerCase() === name.trim().toLowerCase());
-    if (match) {
-      setCustId(match.id);
-      setCustEmail(match.email);
-      setCustPhone(formatPhone(match.phone));
-      applyCustAddress(match.street ?? "", match.city ?? "", match.state ?? "", match.zip ?? "");
-      setCustCompany(match.company);
-      if (deliveryAddressBlank() && (match.street || match.city || match.zip)) {
-        applyDeliveryAddress(match.street ?? "", match.city ?? "", match.state ?? "", match.zip ?? "");
-      }
-    } else {
-      setCustId(null);
-    }
+    setCustId(null);
   }
 
   // Picking an admin or manager asks for their password before it takes
