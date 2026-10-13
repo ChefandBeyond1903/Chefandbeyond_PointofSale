@@ -30,6 +30,7 @@ import type {
   Category,
   Company,
   Customer,
+  CustomerLocation,
   HeldSaleDetail,
   HeldSaleSummary,
   Product,
@@ -605,19 +606,28 @@ export default function RegisterPage() {
     return () => clearTimeout(t);
   }, [override]);
 
-  // Register customer search — matches any field, not just the name.
+  // Register customer search — matches any field, not just the name, PLUS
+  // each customer's other ship-to locations by label/address/contact (e.g.
+  // typing "J Bruner" finds "Joe Akers" via his "J Bruner" location) —
+  // location carries which one, so selecting the row can pick that exact
+  // location, not just the customer.
   const custMatches = useMemo(() => {
     const q = custName.trim().toLowerCase();
     if (!q || custId) return [];
     const qd = phoneDigits(q);
-    return customers
-      .filter(
-        (c) =>
-          [c.name, c.company, c.phone, c.email, c.address].some((v) =>
-            (v ?? "").toLowerCase().includes(q),
-          ) || (qd.length >= 2 && phoneDigits(c.phone).includes(qd)),
-      )
-      .slice(0, 8);
+    const hit = (fields: (string | null | undefined)[], phone: string) =>
+      fields.some((v) => (v ?? "").toLowerCase().includes(q)) ||
+      (qd.length >= 2 && phoneDigits(phone).includes(qd));
+    const out: { customer: Customer; location: CustomerLocation | null }[] = [];
+    for (const c of customers) {
+      if (hit([c.name, c.company, c.phone, c.email, c.address], c.phone)) {
+        out.push({ customer: c, location: null });
+        continue;
+      }
+      const loc = c.locations?.find((l) => hit([l.label, l.address, l.contact, l.email], l.phone));
+      if (loc) out.push({ customer: c, location: loc });
+    }
+    return out.slice(0, 8);
   }, [customers, custName, custId]);
 
   function selectCustomer(c: Customer) {
@@ -631,6 +641,25 @@ export default function RegisterPage() {
     setCustMenuOpen(false);
     if (deliveryAddressBlank() && (c.street || c.city || c.zip)) {
       applyDeliveryAddress(c.street ?? "", c.city ?? "", c.state ?? "", c.zip ?? "");
+    }
+  }
+
+  // Like selectCustomer, but also applies a specific matched location (found
+  // directly here, not re-looked-up by custId — still stale at this point
+  // since selectCustomer's setCustId hasn't committed yet).
+  function selectCustomerMatch(m: { customer: Customer; location: CustomerLocation | null }) {
+    selectCustomer(m.customer);
+    const loc = m.location;
+    if (loc) {
+      setCustLocationId(loc.id);
+      if (loc.street || loc.city || loc.zip) {
+        applyCustAddress(loc.street ?? "", loc.city ?? "", loc.state ?? "", loc.zip ?? "");
+      }
+      if (loc.phone) setCustPhone(formatPhone(loc.phone));
+      if (loc.email) setCustEmail(loc.email);
+      if (deliveryAddressBlank() && (loc.street || loc.city || loc.zip)) {
+        applyDeliveryAddress(loc.street ?? "", loc.city ?? "", loc.state ?? "", loc.zip ?? "");
+      }
     }
   }
 
@@ -1765,30 +1794,44 @@ export default function RegisterPage() {
                 )}
                 {custMenuOpen && custMatches.length > 0 && (
                   <ul className="absolute z-40 mt-1 max-h-60 w-80 overflow-auto rounded-md border border-zinc-200 bg-white text-sm shadow-lg">
-                    {custMatches.map((c) => (
-                      <li key={c.id}>
-                        <button
-                          type="button"
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            selectCustomer(c);
-                          }}
-                          className="block w-full px-3 py-1.5 text-left hover:bg-indigo-50"
-                        >
-                          <span className="font-medium">{c.company || c.name}</span>
-                          {c.company && c.name && (
-                            <span className="text-zinc-400"> · {c.name}</span>
-                          )}
-                          {[c.phone, c.email, c.address].filter(Boolean).length > 0 && (
-                            <span className="block truncate text-[11px] text-zinc-400">
-                              {[formatPhone(c.phone), c.email, c.address]
-                                .filter(Boolean)
-                                .join(" · ")}
-                            </span>
-                          )}
-                        </button>
-                      </li>
-                    ))}
+                    {custMatches.map((m) => {
+                      const c = m.customer;
+                      return (
+                        <li key={`${c.id}-${m.location?.id ?? ""}`}>
+                          <button
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              selectCustomerMatch(m);
+                            }}
+                            className="block w-full px-3 py-1.5 text-left hover:bg-indigo-50"
+                          >
+                            <span className="font-medium">{c.company || c.name}</span>
+                            {c.company && c.name && (
+                              <span className="text-zinc-400"> · {c.name}</span>
+                            )}
+                            {m.location && (
+                              <span className="text-indigo-500"> — {m.location.label} (location)</span>
+                            )}
+                            {[
+                              m.location?.phone || c.phone,
+                              m.location?.email || c.email,
+                              m.location?.address || c.address,
+                            ].filter(Boolean).length > 0 && (
+                              <span className="block truncate text-[11px] text-zinc-400">
+                                {[
+                                  formatPhone(m.location?.phone || c.phone),
+                                  m.location?.email || c.email,
+                                  m.location?.address || c.address,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · ")}
+                              </span>
+                            )}
+                          </button>
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </div>

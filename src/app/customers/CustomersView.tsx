@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
@@ -18,6 +18,11 @@ import { AddressFields, stateToDraft, resolveState } from "@/components/AddressF
 import type { Customer, CustomerLocation, StoreCreditEntry } from "@/lib/types";
 
 const TERMS = ["Net 15", "Net 30", "Net 45", "Net 60", "Net 90"] as const;
+
+// Sentinel for "billed to the customer's own address" in the sales-history
+// location filter — a blank customerLocationSnapshot, distinct from "" which
+// means "no filter, show every location" there.
+const MAIN_LOC = "__main__";
 
 type Draft = {
   id?: string;
@@ -91,6 +96,28 @@ export function CustomersView({
   // The open customer's sales / invoice history and ship-to locations.
   const [custSales, setCustSales] = useState<NonNullable<Customer["sales"]>>([]);
   const [custLocations, setCustLocations] = useState<CustomerLocation[]>([]);
+  // "" = every location; otherwise MAIN_LOC (the customer's own address, no
+  // location snapshot) or a location's label as it was at sale time.
+  const [salesLocationFilter, setSalesLocationFilter] = useState("");
+  const salesLocationOptions = useMemo(() => {
+    const labels = new Set<string>();
+    for (const s of custSales) labels.add(s.customerLocationSnapshot?.trim() || MAIN_LOC);
+    return [...labels].sort((a, b) =>
+      a === MAIN_LOC ? -1 : b === MAIN_LOC ? 1 : a.localeCompare(b),
+    );
+  }, [custSales]);
+  // Self-correcting rather than reset via an effect: a filter picked for a
+  // previous customer that doesn't apply to whoever's open now (e.g. they
+  // have no "J Bruner" location) just falls back to "All" on its own.
+  const effectiveLocationFilter = salesLocationOptions.includes(salesLocationFilter)
+    ? salesLocationFilter
+    : "";
+  const shownCustSales = useMemo(() => {
+    if (!effectiveLocationFilter) return custSales;
+    return custSales.filter(
+      (s) => (s.customerLocationSnapshot?.trim() || MAIN_LOC) === effectiveLocationFilter,
+    );
+  }, [custSales, effectiveLocationFilter]);
   const emptyLocForm = {
     label: "",
     street: "",
@@ -872,15 +899,37 @@ export function CustomersView({
 
               {draft.id && (
                 <div className="rounded-md border border-zinc-200 p-3">
-                  <p className="mb-2 text-sm font-medium">
-                    Sales &amp; invoices
-                    <span className="ml-2 font-normal text-zinc-400">{custSales.length}</span>
-                  </p>
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-medium">
+                      Sales &amp; invoices
+                      <span className="ml-2 font-normal text-zinc-400">
+                        {shownCustSales.length}
+                        {effectiveLocationFilter ? ` of ${custSales.length}` : ""}
+                      </span>
+                    </p>
+                    {salesLocationOptions.length > 1 && (
+                      <select
+                        className="input h-7 w-auto text-xs"
+                        value={effectiveLocationFilter}
+                        onChange={(e) => setSalesLocationFilter(e.target.value)}
+                        aria-label="Filter sales by location"
+                      >
+                        <option value="">All locations</option>
+                        {salesLocationOptions.map((loc) => (
+                          <option key={loc} value={loc}>
+                            {loc === MAIN_LOC ? "Main address" : loc}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
                   {custSales.length === 0 ? (
                     <p className="text-xs text-zinc-400">No sales yet.</p>
+                  ) : shownCustSales.length === 0 ? (
+                    <p className="text-xs text-zinc-400">No sales for this location.</p>
                   ) : (
                     <ul className="max-h-56 divide-y divide-zinc-100 overflow-y-auto text-sm">
-                      {custSales.map((s) => {
+                      {shownCustSales.map((s) => {
                         const overdue =
                           s.status === "INVOICED" && !!s.dueDate && new Date(s.dueDate) < new Date();
                         return (
@@ -895,6 +944,11 @@ export function CustomersView({
                               <span className="ml-2 text-xs text-zinc-400">
                                 {formatDateOnly(s.createdAt)}
                               </span>
+                              {s.customerLocationSnapshot && (
+                                <span className="ml-2 text-xs text-indigo-500">
+                                  {s.customerLocationSnapshot}
+                                </span>
+                              )}
                               {s.dueDate && (
                                 <span
                                   className={`ml-2 text-xs ${overdue ? "font-medium text-red-600" : "text-zinc-400"}`}

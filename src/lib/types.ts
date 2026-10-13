@@ -104,6 +104,8 @@ export interface Customer {
     paidAt?: string | null;
     dueDate?: string | null;
     createdAt: string;
+    /** Which ship-to location this sale was billed to ("" = the customer's main address). */
+    customerLocationSnapshot?: string;
   }[];
   storeCreditLedger?: StoreCreditEntry[];
   /** Extra ship-to / billing locations, when this customer has more than one. */

@@ -32,6 +32,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
             paidAt: true,
             dueDate: true,
             createdAt: true,
+            customerLocationSnapshot: true,
           },
         },
         storeCreditLedger: {

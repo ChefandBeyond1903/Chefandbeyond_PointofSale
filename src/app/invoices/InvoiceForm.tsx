@@ -12,7 +12,7 @@ import { PercentInput } from "@/components/PercentInput";
 import { QuickAddProductModal } from "@/components/QuickAddProductModal";
 import { ReceiptModal } from "@/components/ReceiptModal";
 import { PaymentMethodSelect, usePaymentMethods } from "@/components/PaymentMethodPicker";
-import type { Category, Customer, Product, Sale, Store } from "@/lib/types";
+import type { Category, Customer, CustomerLocation, Product, Sale, Store } from "@/lib/types";
 
 type ProductLite = {
   id: string;
@@ -324,13 +324,38 @@ export function InvoiceForm({
     }
   }
 
+  // Matches a customer's own details, OR one of their other ship-to
+  // locations by label/address/contact (e.g. typing "J Bruner" finds "Joe
+  // Akers" via his "J Bruner" location) — location carries which one, so
+  // selecting the row can pick that exact location, not just the customer.
   const custMatches = useMemo(() => {
     const s = custName.trim();
     if (!s || custId) return [];
-    return customers
-      .filter((c) => matchesSearch(s, [c.name, c.email, c.phone, c.company]))
-      .slice(0, 8);
+    const out: { customer: Customer; location: CustomerLocation | null }[] = [];
+    for (const c of customers) {
+      if (matchesSearch(s, [c.name, c.email, c.phone, c.company])) {
+        out.push({ customer: c, location: null });
+        continue;
+      }
+      const loc = c.locations?.find((l) => matchesSearch(s, [l.label, l.address, l.contact]));
+      if (loc) out.push({ customer: c, location: loc });
+    }
+    return out.slice(0, 8);
   }, [customers, custName, custId]);
+
+  function selectCustomerMatch(m: { customer: Customer; location: CustomerLocation | null }) {
+    pickCustomer(m.customer);
+    // Apply the matched location directly (not via pickCustomerLocation,
+    // which re-looks-up the customer by custId — still stale here since
+    // pickCustomer's setCustId above hasn't committed yet).
+    const loc = m.location;
+    if (loc) {
+      setCustLocationId(loc.id);
+      if (loc.address) setCustAddress(loc.address);
+      if (loc.phone) setCustPhone(loc.phone);
+      if (loc.email) setCustEmail(loc.email);
+    }
+  }
 
   function onProductPick(rowKey: string, name: string) {
     const match = products.find((p) => p.name.toLowerCase() === name.trim().toLowerCase());
@@ -908,18 +933,25 @@ export function InvoiceForm({
               />
               {custOpen && custMatches.length > 0 && (
                 <ul className="absolute z-40 mt-1 max-h-56 w-full overflow-auto rounded-md border border-zinc-200 bg-white text-sm shadow-lg">
-                  {custMatches.map((c) => (
-                    <li key={c.id}>
+                  {custMatches.map((m) => (
+                    <li key={`${m.customer.id}-${m.location?.id ?? ""}`}>
                       <button
                         type="button"
                         onMouseDown={(e) => {
                           e.preventDefault();
-                          pickCustomer(c);
+                          selectCustomerMatch(m);
                         }}
                         className="block w-full px-3 py-1.5 text-left hover:bg-indigo-50"
                       >
-                        <span className="font-medium">{c.name}</span>
-                        {c.company && <span className="ml-2 text-xs text-zinc-400">{c.company}</span>}
+                        <span className="font-medium">{m.customer.name}</span>
+                        {m.customer.company && (
+                          <span className="ml-2 text-xs text-zinc-400">{m.customer.company}</span>
+                        )}
+                        {m.location && (
+                          <span className="ml-2 text-xs text-indigo-500">
+                            — {m.location.label} (location)
+                          </span>
+                        )}
                       </button>
                     </li>
                   ))}
