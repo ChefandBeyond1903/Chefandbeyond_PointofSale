@@ -78,6 +78,7 @@ const DRAFT_KEY = "cbpos.invoiceDraft";
 type InvoiceDraft = {
   userId: string;
   storeId: string;
+  salespersonId?: string;
   manualNumber: string;
   manualDate: string;
   custId: string | null;
@@ -129,6 +130,9 @@ export function InvoiceForm({
   // Admin-only: which store this invoice is rung at, and manual overrides for
   // entering a historical invoice under its real number/date.
   const [storeId, setStoreId] = useState("");
+  // "" = credit the signed-in admin.
+  const [salespersonId, setSalespersonId] = useState("");
+  const [salespeople, setSalespeople] = useState<{ id: string; name: string }[]>([]);
   const [manualNumber, setManualNumber] = useState("");
   const [manualDate, setManualDate] = useState("");
   const [manualNumberConflict, setManualNumberConflict] = useState<{ number: number; name: string } | null>(
@@ -208,6 +212,8 @@ export function InvoiceForm({
         if (isAdmin) {
           const s = await api<{ stores: Store[] }>("/api/stores");
           setStores(s.stores);
+          const sp = await api<{ people: { id: string; name: string }[] }>("/api/salespeople");
+          setSalespeople(sp.people);
         } else {
           const me = await api<{
             user: { storeName?: string | null; storeTaxRateBps?: number | null } | null;
@@ -265,6 +271,7 @@ export function InvoiceForm({
           localStorage.removeItem(DRAFT_KEY);
         } else {
           if (d.storeId !== undefined) setStoreId(d.storeId);
+          if (d.salespersonId !== undefined) setSalespersonId(d.salespersonId);
           if (d.manualNumber !== undefined) setManualNumber(d.manualNumber);
           if (d.manualDate !== undefined) setManualDate(d.manualDate);
           if (d.custId !== undefined) setCustId(d.custId);
@@ -498,6 +505,7 @@ export function InvoiceForm({
       const draft: InvoiceDraft = {
         userId,
         storeId,
+        salespersonId,
         manualNumber,
         manualDate,
         custId,
@@ -528,6 +536,7 @@ export function InvoiceForm({
   }, [
     userId,
     storeId,
+    salespersonId,
     manualNumber,
     manualDate,
     custId,
@@ -584,6 +593,7 @@ export function InvoiceForm({
       shippingCents,
       ccFeeBps,
       ...(isAdmin && storeId ? { storeId } : {}),
+      ...(isAdmin && salespersonId && salespersonId !== userId ? { salespersonId } : {}),
       ...(isAdmin && manualNumber.trim() ? { number: parseInt(manualNumber.trim(), 10) } : {}),
       ...(isAdmin && manualDate ? { saleDate: manualDate } : {}),
       ...(paymentNote.trim() ? { note: paymentNote.trim() } : {}),
@@ -778,6 +788,7 @@ export function InvoiceForm({
     setAmountReceived(null);
     setTenderedCents(0);
     setCheckNumber("");
+    setSalespersonId("");
     setManualNumber("");
     setManualDate("");
     setPaymentNote("");
@@ -852,7 +863,7 @@ export function InvoiceForm({
             <h2 className="mb-3 text-sm font-semibold text-zinc-700">
               Manual entry <span className="text-xs font-normal text-zinc-400">(admin only)</span>
             </h2>
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-4">
               <div>
                 <label className="label">Invoice #</label>
                 <input
@@ -879,6 +890,25 @@ export function InvoiceForm({
                   onChange={(e) => setManualDate(e.target.value)}
                 />
               </div>
+              {salespeople.length > 0 && (
+                <div>
+                  <label className="label">Salesperson</label>
+                  <select
+                    className="input"
+                    value={salespersonId}
+                    onChange={(e) => setSalespersonId(e.target.value)}
+                  >
+                    <option value="">Me</option>
+                    {salespeople
+                      .filter((p) => p.id !== userId)
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              )}
               {stores.length > 0 && (
                 <div>
                   <label className="label">
