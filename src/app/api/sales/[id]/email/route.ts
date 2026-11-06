@@ -7,6 +7,8 @@ import { ok, toErrorResponse } from "@/lib/api";
 import { sendBrevoEmail, brevoConfigured } from "@/lib/brevo";
 import { buildInvoiceEmailHtml, invoiceLabel } from "@/lib/invoiceEmail";
 import { buildInvoicePdf } from "@/lib/invoicePdf";
+import { payLinkFor } from "@/lib/payLink";
+import { stripeConfigured } from "@/lib/stripe";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -43,7 +45,17 @@ export async function POST(req: NextRequest, { params }: Params) {
     const storeName = sale.storeNameSnapshot || company?.name || "Chef and Beyond";
     const replyTo = sale.storeEmailSnapshot || company?.email || undefined;
 
-    const subject = `Invoice ${invoiceLabel(sale)} from ${storeName}`;
+    // "Pay now" button — only when Stripe and its webhook are both set up, so a
+    // payment made through it is always recorded back on the invoice.
+    const payUrl =
+      sale.status === "INVOICED" &&
+      sale.totalCents - sale.amountPaidCents > 0 &&
+      stripeConfigured() &&
+      process.env.STRIPE_WEBHOOK_SECRET
+        ? payLinkFor(req.nextUrl.origin, sale.id)
+        : undefined;
+
+    const subject =`Invoice ${invoiceLabel(sale)} from ${storeName}`;
     await sendBrevoEmail({
         to: [to],
         subject,
@@ -52,6 +64,7 @@ export async function POST(req: NextRequest, { params }: Params) {
           company,
           message,
           logoUrl: `${req.nextUrl.origin}/logo-email.png`,
+          payUrl,
         }),
         attachments: [
           {

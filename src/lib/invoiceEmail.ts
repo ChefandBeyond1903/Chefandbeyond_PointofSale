@@ -77,8 +77,10 @@ export function buildInvoiceEmailHtml(opts: {
   company: EmailCompany;
   message?: string;
   logoUrl?: string;
+  /** "Pay now" button target — only shown while a balance is owed. */
+  payUrl?: string;
 }): string {
-  const { sale, company, message, logoUrl } = opts;
+  const { sale, company, message, logoUrl, payUrl } = opts;
   const storeName = sale.storeNameSnapshot || company?.name || "Chef and Beyond";
   const address = sale.storeAddressSnapshot || company?.address || "";
   const phone = sale.storePhoneSnapshot || company?.phone || "";
@@ -137,6 +139,7 @@ ${logoUrl ? `<img src="${esc(logoUrl)}" alt="${esc(company?.name || "Chef and Be
 <div style="font-size:38px;line-height:1.15;font-weight:800;color:${owing ? NAVY : GREEN};margin-top:4px;">${formatMoney(balance)}</div>
 <div style="margin-top:10px;color:#52525b;">Total <strong>${formatMoney(sale.totalCents)}</strong>${sale.dueDate ? ` &nbsp;·&nbsp; Due <strong>${dateOnly(sale.dueDate)}</strong>` : ""}</div>
 <div style="margin-top:4px;color:#8b93a1;font-size:12px;">Invoice ${esc(invoiceLabel(sale))} · ${sale.createdAt.toLocaleDateString("en-US", { timeZone: "America/Chicago" })}${sale.termsSnapshot ? ` · ${esc(sale.termsSnapshot)}` : ""}</div>
+${owing && payUrl ? `<div style="margin-top:20px;"><a href="${esc(payUrl)}" style="display:inline-block;background:${GREEN};color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;padding:14px 40px;border-radius:999px;">Pay ${formatMoney(balance)} now</a><div style="margin-top:8px;font-size:11px;color:#8b93a1;">Secure card payment powered by Stripe</div></div>` : ""}
 </div>
 </div>
 

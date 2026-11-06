@@ -9,6 +9,11 @@ const PUBLIC_PATHS = [
   "/api/auth/logout",
   "/api/auth/me",
   "/api/version",
+  // Customer-facing: the invoice email's Pay now link, its thank-you page, and
+  // the Stripe webhook (which authenticates by signature).
+  "/api/pay",
+  "/pay",
+  "/api/stripe/webhook",
 ];
 
 // Page sections a plain CASHIER may not open. Enforced here (not just in the
