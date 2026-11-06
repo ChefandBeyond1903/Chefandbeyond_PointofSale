@@ -10,6 +10,7 @@ import { MoneyInput } from "@/components/MoneyInput";
 import { CardReaderPanel, type ReaderOption, type CardPaid } from "@/components/CardReaderPanel";
 import { ManualCardPanel, manualCardAvailable } from "@/components/ManualCardPanel";
 import { ReceiptModal } from "@/components/ReceiptModal";
+import { SendInvoiceEmailModal } from "@/components/SendInvoiceEmailModal";
 import { RefundReceiptModal } from "@/components/RefundReceiptModal";
 import { DeliverySignature } from "@/components/DeliverySignature";
 import type { InvoiceDetail, PurchaseOrder, Sale, Vendor } from "@/lib/types";
@@ -68,6 +69,7 @@ export function InvoiceModal({
   const [pickerVendor, setPickerVendor] = useState<string | null>(null);
   const [picks, setPicks] = useState<Record<string, Pick>>({});
   const [printing, setPrinting] = useState(false);
+  const [emailing, setEmailing] = useState(false);
   // vendor name -> free-freight minimum (cents); 0 / missing means none.
   const [freightMins, setFreightMins] = useState<Record<string, number>>({});
 
@@ -633,6 +635,12 @@ export function InvoiceModal({
                   className="btn-secondary px-3 py-1 text-sm"
                 >
                   Print receipt
+                </button>
+                <button
+                  onClick={() => setEmailing(true)}
+                  className="btn-secondary px-3 py-1 text-sm"
+                >
+                  Email
                 </button>
                 {isAdmin && (
                   <button
@@ -1555,6 +1563,15 @@ export function InvoiceModal({
           </>
         )}
       </div>
+
+      {emailing && sale && (
+        <SendInvoiceEmailModal
+          saleId={sale.id}
+          label={sale.websiteOrderNumber || `#${sale.number}`}
+          defaultTo={sale.customerEmailSnapshot ?? ""}
+          onClose={() => setEmailing(false)}
+        />
+      )}
 
       {printing && sale && (
         <ReceiptModal sale={sale} onClose={() => setPrinting(false)} />
