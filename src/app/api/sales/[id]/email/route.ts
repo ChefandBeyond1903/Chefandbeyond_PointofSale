@@ -6,6 +6,7 @@ import { requireScopedUser, scopeStoreId } from "@/lib/scope";
 import { ok, toErrorResponse } from "@/lib/api";
 import { sendBrevoEmail, brevoConfigured } from "@/lib/brevo";
 import { buildInvoiceEmailHtml, invoiceLabel } from "@/lib/invoiceEmail";
+import { buildInvoicePdf } from "@/lib/invoicePdf";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -42,12 +43,24 @@ export async function POST(req: NextRequest, { params }: Params) {
     const storeName = sale.storeNameSnapshot || company?.name || "Chef and Beyond";
     const replyTo = sale.storeEmailSnapshot || company?.email || undefined;
 
+    const subject = `Invoice ${invoiceLabel(sale)} from ${storeName}`;
     await sendBrevoEmail({
-      to: [to],
-      subject: `Invoice ${invoiceLabel(sale)} from ${storeName}`,
-      html: buildInvoiceEmailHtml({ sale, company, message }),
-      replyTo,
-    });
+        to: [to],
+        subject,
+        html: buildInvoiceEmailHtml({
+          sale,
+          company,
+          message,
+          logoUrl: `${req.nextUrl.origin}/logo-email.png`,
+        }),
+        attachments: [
+          {
+            name: `Invoice-${invoiceLabel(sale).replace(/[^A-Za-z0-9-]/g, "")}.pdf`,
+            contentBase64: Buffer.from(await buildInvoicePdf(sale, company)).toString("base64"),
+          },
+        ],
+        replyTo,
+      });
     return ok({ sent: true });
   } catch (err) {
     return toErrorResponse(err);
