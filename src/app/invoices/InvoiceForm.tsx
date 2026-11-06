@@ -11,6 +11,7 @@ import { MoneyInput } from "@/components/MoneyInput";
 import { PercentInput } from "@/components/PercentInput";
 import { QuickAddProductModal } from "@/components/QuickAddProductModal";
 import { ReceiptModal } from "@/components/ReceiptModal";
+import { SendInvoiceEmailModal } from "@/components/SendInvoiceEmailModal";
 import { PaymentMethodSelect, usePaymentMethods } from "@/components/PaymentMethodPicker";
 import type { Category, Customer, CustomerLocation, Product, Sale, Store } from "@/lib/types";
 
@@ -197,6 +198,7 @@ export function InvoiceForm({
   const [saving, setSaving] = useState(false);
   const [savedSale, setSavedSale] = useState<{ id: string; number: number } | null>(null);
   const [printOpen, setPrintOpen] = useState(false);
+  const [emailOpen, setEmailOpen] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -825,12 +827,7 @@ export function InvoiceForm({
   }
   async function handleSaveAndSend() {
     const s = savedSale ?? (await doSave());
-    if (s) {
-      alert(
-        `Invoice #${s.number} saved. (Email delivery isn't configured yet — use Print or ` +
-          `download to send it to the customer yourself.)`,
-      );
-    }
+    if (s) setEmailOpen(true);
   }
 
   if (loading) {
@@ -1476,6 +1473,15 @@ export function InvoiceForm({
             />
           );
         })()}
+
+      {emailOpen && savedSale && (
+        <SendInvoiceEmailModal
+          saleId={savedSale.id}
+          label={`#${savedSale.number}`}
+          defaultTo={custEmail.trim() || customers.find((c) => c.id === custId)?.email || ""}
+          onClose={() => setEmailOpen(false)}
+        />
+      )}
 
       {printOpen && savedSale && (
         <ReceiptModal saleId={savedSale.id} onClose={() => setPrintOpen(false)} />

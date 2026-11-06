@@ -8,15 +8,10 @@ import { formatDateOnly } from "@/lib/date";
 import { PrintPaperToggle, usePrintPaper } from "@/components/PrintPaperToggle";
 import type { Company, Sale } from "@/lib/types";
 
-// Printed on every invoice/receipt.
-export const INVOICE_FINE_PRINT =
-  "ALL SALES ARE FINAL. Changes after 48 hours may incur a fee (refund subject to a " +
-  "restocking fee of 30% of the total purchase price or more depends on the vendor). " +
-  "Installation, electrical, roofing, ducting, construction, permits, stainless steel panels, " +
-  "shrouds, duct enclosures, fire wrap, fire system connection, and testing are NOT INCLUDED " +
-  "unless stated in writing. Buyer must comply with local regulations. Seller is not liable for " +
-  "indirect damages. Tennessee laws apply. A 3% fee applies to refunds issued back to a credit " +
-  "card.";
+import { INVOICE_FINE_PRINT } from "@/lib/invoiceFinePrint";
+import { SendInvoiceEmailModal } from "@/components/SendInvoiceEmailModal";
+
+export { INVOICE_FINE_PRINT };
 
 /**
  * The printable receipt / invoice for one completed sale. Pass a loaded `sale`,
@@ -40,6 +35,7 @@ export function ReceiptModal({
   const [company, setCompany] = useState<Company | null>(companyProp ?? null);
   const [error, setError] = useState<string | null>(null);
   const [paper, setPaper] = usePrintPaper();
+  const [emailOpen, setEmailOpen] = useState(false);
 
   useEffect(() => {
     if (saleProp || !saleId) return;
@@ -104,6 +100,13 @@ export function ReceiptModal({
               >
                 Print
               </button>
+              <button
+                onClick={() => setEmailOpen(true)}
+                disabled={!sale}
+                className="btn-secondary flex-1"
+              >
+                Email
+              </button>
               <button onClick={onClose} className="btn-primary flex-1">
                 {closeLabel}
               </button>
@@ -111,6 +114,14 @@ export function ReceiptModal({
           </div>
         </div>
       </div>
+      {emailOpen && sale && (
+        <SendInvoiceEmailModal
+          saleId={sale.id}
+          label={sale.websiteOrderNumber || `#${sale.number}`}
+          defaultTo={sale.customerEmailSnapshot ?? ""}
+          onClose={() => setEmailOpen(false)}
+        />
+      )}
     </div>,
     document.body
   );
