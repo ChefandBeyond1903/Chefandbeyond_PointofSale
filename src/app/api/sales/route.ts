@@ -220,6 +220,11 @@ export async function POST(req: NextRequest) {
       salespersonId = sp.id;
     }
 
+    // A negative quantity is an item coming back (credit) — manager/admin only.
+    if (body.items.some((i) => i.quantity < 0) && actor?.role !== "ADMIN" && actor?.role !== "MANAGER") {
+      throw new HttpError(403, "Only a manager or admin can enter a negative quantity (a return).");
+    }
+
     // Merge duplicate product lines defensively.
     const merged = new Map<
       string,
@@ -243,6 +248,12 @@ export async function POST(req: NextRequest) {
           unitPriceCents: item.unitPriceCents,
           serialNumber: item.serialNumber ?? "",
         });
+      }
+    }
+
+    for (const [, line] of merged) {
+      if (line.quantity === 0) {
+        throw new HttpError(400, "A product's quantities cancel out to zero — remove those lines.");
       }
     }
 
@@ -306,7 +317,8 @@ export async function POST(req: NextRequest) {
     if (!adminOverride) {
       for (const l of computed.lines) {
         const umrp = umrpById.get(l.productId) ?? 0;
-        if (umrp <= 0) continue;
+        // A returned item (negative quantity) has no minimum price.
+        if (umrp <= 0 || l.quantity < 0) continue;
         const netCents = l.unitPriceCents * l.quantity - l.discountCents;
         if (netCents < umrp * l.quantity) {
           const eachCents = Math.floor(netCents / l.quantity);
@@ -324,6 +336,13 @@ export async function POST(req: NextRequest) {
     );
 
     const total = finalTotalCents + ccFeeCents;
+    if (total < 0) {
+      throw new HttpError(
+        400,
+        `The returned items are worth more than the rest of this invoice (${formatMoney(-total)} over). ` +
+          `Issue the difference as a refund or store credit from the original invoice instead.`,
+      );
+    }
     const isTermsInvoice = customerTerms !== "";
 
     // Normalise every way the client can send money into one list of payments.

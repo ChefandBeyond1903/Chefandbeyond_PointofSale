@@ -310,12 +310,24 @@ export const taxOverrideSchema = z.object({
   reason: z.string().trim().max(300).default(""),
 });
 
+// A line on a new sale/invoice. Unlike a quote or held cart, a negative quantity
+// is allowed: it's an item coming back (takes its value off the total and puts
+// it back in stock). Only managers/admins may use it — enforced in the route.
+const saleCreateItemSchema = saleItemSchema.extend({
+  quantity: z
+    .number()
+    .int()
+    .min(-9999)
+    .max(9999)
+    .refine((n) => n !== 0, "Quantity can't be zero"),
+});
+
 export const saleCreateSchema = z.object({
   // Validate everything (stock, prices, UMRP, payments…) and stop before
   // writing — the register runs this before charging a card reader so a card
   // is never charged for a sale that would then be rejected.
   dryRun: z.boolean().default(false),
-  items: z.array(saleItemSchema).min(1),
+  items: z.array(saleCreateItemSchema).min(1),
   orderDiscountCents: z.number().int().min(0).default(0),
   shippingCents: z.number().int().min(0).default(0),
   // Card-processing surcharge, as a % (basis points) of the total — not

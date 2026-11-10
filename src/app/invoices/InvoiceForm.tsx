@@ -33,7 +33,11 @@ type Line = {
   productId: string | null;
   productName: string;
   sku: string;
+  // Negative = an item coming back (a return): takes its value off the total
+  // and puts it back in stock. Managers/admins only.
   quantity: number;
+  // True while a "-" has been typed but no digits yet, so the field can show it.
+  negative?: boolean;
   unitPriceCents: number;
   // Resolved $ discount when discMode is AMOUNT; derived from discPercent
   // (via resolveLineDiscount) when PERCENT — same split as the register.
@@ -67,7 +71,7 @@ function resolveLineDiscount(l: Line): number {
 }
 
 function lineNetCents(l: Line): number {
-  return Math.max(0, l.quantity * l.unitPriceCents - resolveLineDiscount(l));
+  return l.quantity * l.unitPriceCents - resolveLineDiscount(l);
 }
 
 // Keeps an in-progress invoice across an accidental sign-out (the idle
@@ -458,8 +462,8 @@ export function InvoiceForm({
 
   const itemsSubtotalCents = lines.reduce((s, l) => s + l.quantity * l.unitPriceCents, 0);
   const lineDiscountsCents = lines.reduce((s, l) => s + resolveLineDiscount(l), 0);
-  const netBeforeTaxCents = Math.max(0, itemsSubtotalCents - lineDiscountsCents + shippingCents);
-  const validLines = lines.filter((l) => l.productId && l.quantity > 0);
+  const netBeforeTaxCents = itemsSubtotalCents - lineDiscountsCents + shippingCents;
+  const validLines = lines.filter((l) => l.productId && l.quantity !== 0);
   // Flags any line still below its minimum price — for a non-admin this
   // shouldn't normally happen (snapLineToUmrp corrects it on commit), but is
   // checked again at save time as a hard stop; for an admin it's a warning
@@ -467,7 +471,8 @@ export function InvoiceForm({
   const umrpViolations = validLines.flatMap((l) => {
     const p = products.find((pp) => pp.id === l.productId);
     const umrp = p?.umrpCents ?? 0;
-    if (umrp <= 0) return [];
+    // A returned item (negative quantity) has no minimum price.
+    if (umrp <= 0 || l.quantity < 0) return [];
     const net = lineNetCents(l);
     if (net >= umrp * l.quantity) return [];
     return [
@@ -1077,7 +1082,7 @@ export function InvoiceForm({
               <tbody>
                 {lines.map((row) => {
                   const lineDisc = resolveLineDiscount(row);
-                  const amount = Math.max(0, row.quantity * row.unitPriceCents - lineDisc);
+                  const amount = row.quantity * row.unitPriceCents - lineDisc;
                   const violation = umrpViolations.find((v) => v.key === row.key);
                   const rowProduct = products.find((p) => p.id === row.productId);
                   return (
@@ -1122,12 +1127,15 @@ export function InvoiceForm({
                         <input
                           className="input h-8 text-right"
                           inputMode="numeric"
-                          value={row.quantity || ""}
-                          onChange={(e) =>
-                            updateLine(row.key, {
-                              quantity: parseInt(e.target.value.replace(/[^0-9]/g, ""), 10) || 0,
-                            })
+                          value={
+                            row.negative ? `-${Math.abs(row.quantity) || ""}` : row.quantity || ""
                           }
+                          onChange={(e) => {
+                            // A leading "-" marks a return (managers/admins only).
+                            const neg = role !== "CASHIER" && e.target.value.trim().startsWith("-");
+                            const n = parseInt(e.target.value.replace(/[^0-9]/g, ""), 10) || 0;
+                            updateLine(row.key, { quantity: neg ? -n : n, negative: neg });
+                          }}
                         />
                       </td>
                       <td className="py-1 pr-2">
@@ -1200,6 +1208,12 @@ export function InvoiceForm({
           <button type="button" onClick={addLine} className="btn-secondary mt-2 h-8 text-xs">
             + Add 5 lines
           </button>
+          {role !== "CASHIER" && (
+            <p className="mt-2 text-[11px] text-zinc-400">
+              Item coming back? Enter a <strong>negative quantity</strong> (e.g. -1) — its value comes
+              off the total and the item goes back into inventory.
+            </p>
+          )}
         </section>
 
         <section className="card mb-4 p-4">
