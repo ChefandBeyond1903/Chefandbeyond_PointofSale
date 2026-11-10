@@ -566,7 +566,24 @@ export function InvoiceForm({
 
   function customerPayload() {
     if (custId) {
-      return { customerId: custId, ...(custLocationId ? { customerLocationId: custLocationId } : {}) };
+      // Anything changed here on an existing customer is saved back onto
+      // their record. With a ship-to location picked, the email/phone/address
+      // fields hold that location's details, so only the company is synced.
+      const cur = customers.find((c) => c.id === custId);
+      const updates: { company?: string; email?: string; phone?: string; address?: string } = {};
+      if (cur) {
+        if (custCompany.trim() !== cur.company) updates.company = custCompany.trim();
+        if (!custLocationId) {
+          if (custEmail.trim() !== cur.email) updates.email = custEmail.trim();
+          if (custPhone.trim() !== cur.phone) updates.phone = custPhone.trim();
+          if (custAddress.trim() !== cur.address) updates.address = custAddress.trim();
+        }
+      }
+      return {
+        customerId: custId,
+        ...(custLocationId ? { customerLocationId: custLocationId } : {}),
+        ...(Object.keys(updates).length ? { customerUpdates: updates } : {}),
+      };
     }
     if (custName.trim()) {
       return {
@@ -755,6 +772,12 @@ export function InvoiceForm({
         body: JSON.stringify(payload),
       });
       const saved = { id: res.sale.id, number: res.sale.number };
+      // Mirror the details just saved onto the customer, so picking them
+      // again (e.g. after Save and new) shows the updated info.
+      const sentUpdates = (payload as { customerUpdates?: Partial<Customer> }).customerUpdates;
+      if (custId && sentUpdates) {
+        setCustomers((cur) => cur.map((c) => (c.id === custId ? { ...c, ...sentUpdates } : c)));
+      }
       setSavedSale(saved);
       try {
         localStorage.removeItem(DRAFT_KEY);

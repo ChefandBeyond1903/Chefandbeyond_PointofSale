@@ -399,6 +399,17 @@ export const saleCreateSchema = z.object({
   // One of that customer's ship-to locations, when they have several.
   customerLocationId: z.string().min(1).optional(),
   customer: saleCustomerSchema.optional(),
+  // Edits made to an existing customer's details on the invoice form — saved
+  // back onto the customer record when the invoice is saved.
+  customerUpdates: z
+    .object({
+      company: z.string().trim().max(160),
+      email: z.string().trim().max(200),
+      phone: z.string().trim().max(60),
+      address: z.string().trim().max(400),
+    })
+    .partial()
+    .optional(),
 });
 
 // Record a payment (deposit, partial, or final) against an INVOICED sale.

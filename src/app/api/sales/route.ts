@@ -12,7 +12,7 @@ import {
   jurisdictionRateBps,
 } from "@/lib/taxJurisdiction";
 import { formatMoney } from "@/lib/money";
-import { formatAddress } from "@/lib/address";
+import { formatAddress, parseOneLineAddress } from "@/lib/address";
 import { ok, toErrorResponse } from "@/lib/api";
 import { verifyPaidIntent } from "@/lib/terminal";
 import { parseEventDate } from "@/lib/date";
@@ -466,8 +466,22 @@ export async function POST(req: NextRequest) {
       let cSnap = { name: "", company: "", email: "", phone: "", address: "" };
       let locationLabel = "";
       if (body.customerId) {
-        const c = await tx.customer.findUnique({ where: { id: body.customerId } });
+        let c = await tx.customer.findUnique({ where: { id: body.customerId } });
         if (!c) throw new HttpError(400, "Customer not found");
+        // Details edited on the invoice form are saved back onto the customer.
+        if (body.customerUpdates) {
+          const u = body.customerUpdates;
+          const patch: Record<string, string> = {};
+          if (u.company !== undefined && u.company !== c.company) patch.company = u.company;
+          if (u.email !== undefined && u.email !== c.email) patch.email = u.email;
+          if (u.phone !== undefined && u.phone !== c.phone) patch.phone = u.phone;
+          if (u.address !== undefined && u.address !== c.address) {
+            Object.assign(patch, parseOneLineAddress(u.address), { address: u.address });
+          }
+          if (Object.keys(patch).length) {
+            c = await tx.customer.update({ where: { id: c.id }, data: patch });
+          }
+        }
         customerId = c.id;
         cSnap = { name: c.name, company: c.company, email: c.email, phone: c.phone, address: c.address };
         // Charging to a specific ship-to location: its address/contact win.
