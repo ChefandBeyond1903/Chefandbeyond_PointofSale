@@ -56,7 +56,15 @@ export async function POST(req: NextRequest, { params }: Params) {
         : undefined;
 
     const subject =`Invoice ${invoiceLabel(sale)} from ${storeName}`;
-    await sendBrevoEmail({
+    // Log every attempt (sent or failed) — a logging hiccup never blocks or
+    // hides the email itself.
+    const log = (status: "SENT" | "FAILED", error = "") =>
+      prisma.saleEmailLog
+        .create({ data: { saleId: id, toEmail: to, subject, status, error, sentById: actor.id } })
+        .catch(() => {});
+
+    try {
+      await sendBrevoEmail({
         to: [to],
         subject,
         html: buildInvoiceEmailHtml({
@@ -74,6 +82,11 @@ export async function POST(req: NextRequest, { params }: Params) {
         ],
         replyTo,
       });
+    } catch (err) {
+      await log("FAILED", err instanceof Error ? err.message : "Unknown error");
+      throw err;
+    }
+    await log("SENT");
     return ok({ sent: true });
   } catch (err) {
     return toErrorResponse(err);

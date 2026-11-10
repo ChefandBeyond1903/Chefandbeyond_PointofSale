@@ -108,17 +108,22 @@ export function SalesByVendorReport({ isAdmin }: { isAdmin: boolean }) {
                   </tr>
                 ) : (
                   data.rows.map((r) => (
-                    <Fragment key={r.vendor}>
+                    <Fragment key={`${r.vendor}|${r.group}`}>
                       <tr
-                        onClick={() => toggle(r.vendor)}
+                        onClick={() => toggle(`${r.vendor}|${r.group}`)}
                         className="cursor-pointer hover:bg-zinc-50"
-                        aria-expanded={expanded.has(r.vendor)}
+                        aria-expanded={expanded.has(`${r.vendor}|${r.group}`)}
                       >
                         <td className="px-4 py-2 font-medium">
                           <span className="mr-1.5 inline-block w-3 text-xs text-zinc-400">
-                            {expanded.has(r.vendor) ? "▾" : "▸"}
+                            {expanded.has(`${r.vendor}|${r.group}`) ? "▾" : "▸"}
                           </span>
                           {r.vendor}
+                          {r.group && (
+                            <span className="ml-1.5 rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700">
+                              {r.group === "USAFED" ? "USA-FED" : "Strata"}
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 py-2 text-right text-zinc-500">
                           {r.quantity.toLocaleString()}
@@ -134,7 +139,7 @@ export function SalesByVendorReport({ isAdmin }: { isAdmin: boolean }) {
                           {r.rebateCents > 0 ? formatMoney(r.rebateCents) : "—"}
                         </td>
                       </tr>
-                      {expanded.has(r.vendor) && (
+                      {expanded.has(`${r.vendor}|${r.group}`) && (
                         <tr className="bg-zinc-50/60">
                           <td colSpan={6} className="px-4 pb-3 pt-1">
                             {r.vendor === "Unassigned" && (

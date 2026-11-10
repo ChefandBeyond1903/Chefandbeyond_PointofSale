@@ -57,6 +57,9 @@ export interface Vendor {
   rebateBps: number;
   /** Member of the Strata buying group. */
   strataBuyingGroup: boolean;
+  /** Member of the USA-FED buying group (its rebate % is usaFedRebateBps). */
+  usaFedBuyingGroup: boolean;
+  usaFedRebateBps: number;
   /** We currently have an active open (net-terms) account with this vendor. */
   hasOpenAccount: boolean;
   createdAt?: string;
@@ -157,6 +160,8 @@ export interface Product {
   vendor: string;
   /** Doesn't count toward its vendor's rebate, even though the vendor otherwise pays one. */
   excludeFromRebate: boolean;
+  /** Buying group this product is bought through: "STRATA", "USAFED", or "" to follow its vendor. */
+  buyingGroup: "" | "STRATA" | "USAFED";
   categoryId: string | null;
   category: { id: string; name: string } | null;
   createdAt?: string;
@@ -470,6 +475,14 @@ export interface Sale {
   paidAt?: string | null;
   amountPaidCents?: number;
   payments?: SalePayment[];
+  emailLogs?: {
+    id: string;
+    toEmail: string;
+    status: "SENT" | "FAILED";
+    error: string;
+    createdAt: string;
+    sentBy: { name: string } | null;
+  }[];
   refundedCents?: number;
   refunds?: SaleRefund[];
   customerTaxExemptSnapshot?: boolean;
@@ -801,6 +814,8 @@ export interface SalesByVendorReport {
   stores: { id: string; name: string }[];
   rows: {
     vendor: string;
+    /** Buying group this row's sales were bought through ("" = none). */
+    group: "" | "STRATA" | "USAFED";
     quantity: number;
     revenueCents: number;
     costCents: number;
@@ -834,6 +849,7 @@ export interface PurchasesByVendorReport {
   rows: PurchasesByVendorRow[];
   totals: PurchasesByVendorTotals;
   strata: { rows: PurchasesByVendorRow[]; totals: PurchasesByVendorTotals };
+  usaFed: { rows: PurchasesByVendorRow[]; totals: PurchasesByVendorTotals };
   other: { rows: PurchasesByVendorRow[]; totals: PurchasesByVendorTotals };
 }
 
@@ -857,6 +873,9 @@ export interface PurchasesByVendorRow {
   rebateCents: number;
   discountCents: number;
   strataBuyingGroup: boolean;
+  usaFedBuyingGroup: boolean;
+  /** Which buying group this row's purchases were made through ("" = none). */
+  group: "" | "STRATA" | "USAFED";
   hasOpenAccount: boolean;
 }
 

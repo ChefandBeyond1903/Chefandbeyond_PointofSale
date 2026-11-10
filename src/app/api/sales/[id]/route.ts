@@ -30,6 +30,10 @@ export async function GET(_req: NextRequest, { params }: Params) {
         cashier: { select: { id: true, name: true } },
         salesperson: { select: { id: true, name: true } },
         customer: true,
+        emailLogs: {
+          orderBy: { createdAt: "desc" },
+          include: { sentBy: { select: { name: true } } },
+        },
         purchaseOrders: {
           orderBy: { poNumber: "asc" },
           include: { items: true, createdBy: { select: { id: true, name: true } } },

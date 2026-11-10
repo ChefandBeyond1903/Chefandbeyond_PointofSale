@@ -82,6 +82,7 @@ model User {
   sales              Sale[]             @relation("SaleCashier")
   salesCredited      Sale[]             @relation("SaleSalesperson")
   salePayments       SalePayment[]      @relation("SalePaymentCreatedBy")
+  saleEmailLogs      SaleEmailLog[]     @relation("SaleEmailLogSentBy")
   saleRefunds        SaleRefund[]       @relation("SaleRefundCreatedBy")
   storeCreditEntries StoreCreditEntry[] @relation("StoreCreditEntryCreatedBy")
   shifts             Shift[]
@@ -159,6 +160,11 @@ model Vendor {
   // Member of the Strata buying group — splits out as its own section on the
   // Purchases by Vendor report.
   strataBuyingGroup   Boolean  @default(false)
+  // Member of the USA-FED buying group — its own section on the report. Its
+  // rebate is tracked separately from Strata's (rebateBps above is the Strata /
+  // non-group rate).
+  usaFedBuyingGroup   Boolean  @default(false)
+  usaFedRebateBps     Int      @default(0)
   // We currently have an active open (net-terms) account with this vendor.
   hasOpenAccount      Boolean  @default(false)
   createdAt           DateTime @default(now())
@@ -286,6 +292,8 @@ model Product {
   // though the vendor otherwise pays one — some SKUs are carved out by the
   // vendor's own program terms.
   excludeFromRebate Boolean @default(false)
+  // Buying group it is purchased through: "STRATA", "USAFED", or "" (follow the vendor).
+  buyingGroup       String  @default("")
 
   categoryId String?
   category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
@@ -412,6 +420,7 @@ model Sale {
   // amountPaidCents reaches totalCents and status flips to COMPLETED.
   amountPaidCents Int           @default(0)
   payments        SalePayment[]
+  emailLogs       SaleEmailLog[]
 
   // Total refunded against this sale (SaleRefund rows). status becomes
   // "REFUNDED" once refundedCents reaches totalCents.
@@ -968,4 +977,21 @@ model CardReader {
   updatedAt      DateTime @updatedAt
 
   @@index([storeId])
+}
+
+/// A log of every invoice email attempted through Brevo — who sent it, to
+/// whom, when, and whether Brevo accepted it.
+model SaleEmailLog {
+  id        String   @id @default(cuid())
+  saleId    String
+  sale      Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  toEmail   String
+  subject   String   @default("")
+  status    String   @default("SENT") // SENT | FAILED
+  error     String   @default("")
+  sentById  String?
+  sentBy    User?    @relation("SaleEmailLogSentBy", fields: [sentById], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+
+  @@index([saleId, createdAt])
 }

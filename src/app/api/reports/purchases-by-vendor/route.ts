@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireScopedRole, scopeStoreId } from "@/lib/scope";
 import { earlyPayDiscountCents } from "@/lib/billFees";
 import { ok, toErrorResponse } from "@/lib/api";
+import { effectiveGroup, rebateBpsFor, type BuyingGroup } from "@/lib/buyingGroup";
 
 // What we've actually paid each vendor, grouped by vendor — PAID bills only
 // (an open/unpaid bill isn't money out the door yet), and only real vendor
@@ -48,13 +49,23 @@ export async function GET(req: NextRequest) {
               paidAt: true,
               po: { select: { id: true, poNumber: true } },
               items: {
-                select: { lineCostCents: true, product: { select: { excludeFromRebate: true } } },
+                select: {
+                  lineCostCents: true,
+                  product: { select: { excludeFromRebate: true, buyingGroup: true } },
+                },
               },
             },
           }),
       prisma.store.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
       prisma.vendor.findMany({
-        select: { name: true, rebateBps: true, strataBuyingGroup: true, hasOpenAccount: true },
+        select: {
+          name: true,
+          rebateBps: true,
+          usaFedRebateBps: true,
+          strataBuyingGroup: true,
+          usaFedBuyingGroup: true,
+          hasOpenAccount: true,
+        },
       }),
     ]);
 
@@ -63,12 +74,16 @@ export async function GET(req: NextRequest) {
       return !!effective && effective >= from && effective <= to;
     });
 
-    const rebateByVendor = new Map(vendors.map((v) => [v.name.trim().toLowerCase(), v.rebateBps]));
     const vendorByName = new Map(vendors.map((v) => [v.name.trim().toLowerCase(), v]));
 
+    // One row per vendor PER buying group — a vendor bought from through both
+    // Strata and USA-FED shows up in each section with just that group's share.
+    type Group = BuyingGroup | "";
     const byVendor = new Map<
       string,
       {
+        vendor: string;
+        group: Group;
         billCount: number;
         paidCents: number;
         rebateEligibleCents: number;
@@ -88,13 +103,7 @@ export async function GET(req: NextRequest) {
     >();
     for (const b of bills) {
       const vendor = b.vendor?.trim() || "Unassigned";
-      const row = byVendor.get(vendor) ?? {
-        billCount: 0,
-        paidCents: 0,
-        rebateEligibleCents: 0,
-        discountCents: 0,
-        bills: [],
-      };
+      const vendorRow = vendorByName.get(vendor.toLowerCase());
       // Items flagged "exclude from rebate" (Products), plus shipping,
       // minimum-order and drop-ship fees, all come straight out of this
       // bill's rebate basis.
@@ -109,30 +118,70 @@ export async function GET(req: NextRequest) {
       );
       const itemsCents = b.items.reduce((s, it) => s + it.lineCostCents, 0);
       const discountCents = earlyPayDiscountCents(itemsCents, b.earlyPayDiscountBps);
-      row.billCount += 1;
-      row.paidCents += b.subtotalCents;
-      row.rebateEligibleCents += rebateEligibleCents;
-      row.discountCents += discountCents;
-      row.bills.push({
-        id: b.id,
-        billNumber: b.billNumber,
-        poId: b.po?.id ?? null,
-        poNumber: b.po?.poNumber ?? null,
-        dueDate: b.dueDate?.toISOString() ?? null,
-        paidAt: b.paidAt?.toISOString() ?? null,
-        amountCents: b.subtotalCents,
-        hasRebateAdjustment: excludedItemCents > 0 || excludedFeeCents > 0,
-        discountCents,
+
+      // Split the bill across buying groups by each group's share of its items.
+      const parts = new Map<Group, { items: number; eligibleItems: number }>();
+      for (const it of b.items) {
+        const g = effectiveGroup(it.product?.buyingGroup, vendorRow);
+        const part = parts.get(g) ?? { items: 0, eligibleItems: 0 };
+        part.items += it.lineCostCents;
+        if (!it.product?.excludeFromRebate) part.eligibleItems += it.lineCostCents;
+        parts.set(g, part);
+      }
+      if (parts.size === 0) parts.set(effectiveGroup("", vendorRow), { items: 0, eligibleItems: 0 });
+      const eligibleItemsTotal = [...parts.values()].reduce((t, x) => t + x.eligibleItems, 0);
+
+      const entries = [...parts.entries()];
+      let paidLeft = b.subtotalCents;
+      let eligLeft = rebateEligibleCents;
+      let discLeft = discountCents;
+      entries.forEach(([group, part], i) => {
+        const last = i === entries.length - 1;
+        const itemShare = itemsCents > 0 ? part.items / itemsCents : 1;
+        const eligShare = eligibleItemsTotal > 0 ? part.eligibleItems / eligibleItemsTotal : itemShare;
+        const paid = last ? paidLeft : Math.round(b.subtotalCents * itemShare);
+        const elig = last ? eligLeft : Math.round(rebateEligibleCents * eligShare);
+        const disc = last ? discLeft : Math.round(discountCents * itemShare);
+        paidLeft -= paid;
+        eligLeft -= elig;
+        discLeft -= disc;
+
+        const key = `${vendor}|${group}`;
+        const row = byVendor.get(key) ?? {
+          vendor,
+          group,
+          billCount: 0,
+          paidCents: 0,
+          rebateEligibleCents: 0,
+          discountCents: 0,
+          bills: [],
+        };
+        row.billCount += 1;
+        row.paidCents += paid;
+        row.rebateEligibleCents += elig;
+        row.discountCents += disc;
+        row.bills.push({
+          id: b.id,
+          billNumber: b.billNumber,
+          poId: b.po?.id ?? null,
+          poNumber: b.po?.poNumber ?? null,
+          dueDate: b.dueDate?.toISOString() ?? null,
+          paidAt: b.paidAt?.toISOString() ?? null,
+          amountCents: paid,
+          hasRebateAdjustment: excludedItemCents > 0 || excludedFeeCents > 0,
+          discountCents: disc,
+        });
+        byVendor.set(key, row);
       });
-      byVendor.set(vendor, row);
     }
 
-    const rows = [...byVendor.entries()]
-      .map(([vendor, v]) => {
-        const rebateBps = rebateByVendor.get(vendor.trim().toLowerCase()) ?? 0;
-        const vendorRow = vendorByName.get(vendor.trim().toLowerCase());
+    const rows = [...byVendor.values()]
+      .map((v) => {
+        const vendorRow = vendorByName.get(v.vendor.trim().toLowerCase());
+        const rebateBps = rebateBpsFor(v.group, vendorRow);
         return {
-          vendor,
+          vendor: v.vendor,
+          group: v.group,
           billCount: v.billCount,
           paidCents: v.paidCents,
           bills: v.bills.sort((a, b) =>
@@ -142,6 +191,7 @@ export async function GET(req: NextRequest) {
           rebateCents: Math.round((v.rebateEligibleCents * rebateBps) / 10_000),
           discountCents: v.discountCents,
           strataBuyingGroup: vendorRow?.strataBuyingGroup ?? false,
+          usaFedBuyingGroup: vendorRow?.usaFedBuyingGroup ?? false,
           hasOpenAccount: vendorRow?.hasOpenAccount ?? false,
         };
       })
@@ -160,10 +210,11 @@ export async function GET(req: NextRequest) {
     }
 
     const totals = sumRows(rows);
-    // Split out the Strata buying-group vendors from everyone else, so the
-    // two can be compared at a glance instead of hunting through one list.
-    const strataRows = rows.filter((r) => r.strataBuyingGroup);
-    const otherRows = rows.filter((r) => !r.strataBuyingGroup);
+    // Split by buying group — Strata, USA-FED, and everyone else — so each
+    // rebate can be tracked on its own.
+    const strataRows = rows.filter((r) => r.group === "STRATA");
+    const usaFedRows = rows.filter((r) => r.group === "USAFED");
+    const otherRows = rows.filter((r) => r.group === "");
 
     const storeName = storeId ? (stores.find((s) => s.id === storeId)?.name ?? "") : "";
 
@@ -178,6 +229,7 @@ export async function GET(req: NextRequest) {
       rows,
       totals,
       strata: { rows: strataRows, totals: sumRows(strataRows) },
+      usaFed: { rows: usaFedRows, totals: sumRows(usaFedRows) },
       other: { rows: otherRows, totals: sumRows(otherRows) },
     });
   } catch (err) {

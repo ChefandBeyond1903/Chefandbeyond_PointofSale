@@ -33,6 +33,9 @@ export const productCreateSchema = z.object({
   favorite: z.boolean().default(false),
   vendor: z.string().trim().max(120).default(""),
   excludeFromRebate: z.boolean().default(false),
+  // Which buying group this product is bought through: "STRATA", "USAFED", or
+  // "" to follow its vendor.
+  buyingGroup: z.enum(["", "STRATA", "USAFED"]).default(""),
 });
 
 // Every field optional and — crucially — NO defaults, so a partial update
@@ -52,6 +55,7 @@ export const productUpdateSchema = z.object({
   favorite: z.boolean().optional(),
   vendor: z.string().trim().max(120).optional(),
   excludeFromRebate: z.boolean().optional(),
+  buyingGroup: z.enum(["", "STRATA", "USAFED"]).optional(),
 });
 
 // Bulk operations on the Products page: act on a set of product ids at once.
@@ -62,8 +66,9 @@ export const productBulkUpdateSchema = z
     ids: z.array(z.string().min(1)).min(1).max(1000),
     categoryId: z.string().trim().min(1).nullable().optional(),
     active: z.boolean().optional(),
+    buyingGroup: z.enum(["", "STRATA", "USAFED"]).optional(),
   })
-  .refine((v) => v.categoryId !== undefined || v.active !== undefined, {
+  .refine((v) => v.categoryId !== undefined || v.active !== undefined || v.buyingGroup !== undefined, {
     message: "Nothing to update",
   });
 
@@ -243,6 +248,8 @@ export const vendorCreateSchema = z.object({
   // Rebate this vendor pays back, in basis points (250 = 2.50%).
   rebateBps: z.number().int().min(0).max(10_000).default(0),
   strataBuyingGroup: z.boolean().default(false),
+  usaFedBuyingGroup: z.boolean().default(false),
+  usaFedRebateBps: z.number().int().min(0).max(10_000).default(0),
   hasOpenAccount: z.boolean().default(false),
 });
 
@@ -256,6 +263,8 @@ export const vendorUpdateSchema = z.object({
   freightMinimumCents: z.number().int().min(0).max(1_000_000_00).optional(),
   rebateBps: z.number().int().min(0).max(10_000).optional(),
   strataBuyingGroup: z.boolean().optional(),
+  usaFedBuyingGroup: z.boolean().optional(),
+  usaFedRebateBps: z.number().int().min(0).max(10_000).optional(),
   hasOpenAccount: z.boolean().optional(),
 });
 

@@ -61,6 +61,8 @@ export async function POST(req: NextRequest) {
           freightMinimumCents: target.freightMinimumCents || source.freightMinimumCents,
           rebateBps: target.rebateBps || source.rebateBps,
           strataBuyingGroup: target.strataBuyingGroup || source.strataBuyingGroup,
+          usaFedBuyingGroup: target.usaFedBuyingGroup || source.usaFedBuyingGroup,
+          usaFedRebateBps: target.usaFedRebateBps || source.usaFedRebateBps,
           hasOpenAccount: target.hasOpenAccount || source.hasOpenAccount,
         },
       });

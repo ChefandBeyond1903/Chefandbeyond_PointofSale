@@ -55,6 +55,7 @@ type Draft = {
   favorite: boolean;
   vendor: string;
   excludeFromRebate: boolean;
+  buyingGroup: "" | "STRATA" | "USAFED";
 };
 
 const emptyDraft: Draft = {
@@ -71,6 +72,7 @@ const emptyDraft: Draft = {
   favorite: false,
   vendor: "",
   excludeFromRebate: false,
+  buyingGroup: "",
 };
 
 export function ProductManager({
@@ -111,6 +113,7 @@ export function ProductManager({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkCategoryId, setBulkCategoryId] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkGroup, setBulkGroup] = useState("");
   const [labelsOpen, setLabelsOpen] = useState(false);
 
   // Inline "add vendor" state for the product modal.
@@ -283,6 +286,28 @@ export function ProductManager({
     setBulkCategoryId("");
   }
 
+  async function bulkSetBuyingGroup() {
+    if (selected.size === 0 || !bulkGroup) return;
+    setBulkBusy(true);
+    setError(null);
+    try {
+      await api("/api/products", {
+        method: "PATCH",
+        body: JSON.stringify({
+          ids: [...selected],
+          buyingGroup: bulkGroup === "__vendor__" ? "" : bulkGroup,
+        }),
+      });
+      setBulkGroup("");
+      clearSelection();
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not set the buying group");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
   async function bulkMoveCategory() {
     if (selected.size === 0 || !bulkCategoryId) return;
     setBulkBusy(true);
@@ -406,6 +431,7 @@ export function ProductManager({
       favorite: p.favorite,
       vendor: p.vendor ?? "",
       excludeFromRebate: p.excludeFromRebate ?? false,
+      buyingGroup: p.buyingGroup ?? "",
     });
     // Pull the per-store on-hand for this product in the background.
     setEditStock(null);
@@ -465,6 +491,7 @@ export function ProductManager({
       favorite: p.favorite,
       vendor: p.vendor ?? "",
       excludeFromRebate: p.excludeFromRebate ?? false,
+      buyingGroup: p.buyingGroup ?? "",
     });
     // The list omits description to stay small — fetch the full one.
     api<{ product: { description: string | null } }>(`/api/products/${p.id}`)
@@ -533,6 +560,7 @@ export function ProductManager({
       favorite: draft.favorite,
       vendor: draft.vendor.trim(),
       excludeFromRebate: draft.excludeFromRebate,
+      buyingGroup: draft.buyingGroup,
     };
     try {
       if (draft.id) {
@@ -621,6 +649,25 @@ export function ProductManager({
           <button
             onClick={bulkMoveCategory}
             disabled={bulkBusy || !bulkCategoryId}
+            className="btn-secondary h-8"
+          >
+            Apply
+          </button>
+          <span className="mx-1 h-4 w-px bg-zinc-300" />
+          <select
+            className="input h-8 w-auto min-w-44"
+            value={bulkGroup}
+            onChange={(e) => setBulkGroup(e.target.value)}
+            disabled={bulkBusy}
+          >
+            <option value="">Set buying group…</option>
+            <option value="STRATA">Strata</option>
+            <option value="USAFED">USA-FED</option>
+            <option value="__vendor__">Follow the vendor</option>
+          </select>
+          <button
+            onClick={bulkSetBuyingGroup}
+            disabled={bulkBusy || !bulkGroup}
             className="btn-secondary h-8"
           >
             Apply
@@ -1166,6 +1213,26 @@ export function ProductManager({
                 />
                 Show on register home <span className="text-zinc-400">(favorite)</span>
               </label>
+              {draft.vendor && (
+                <div className="col-span-2">
+                  <label className="label">Buying group</label>
+                  <select
+                    className="input"
+                    value={draft.buyingGroup}
+                    onChange={(e) =>
+                      setDraft({ ...draft, buyingGroup: e.target.value as Draft["buyingGroup"] })
+                    }
+                  >
+                    <option value="">Follow the vendor</option>
+                    <option value="STRATA">Strata</option>
+                    <option value="USAFED">USA-FED</option>
+                  </select>
+                  <p className="mt-0.5 text-[11px] text-zinc-400">
+                    Which buying group you buy this item through — its purchases and rebate are
+                    tracked under that group on Reports → Purchases by vendor.
+                  </p>
+                </div>
+              )}
               {draft.vendor && (
                 <div className="col-span-2">
                   <label className="flex items-center gap-2 text-sm">

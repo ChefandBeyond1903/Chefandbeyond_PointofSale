@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireScopedRole, scopeStoreId } from "@/lib/scope";
 import { ok, toErrorResponse } from "@/lib/api";
+import { effectiveGroup, rebateBpsFor, type BuyingGroup } from "@/lib/buyingGroup";
 
 // Sold quantity and cost, grouped by vendor. Normally the vendor snapshotted
 // on the sale line at the time of sale (so correcting a product's vendor
@@ -47,20 +48,32 @@ export async function GET(req: NextRequest) {
                   unitCostCents: true,
                   unitPriceCents: true,
                   discountCents: true,
-                  product: { select: { vendor: true, excludeFromRebate: true } },
+                  product: { select: { vendor: true, excludeFromRebate: true, buyingGroup: true } },
                 },
               },
             },
           }),
       prisma.store.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
-      prisma.vendor.findMany({ select: { name: true, rebateBps: true } }),
+      prisma.vendor.findMany({
+        select: {
+          name: true,
+          rebateBps: true,
+          usaFedRebateBps: true,
+          strataBuyingGroup: true,
+          usaFedBuyingGroup: true,
+        },
+      }),
     ]);
 
-    const rebateByVendor = new Map(vendors.map((v) => [v.name.trim().toLowerCase(), v.rebateBps]));
+    const vendorByName = new Map(vendors.map((v) => [v.name.trim().toLowerCase(), v]));
 
+    // One row per vendor per buying group, so a vendor bought through both
+    // Strata and USA-FED has each group's rebate tracked on its own.
     const byVendor = new Map<
       string,
       {
+        vendor: string;
+        group: BuyingGroup | "";
         quantity: number;
         costCents: number;
         // Cost of lines that actually count toward the rebate — excludes any
@@ -82,7 +95,11 @@ export async function GET(req: NextRequest) {
     for (const s of sales) {
       for (const it of s.items) {
         const vendor = it.vendorSnapshot?.trim() || it.product.vendor?.trim() || "Unassigned";
-        const row = byVendor.get(vendor) ?? {
+        const group = effectiveGroup(it.product.buyingGroup, vendorByName.get(vendor.toLowerCase()));
+        const key = `${vendor}|${group}`;
+        const row = byVendor.get(key) ?? {
+          vendor,
+          group,
           quantity: 0,
           costCents: 0,
           rebateCostCents: 0,
@@ -114,17 +131,18 @@ export async function GET(req: NextRequest) {
         itemRow.quantity += it.quantity;
         itemRow.revenueCents += lineRevenue;
         row.items.set(it.productId, itemRow);
-        byVendor.set(vendor, row);
+        byVendor.set(key, row);
       }
     }
 
     // Rebate is a percentage of what we paid the vendor for rebate-eligible
     // items, not the full cost of everything sold.
-    const rows = [...byVendor.entries()]
-      .map(([vendor, v]) => {
-        const rebateBps = rebateByVendor.get(vendor.trim().toLowerCase()) ?? 0;
+    const rows = [...byVendor.values()]
+      .map((v) => {
+        const rebateBps = rebateBpsFor(v.group, vendorByName.get(v.vendor.trim().toLowerCase()));
         return {
-          vendor,
+          vendor: v.vendor,
+          group: v.group,
           quantity: v.quantity,
           revenueCents: v.revenueCents,
           costCents: v.costCents,

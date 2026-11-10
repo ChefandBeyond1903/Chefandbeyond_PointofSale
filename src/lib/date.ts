@@ -45,3 +45,19 @@ export function formatDateOnly(s: string | null | undefined): string {
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleDateString(undefined, { timeZone: "UTC" });
 }
+
+/** A moment (ISO string or Date) shown in US Central time, e.g. "11/6/2026, 3:42 PM CST". */
+export function formatCentral(d: string | Date | null | undefined): string {
+  if (!d) return "—";
+  const date = typeof d === "string" ? new Date(d) : d;
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString("en-US", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  });
+}

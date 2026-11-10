@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney, formatBps } from "@/lib/money";
-import { formatDateOnly, todayInputValue } from "@/lib/date";
+import { formatCentral, formatDateOnly, todayInputValue } from "@/lib/date";
 import { splitSerials, joinSerials, tracksSerials } from "@/lib/serials";
 import { MoneyInput } from "@/components/MoneyInput";
 import { CardReaderPanel, type ReaderOption, type CardPaid } from "@/components/CardReaderPanel";
@@ -1172,6 +1172,23 @@ export function InvoiceModal({
               }
               return null;
             })()}
+
+            {!!sale.emailLogs?.length && (
+              <div className="mb-3 rounded-md border border-zinc-200 p-3">
+                <p className="text-sm font-medium text-zinc-700">Emails</p>
+                <ul className="mt-1.5 space-y-0.5 text-xs text-zinc-600">
+                  {sale.emailLogs.map((l) => (
+                    <li key={l.id}>
+                      <span className={l.status === "FAILED" ? "font-medium text-red-600" : ""}>
+                        {l.status === "FAILED" ? "Failed to send" : "Sent"}
+                      </span>{" "}
+                      to {l.toEmail} · {formatCentral(l.createdAt)}
+                      {l.sentBy?.name ? ` · by ${l.sentBy.name}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             {canManage && creditOwedCents > 0 && !refundOpen && (
               <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm">

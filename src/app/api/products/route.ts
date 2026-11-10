@@ -65,6 +65,7 @@ export async function GET(req: NextRequest) {
         favorite: true,
         vendor: true,
         excludeFromRebate: true,
+        buyingGroup: true,
         categoryId: true,
         category: { select: { id: true, name: true } },
         description: withDetail,
@@ -154,6 +155,7 @@ export async function POST(req: NextRequest) {
         vendor: data.vendor,
         categoryId: data.categoryId,
         excludeFromRebate: data.excludeFromRebate,
+        buyingGroup: data.buyingGroup,
       },
       include: { category: { select: { id: true, name: true } } },
     });
@@ -176,7 +178,7 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     await requireRole("MANAGER", "ADMIN");
-    const { ids, categoryId, active } = productBulkUpdateSchema.parse(await req.json());
+    const { ids, categoryId, active, buyingGroup } = productBulkUpdateSchema.parse(await req.json());
 
     const data: Prisma.ProductUncheckedUpdateManyInput = {};
     if (categoryId !== undefined) {
@@ -190,6 +192,7 @@ export async function PATCH(req: NextRequest) {
       data.categoryId = categoryId;
     }
     if (active !== undefined) data.active = active;
+    if (buyingGroup !== undefined) data.buyingGroup = buyingGroup;
 
     const { count } = await prisma.product.updateMany({
       where: { id: { in: ids } },

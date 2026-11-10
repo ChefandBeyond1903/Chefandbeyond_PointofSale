@@ -84,13 +84,21 @@ export function PurchasesByVendorReport({ isAdmin }: { isAdmin: boolean }) {
             under Vendors, minus shipping, minimum-order and drop-ship fees, and the cost of any
             item marked &ldquo;exclude from rebate&rdquo; on the product (bills with any of these
             are flagged &ldquo;partial rebate&rdquo; below). Discount saved is each bill&apos;s
-            early-pay discount %. Split below by whether the vendor is in the Strata buying group.
+            early-pay discount %. Split below by buying group — Strata, USA-FED and other vendors — so each
+            group's rebate is tracked on its own. A vendor bought from through both groups appears in
+            both, with only that group's share (set each product's buying group under Products).
           </p>
           <VendorSection
             title="Strata buying group"
             rows={data.strata.rows}
             totals={data.strata.totals}
-            emptyLabel="No Strata buying-group vendors paid in this period."
+            emptyLabel="No Strata purchases paid in this period."
+          />
+          <VendorSection
+            title="USA-FED buying group"
+            rows={data.usaFed.rows}
+            totals={data.usaFed.totals}
+            emptyLabel="No USA-FED purchases paid in this period."
           />
           <VendorSection
             title="Other vendors"

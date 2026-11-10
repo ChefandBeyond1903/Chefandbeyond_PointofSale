@@ -24,7 +24,9 @@ type Draft = {
   notes: string;
   freightMinimumCents: number;
   rebatePct: string;
+  usaFedRebatePct: string;
   strataBuyingGroup: boolean;
+  usaFedBuyingGroup: boolean;
   hasOpenAccount: boolean;
 };
 
@@ -37,7 +39,9 @@ const emptyDraft: Draft = {
   notes: "",
   freightMinimumCents: 0,
   rebatePct: "",
+  usaFedRebatePct: "",
   strataBuyingGroup: false,
+  usaFedBuyingGroup: false,
   hasOpenAccount: false,
 };
 
@@ -134,7 +138,9 @@ export function VendorsView({
       notes: v.notes,
       freightMinimumCents: v.freightMinimumCents,
       rebatePct: v.rebateBps ? String(v.rebateBps / 100) : "",
+      usaFedRebatePct: v.usaFedRebateBps ? String(v.usaFedRebateBps / 100) : "",
       strataBuyingGroup: v.strataBuyingGroup,
+      usaFedBuyingGroup: v.usaFedBuyingGroup,
       hasOpenAccount: v.hasOpenAccount,
     });
     setPendingOpenId(null);
@@ -153,7 +159,9 @@ export function VendorsView({
       notes: draft.notes,
       freightMinimumCents: draft.freightMinimumCents,
       rebateBps: Math.round((parseFloat(draft.rebatePct) || 0) * 100),
+      usaFedRebateBps: Math.round((parseFloat(draft.usaFedRebatePct) || 0) * 100),
       strataBuyingGroup: draft.strataBuyingGroup,
+      usaFedBuyingGroup: draft.usaFedBuyingGroup,
       hasOpenAccount: draft.hasOpenAccount,
     };
     try {
@@ -339,6 +347,14 @@ export function VendorsView({
                         Strata
                       </span>
                     )}
+                    {v.usaFedBuyingGroup && (
+                      <span
+                        className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700"
+                        title="Member of the USA-FED buying group"
+                      >
+                        USA-FED
+                      </span>
+                    )}
                     {v.hasOpenAccount && (
                       <span
                         className="ml-1.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700"
@@ -384,7 +400,9 @@ export function VendorsView({
                               notes: v.notes,
                               freightMinimumCents: v.freightMinimumCents,
                               rebatePct: v.rebateBps ? String(v.rebateBps / 100) : "",
+                              usaFedRebatePct: v.usaFedRebateBps ? String(v.usaFedRebateBps / 100) : "",
                               strataBuyingGroup: v.strataBuyingGroup,
+                              usaFedBuyingGroup: v.usaFedBuyingGroup,
                               hasOpenAccount: v.hasOpenAccount,
                             })
                           }
@@ -542,7 +560,7 @@ export function VendorsView({
                 </div>
                 {isAdmin && (
                   <div>
-                    <label className="label">Rebate %</label>
+                    <label className="label">Rebate % (Strata / other)</label>
                     <input
                       className="input"
                       inputMode="decimal"
@@ -554,7 +572,25 @@ export function VendorsView({
                     />
                     <p className="mt-0.5 text-[11px] text-zinc-400">
                       Rebate this vendor pays back, e.g. 2.5 for 2.5%. Shown on Reports &gt; Sales
-                      by vendor.
+                      by vendor. Used for Strata purchases and for vendors in no buying group.
+                    </p>
+                  </div>
+                )}
+                {isAdmin && draft.usaFedBuyingGroup && (
+                  <div>
+                    <label className="label">USA-FED rebate %</label>
+                    <input
+                      className="input"
+                      inputMode="decimal"
+                      placeholder="0"
+                      value={draft.usaFedRebatePct}
+                      onChange={(e) =>
+                        setDraft({ ...draft, usaFedRebatePct: e.target.value.replace(/[^0-9.]/g, "") })
+                      }
+                    />
+                    <p className="mt-0.5 text-[11px] text-zinc-400">
+                      The rebate on what you buy from this vendor through USA-FED — tracked
+                      separately from Strata.
                     </p>
                   </div>
                 )}
@@ -567,6 +603,14 @@ export function VendorsView({
                     onChange={(e) => setDraft({ ...draft, strataBuyingGroup: e.target.checked })}
                   />
                   Member of the Strata buying group
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={draft.usaFedBuyingGroup}
+                    onChange={(e) => setDraft({ ...draft, usaFedBuyingGroup: e.target.checked })}
+                  />
+                  Member of the USA-FED buying group
                 </label>
                 <label className="flex items-center gap-2 text-sm">
                   <input
