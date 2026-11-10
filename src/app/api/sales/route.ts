@@ -567,6 +567,13 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      // A different shipping address typed on the invoice: it becomes the
+      // invoice's ship-to (same slot a saved customer location uses).
+      if (body.shipToAddress) {
+        locationLabel = "Ship to";
+        cSnap.address = body.shipToAddress;
+      }
+
       // Sync the delivery address entered for this sale back onto the
       // customer's own record, so it's remembered next time — for both a
       // customer that already existed and one just auto-created above.

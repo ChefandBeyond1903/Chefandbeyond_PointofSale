@@ -410,6 +410,9 @@ export const saleCreateSchema = z.object({
   customerId: z.string().min(1).optional(),
   // One of that customer's ship-to locations, when they have several.
   customerLocationId: z.string().min(1).optional(),
+  // A one-off ship-to address for this invoice only (typed in by hand). Shown on
+  // the invoice as the ship-to location; the customer record is left alone.
+  shipToAddress: z.string().trim().max(400).optional(),
   customer: saleCustomerSchema.optional(),
   // Edits made to an existing customer's details on the invoice form — saved
   // back onto the customer record when the invoice is saved.

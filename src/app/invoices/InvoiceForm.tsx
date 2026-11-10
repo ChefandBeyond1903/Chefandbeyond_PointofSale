@@ -93,6 +93,8 @@ type InvoiceDraft = {
   custCompany: string;
   custAddress: string;
   custLocationId: string;
+  shipDifferent?: boolean;
+  shipAddress?: string;
   lines: Line[];
   shippingCents: number;
   ccFeeBps: number;
@@ -156,6 +158,10 @@ export function InvoiceForm({
   // (e.g. a district with several school sites) — its address/contact win
   // over the customer's own when picked.
   const [custLocationId, setCustLocationId] = useState("");
+  // This invoice ships somewhere other than the customer's address — typed in
+  // by hand, for this invoice only.
+  const [shipDifferent, setShipDifferent] = useState(false);
+  const [shipAddress, setShipAddress] = useState("");
   const [custOpen, setCustOpen] = useState(false);
   const custInputRef = useRef<HTMLInputElement>(null);
 
@@ -287,6 +293,8 @@ export function InvoiceForm({
           if (d.custCompany !== undefined) setCustCompany(d.custCompany);
           if (d.custAddress !== undefined) setCustAddress(d.custAddress);
           if (d.custLocationId !== undefined) setCustLocationId(d.custLocationId);
+          if (d.shipDifferent !== undefined) setShipDifferent(d.shipDifferent);
+          if (d.shipAddress !== undefined) setShipAddress(d.shipAddress);
           if (Array.isArray(d.lines) && d.lines.length > 0) setLines(d.lines);
           if (d.shippingCents !== undefined) setShippingCents(d.shippingCents);
           if (d.ccFeeBps !== undefined) setCcFeeBps(d.ccFeeBps);
@@ -522,6 +530,8 @@ export function InvoiceForm({
         custCompany,
         custAddress,
         custLocationId,
+        shipDifferent,
+        shipAddress,
         lines,
         shippingCents,
         ccFeeBps,
@@ -553,6 +563,8 @@ export function InvoiceForm({
     custCompany,
     custAddress,
     custLocationId,
+    shipDifferent,
+    shipAddress,
     lines,
     shippingCents,
     ccFeeBps,
@@ -621,6 +633,7 @@ export function InvoiceForm({
       ...(isAdmin && manualNumber.trim() ? { number: parseInt(manualNumber.trim(), 10) } : {}),
       ...(isAdmin && manualDate ? { saleDate: manualDate } : {}),
       ...(paymentNote.trim() ? { note: paymentNote.trim() } : {}),
+      ...(shipDifferent && shipAddress.trim() ? { shipToAddress: shipAddress.trim() } : {}),
       // The server requires a payment method up front for any customer who
       // isn't on terms (same rule as the register) — even to just total up a
       // dry run — and, for Check, a check number too (it validates that
@@ -807,6 +820,8 @@ export function InvoiceForm({
     setCustCompany("");
     setCustAddress("");
     setCustLocationId("");
+    setShipDifferent(false);
+    setShipAddress("");
     setShippingCents(0);
     setCcFeeBps(0);
     setCcFeeCentsPreview(0);
@@ -1060,6 +1075,31 @@ export function InvoiceForm({
                 value={custAddress}
                 onChange={(e) => setCustAddress(e.target.value)}
               />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={shipDifferent}
+                  onChange={(e) => setShipDifferent(e.target.checked)}
+                />
+                Shipping address is different
+              </label>
+              {shipDifferent && (
+                <div className="mt-2">
+                  <input
+                    className="input"
+                    placeholder="Ship-to address — street, city, state, zip"
+                    value={shipAddress}
+                    onChange={(e) => setShipAddress(e.target.value)}
+                    autoFocus
+                  />
+                  <p className="mt-0.5 text-[11px] text-zinc-400">
+                    For this invoice only — shown on it as the ship-to address; the customer&rsquo;s own
+                    address isn&rsquo;t changed.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </section>
