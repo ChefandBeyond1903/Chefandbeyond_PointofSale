@@ -995,3 +995,113 @@ model SaleEmailLog {
 
   @@index([saleId, createdAt])
 }
+
+/// A payroll employee (separate from POS logins). Only the last 4 of the SSN are
+/// kept; the full W-4 / I-9 / ID live as private documents (EmployeeDocument).
+model Employee {
+  id        String  @id @default(cuid())
+  firstName String
+  lastName  String
+  email     String  @default("")
+  phone     String  @default("")
+  street    String  @default("")
+  city      String  @default("")
+  state     String  @default("TN")
+  zip       String  @default("")
+  ssnLast4  String  @default("")
+  hireDate  DateTime?
+  active    Boolean @default(true)
+  notes     String  @default("")
+
+  // "HOURLY" (rate x hours, overtime at 1.5x) or "SALARY" (annual / 26).
+  payType           String @default("HOURLY")
+  hourlyRateCents   Int    @default(0)
+  annualSalaryCents Int    @default(0)
+
+  // Form W-4 (2020 or later) — drives federal income tax withholding.
+  filingStatus            String  @default("SINGLE") // SINGLE (or married filing separately) | MFJ | HOH
+  w4Step2Checked          Boolean @default(false)
+  w4CreditsCents          Int     @default(0) // Step 3: dependents/credits, per year
+  w4OtherIncomeCents      Int     @default(0) // Step 4(a), per year
+  w4DeductionsCents       Int     @default(0) // Step 4(b), per year
+  w4ExtraWithholdingCents Int     @default(0) // Step 4(c), per pay period
+
+  documents      EmployeeDocument[]
+  payrollEntries PayrollEntry[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// A file attached to an employee (W-4, I-9, W-9, ID, …) in the private
+/// `employee-docs` storage bucket.
+model EmployeeDocument {
+  id          String   @id @default(cuid())
+  employeeId  String
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  kind        String   @default("OTHER") // W4 | I9 | W9 | ID | OTHER
+  fileName    String
+  storagePath String
+  createdAt   DateTime @default(now())
+
+  @@index([employeeId])
+}
+
+/// One biweekly (or ad-hoc) pay run.
+model PayrollRun {
+  id          String   @id @default(cuid())
+  periodStart DateTime
+  periodEnd   DateTime
+  payDate     DateTime
+  note        String   @default("")
+  createdAt   DateTime @default(now())
+  entries     PayrollEntry[]
+
+  @@index([payDate])
+}
+
+/// One employee's paycheck in a run, with every tax computed and frozen.
+model PayrollEntry {
+  id         String     @id @default(cuid())
+  runId      String
+  run        PayrollRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  employeeId String
+  employee   Employee   @relation(fields: [employeeId], references: [id])
+
+  nameSnapshot       String
+  payType            String
+  rateCents          Int // hourly rate, or the per-period salary
+  regularHoursX100   Int @default(0)
+  overtimeHoursX100  Int @default(0)
+  grossCents         Int
+
+  // Withheld from the employee.
+  fedWithholdingCents    Int
+  ssEmployeeCents        Int
+  medicareEmployeeCents  Int
+  addlMedicareCents      Int
+  netPayCents            Int
+
+  // Paid by the employer on top.
+  ssEmployerCents       Int
+  medicareEmployerCents Int
+  futaCents             Int
+  sutaCents             Int
+
+  @@index([runId])
+  @@index([employeeId])
+}
+
+/// Singleton payroll settings (id "payroll").
+model PayrollSettings {
+  id                String @id @default("payroll")
+  // Tennessee employer unemployment (SUTA) rate in basis points — 270 = 2.70%
+  // (the new-employer rate); replace it with the rate on your TN notice.
+  sutaRateBps       Int    @default(270)
+  sutaWageBaseCents Int    @default(700000)
+  // Federal unemployment, net of the state credit: 0.6% on the first $7,000.
+  futaRateBps       Int    @default(60)
+  futaWageBaseCents Int    @default(700000)
+  employerEin       String @default("")
+  updatedAt         DateTime @updatedAt
+}

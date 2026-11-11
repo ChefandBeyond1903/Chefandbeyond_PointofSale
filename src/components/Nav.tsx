@@ -60,6 +60,7 @@ const NAV: NavGroup[] = [
     label: "Settings",
     items: [
       { href: "/users", label: "Staff", roles: STAFF_UP },
+      { href: "/payroll", label: "Payroll", roles: ADMIN_ONLY },
       { href: "/settings", label: "Settings", roles: STAFF_UP },
     ],
   },

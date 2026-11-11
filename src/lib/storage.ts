@@ -43,3 +43,17 @@ export async function ensureDeliverySignatureBucket(): Promise<void> {
   if (error && !/exist/i.test(error.message)) throw new Error(error.message);
   signatureBucketReady = true;
 }
+
+/** Private bucket holding employee payroll documents (W-4, I-9, W-9, ID, …). */
+export const EMPLOYEE_DOCS_BUCKET = "employee-docs";
+
+let employeeBucketReady = false;
+
+/** Create the private bucket on first use; a re-create error just means it exists. */
+export async function ensureEmployeeDocsBucket(): Promise<void> {
+  if (employeeBucketReady) return;
+  const admin = supabaseAdmin();
+  const { error } = await admin.storage.createBucket(EMPLOYEE_DOCS_BUCKET, { public: false });
+  if (error && !/exist/i.test(error.message)) throw new Error(error.message);
+  employeeBucketReady = true;
+}
